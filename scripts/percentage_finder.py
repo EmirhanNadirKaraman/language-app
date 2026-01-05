@@ -440,7 +440,7 @@ def main():
         read_files = [
             '01.Das Herz von Dresden (B1).txt', 
             '04.Heisse Spur in Muenchen (B1).txt', 
-            '07.Wiener Blut (B1).txt'
+            # '07.Wiener Blut (B1).txt'
         ]
 
         known_words = get_known_words()
@@ -456,7 +456,10 @@ def main():
         for row in optimal_order: 
             print(row)
 
-        # for word in all_words - words: 
+        remaining_words = all_words - words - known_words
+
+        print(remaining_words)
+        # for word in remaining_words: 
         #     manage_known_words(word=word)
 
     except psycopg2.Error as e:
