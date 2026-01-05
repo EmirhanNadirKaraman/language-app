@@ -206,8 +206,8 @@ def get_exclusive_words():
     finally:
         conn.close()
 
-def get_all_words(): 
-    with open('data/real_final_result.txt', 'r') as f:
+def get_all_words(file_path='data/real_final_result.txt'): 
+    with open(file_path, 'r') as f:
         result = set([line.strip() for line in f.readlines()])
     return result
 
@@ -380,7 +380,7 @@ def get_known_words():
     with open('data/known_words.txt', 'r') as f: 
         return set([word.strip() for word in f.readlines()])
 
-def manage_known_words(word, file_path='known_words.txt'):
+def manage_known_words(word, file_path='data/known_words.txt'):
     """
     Checks if a word is known. If not, prompts the user to add it to the file.
     """
@@ -428,7 +428,7 @@ def main():
 
         # Example: Get words from a specific file
         # Uncomment to see words from a specific file:
-        all_words = get_all_words()
+        all_words = get_all_words('data/b1_parsed.txt')
         words = set()
 
         for file_name in sorted(os.listdir('files/text')):
