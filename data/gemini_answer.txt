@@ -1,0 +1,1062 @@
+Verb,Usage (Grammar)
+werden,---
+haben,etw./jdn. (Akk)
+sein,---
+können,etw. (Akk)
+geben,jdm. (Dat) etw. (Akk)
+müssen,---
+gehen,---
+sagen,jdm. (Dat) etw. (Akk)
+wollen,etw. (Akk)
+wissen,etw. (Akk)
+kommen,---
+sollen,---
+sehen,etw./jdn. (Akk)
+stehen,jdm. (Dat)
+lassen,etw./jdn. (Akk)
+machen,etw. (Akk)
+bleiben,---
+liegen,---
+halten,etw./jdn. (Akk)
+nennen,jdn. (Akk) + Name (Akk)
+tun,etw. (Akk)
+sprechen,mit jdm. / über etw./jdn.
+finden,etw./jdn. (Akk)
+glauben,jdm. (Dat) / etw. (Akk)
+führen,jdn. (Akk)
+heißen,---
+zeigen,jdm. (Dat) etw. (Akk)
+mögen,etw./jdn. (Akk)
+dürfen,---
+leben,---
+nehmen,etw./jdn. (Akk)
+fahren,etw. (Akk)
+bringen,jdm. (Dat) etw. (Akk)
+meinen,etw. (Akk)
+fragen,jdn. (Akk)
+spielen,etw. (Akk)
+gelten,für jdn./etw.
+stellen,etw./jdn. (Akk)
+kennen,etw./jdn. (Akk)
+arbeiten,---
+folgen,jdm. (Dat)
+brauchen,etw./jdn. (Akk)
+bestehen,aus etw. / etw. (Akk) bestehen
+lernen,etw. (Akk)
+bekommen,etw. (Akk)
+setzen,etw./jdn. (Akk)
+verstehen,etw./jdn. (Akk)
+sich setzen,sich (Akk)
+versuchen,etw. (Akk)
+schreiben,jdm. (Dat) etw. (Akk)
+erzählen,jdm. (Dat) etw. (Akk)
+beginnen,mit etw. / etw. (Akk)
+erklären,jdm. (Dat) etw. (Akk)
+laufen,---
+entsprechen,etw./jdm. (Dat)
+ziehen,etw. (Akk)
+sitzen,---
+gehören,jdm. (Dat)
+scheinen,jdm. (Dat)
+fallen,---
+legen,etw./jdn. (Akk)
+entstehen,---
+suchen,etw./jdn. (Akk)
+treffen,jdn. (Akk) / sich mit jdm.
+handeln,mit etw. / von etw.
+erhalten,etw. (Akk)
+vorstellen,jdm. (Dat) jdn./etw. (Akk) / sich (Dat) etw. (Akk)
+erreichen,etw./jdn. (Akk)
+tragen,etw./jdn. (Akk)
+schaffen,etw. (Akk)
+lesen,etw. (Akk)
+verlieren,etw./jdn. (Akk)
+darstellen,etw./jdn. (Akk)
+erkennen,jdn./etw. (Akk)
+aussehen,nach etw.
+entwickeln,etw. (Akk)
+reden,mit jdm. / über etw.
+erscheinen,jdm. (Dat)
+erwarten,etw./jdn. (Akk)
+wohnen,---
+bilden,etw. (Akk)
+anfangen,mit etw.
+helfen,jdm. (Dat)
+vergehen,---
+betreffen,jdn./etw. (Akk)
+warten,auf jdn./etw.
+erinnern,jdn. (Akk) an etw.
+gewinnen,etw. (Akk)
+sich erinnern,an jdn./etw.
+bieten,jdm. (Dat) etw. (Akk)
+schließen,etw. (Akk)
+studieren,etw. (Akk)
+ergeben,etw. (Akk)
+verbinden,jdn./etw. (Akk) mit jdm./etw.
+fühlen,etw. (Akk)
+fehlen,jdm. (Dat)
+sich interessieren,für etw./jdn.
+ansehen,jdm. (Dat) etw. (Akk) / sich (Dat) etw. (Akk)
+bedeuten,jdm. (Dat) etw. (Akk)
+interessieren,jdn. (Akk)
+nutzen,etw. (Akk)
+anbieten,jdm. (Dat) etw. (Akk)
+steigen,---
+sich ergeben,aus etw.
+schauen,auf etw./jdn.
+vergleichen,etw./jdn. (Akk) mit jdm./etw.
+einsetzen,etw./jdn. (Akk)
+ausgehen,von etw.
+wachsen,---
+ändern,etw. (Akk)
+geschehen,jdm. (Dat)
+beschreiben,jdm. (Dat) etw. (Akk)
+sich verlassen,auf jdn./etw.
+verlassen,jdn./etw. (Akk)
+bezeichnen,jdn./etw. (Akk) als etw.
+sich befinden,---
+wirken,auf jdn./etw.
+annehmen,etw. (Akk)
+planen,etw. (Akk)
+kriegen,etw. (Akk)
+passieren,jdm. (Dat)
+rufen,jdn. (Akk)
+öffnen,jdm. (Dat) etw. (Akk)
+zunehmen,---
+fordern,etw. (Akk) von jdm.
+gefallen,jdm. (Dat)
+bestimmen,etw. (Akk)
+aufnehmen,etw./jdn. (Akk)
+treten,jdn. (Akk)
+verändern,etw./jdn. (Akk)
+übernehmen,etw. (Akk)
+lachen,über jdn./etw.
+schlagen,jdn./etw. (Akk)
+kaufen,jdm. (Dat) etw. (Akk)
+gelingen,jdm. (Dat)
+betrachten,jdn./etw. (Akk) als etw.
+verwenden,etw. (Akk)
+sich enthalten,jds./etw. (Gen)
+erfolgen,---
+wählen,jdn./etw. (Akk)
+enthalten,etw. (Akk)
+entscheiden,über etw. (Akk)
+stattfinden,---
+feststellen,etw. (Akk)
+bewegen,etw./jdn. (Akk)
+dienen,jdm. (Dat) / als etw.
+erfahren,etw. (Akk) von jdm.
+vergessen,etw./jdn. (Akk)
+sich verhalten,---
+stimmen,für/gegen jdn./etw.
+berichten,jdm. (Dat) über etw./jdn.
+auftreten,---
+trinken,etw. (Akk)
+rechnen,mit jdm./etw.
+erleben,etw. (Akk)
+beobachten,jdn./etw. (Akk)
+holen,jdm. (Dat) etw. (Akk)
+unterscheiden,etw./jdn. (Akk) von etw./jdm.
+sterben,an etw. (Dat)
+werfen,etw. (Akk)
+essen,etw. (Akk)
+leisten,sich (Dat) etw. (Akk)
+reichen,jdm. (Dat) etw. (Akk)
+verlangen,etw. (Akk) von jdm.
+sich freuen,auf/über etw. (Akk)
+hängen,etw. (Akk) / (Dat-Position)
+hoffen,auf etw. (Akk)
+freuen,jdn. (Akk)
+teilen,etw. (Akk) mit jdm.
+wünschen,jdm. (Dat) etw. (Akk)
+vorliegen,---
+bauen,etw. (Akk)
+zählen,zu etw. / etw. (Akk)
+ankommen,auf etw. / an etw.
+bezahlen,etw. (Akk) / jdn. (Akk)
+sorgen,für jdn./etw.
+stecken,etw. (Akk) in etw.
+dauern,---
+beziehen,etw. (Akk) auf jdn./etw.
+spüren,etw. (Akk)
+bitten,jdn. (Akk) um etw.
+erhöhen,etw. (Akk)
+besuchen,jdn./etw. (Akk)
+melden,jdm. (Dat) etw. (Akk)
+vorkommen,jdm. (Dat)
+betonen,etw. (Akk)
+erfüllen,jdm. (Dat) etw. (Akk)
+besitzen,etw. (Akk)
+beteiligen,jdn. (Akk) an etw.
+sich eignen,für etw. / als etw.
+umfassen,etw. (Akk)
+unterstützen,jdn./etw. (Akk)
+schlafen,---
+merken,jdm. (Dat) etw. (Akk) / sich (Dat) etw. (Akk)
+passen,jdm. (Dat) / zu etw.
+richten,etw. (Akk) an jdn.
+lösen,etw. (Akk)
+lächeln,jdn. (Akk) an / über etw.
+beschäftigen,jdn. (Akk) mit etw.
+antworten,jdm. (Dat) auf etw.
+trennen,etw./jdn. (Akk) von jdm./etw.
+einstellen,etw. (Akk)
+bestätigen,jdm. (Dat) etw. (Akk)
+aufbauen,etw. (Akk)
+lieben,jdn./etw. (Akk)
+genügen,jdm. (Dat)
+durchführen,etw. (Akk)
+verkaufen,jdm. (Dat) etw. (Akk)
+drücken,etw. (Akk)
+untersuchen,etw./jdn. (Akk)
+eingehen,auf etw.
+erlauben,jdm. (Dat) etw. (Akk)
+blicken,auf etw. (Akk)
+versprechen,jdm. (Dat) etw. (Akk)
+benutzen,etw. (Akk)
+entdecken,etw. (Akk)
+ausreichen,jdm. (Dat)
+treiben,etw. (Akk)
+überzeugen,jdn. (Akk) von etw.
+behandeln,jdn./etw. (Akk)
+drohen,jdm. (Dat) mit etw.
+drehen,etw. (Akk)
+verdienen,etw. (Akk)
+kosten,jdn. (Akk) etw. (Akk)
+klingen,nach etw.
+schweigen,---
+reagieren,auf etw. (Akk)
+fliegen,---
+überraschen,jdn. (Akk) mit etw.
+betreiben,etw. (Akk)
+heben,etw. (Akk)
+schicken,jdm. (Dat) etw. (Akk)
+ermöglichen,jdm. (Dat) etw. (Akk)
+vertreten,jdn. (Akk)
+stoßen,gegen etw. / auf etw.
+herstellen,etw. (Akk)
+leiden,an etw. (Dat) / unter etw. (Dat)
+wechseln,etw. (Akk)
+singen,jdm. (Dat) etw. (Akk)
+verhindern,etw. (Akk)
+liefern,jdm. (Dat) etw. (Akk)
+benötigen,etw. (Akk)
+überlegen,sich (Dat) etw. (Akk)
+reisen,---
+stammen,aus etw. / von jdm.
+zahlen,etw. (Akk) an jdn.
+abschließen,etw. (Akk)
+kochen,jdm. (Dat) etw. (Akk)
+aufgeben,etw. (Akk)
+greifen,nach etw.
+verzichten,auf etw. (Akk)
+betragen,---
+erwähnen,etw./jdn. (Akk) gegenüber jdm.
+einrichten,etw. (Akk)
+angeben,etw. (Akk)
+verfügen,über etw. (Akk)
+festhalten,jdn./etw. (Akk)
+geraten,in etw. (Akk)
+begründen,etw. (Akk)
+vorbereiten,etw. (Akk) / sich auf etw.
+wiederholen,etw. (Akk)
+schützen,jdn./etw. (Akk) vor jdm./etw.
+stören,jdn. (Akk) bei etw.
+berücksichtigen,etw./jdn. (Akk)
+feiern,etw. (Akk)
+vermitteln,jdm. (Dat) etw. (Akk)
+behaupten,etw. (Akk)
+herrschen,über jdn. (Akk)
+schieben,etw. (Akk)
+gründen,etw. (Akk)
+ausschließen,jdn./etw. (Akk)
+erheben,etw. (Akk)
+diskutieren,mit jdm. über etw.
+auftauchen,---
+anwenden,etw. (Akk)
+verfolgen,jdn./etw. (Akk)
+beeinflussen,jdn./etw. (Akk)
+funktionieren,---
+ablehnen,etw. (Akk)
+einfallen,jdm. (Dat)
+zurückkommen,auf etw.
+zwingen,jdn. (Akk) zu etw.
+fördern,jdn./etw. (Akk)
+existieren,---
+entfernen,etw. (Akk) aus etw.
+wenden,etw. (Akk) / sich an jdn.
+empfinden,etw. (Akk) für jdn.
+fassen,etw. (Akk)
+ansprechen,jdn. (Akk) auf etw.
+sichern,jdm. (Dat) etw. (Akk)
+beachten,etw. (Akk)
+schneiden,etw. (Akk)
+sich kümmern,um jdn./etw.
+informieren,jdn. (Akk) über etw.
+sinken,---
+ankündigen,jdm. (Dat) etw. (Akk)
+prägen,jdn./etw. (Akk)
+organisieren,etw. (Akk)
+nicken,---
+vermeiden,etw. (Akk)
+verletzen,jdn./etw. (Akk)
+empfehlen,jdm. (Dat) etw. (Akk)
+aufstehen,---
+verstärken,etw. (Akk)
+einladen,jdn. (Akk) zu etw.
+vorsehen,etw. (Akk) für jdn.
+eröffnen,jdm. (Dat) etw. (Akk)
+begreifen,etw. (Akk)
+beschließen,etw. (Akk)
+leiten,etw. (Akk)
+beschränken,etw. (Akk) auf etw.
+konzentrieren,sich auf etw. (Akk)
+abhängen,von jdm./etw.
+schätzen,jdn./etw. (Akk)
+prüfen,jdn./etw. (Akk)
+anlegen,etw. (Akk)
+sich unterhalten,mit jdm. über etw.
+sich bemühen,um jdn./etw.
+schreien,---
+verpflichten,jdn. (Akk) zu etw.
+festlegen,etw. (Akk)
+brechen,etw. (Akk) / jdm. (Dat) etw. (Akk)
+definieren,etw. (Akk)
+zurückkehren,---
+orientieren,sich an jdm./etw.
+weitergehen,---
+beitragen,zu etw.
+einnehmen,etw. (Akk)
+übertragen,jdm. (Dat) etw. (Akk)
+präsentieren,jdm. (Dat) etw. (Akk)
+abgeben,etw. (Akk) bei jdm.
+abnehmen,jdm. (Dat) etw. (Akk)
+anschauen,jdn./etw. (Akk) / sich (Dat) etw. (Akk)
+verteilen,etw. (Akk) an jdn.
+füllen,etw. (Akk) mit etw.
+bemerken,etw./jdn. (Akk)
+sich vornehmen,etw. (Akk)
+aufweisen,etw. (Akk)
+messen,etw. (Akk)
+heiraten,jdn. (Akk)
+hereinkommen,---
+erzielen,etw. (Akk)
+nachdenken,über jdn./etw.
+verbessern,etw. (Akk)
+auslösen,etw. (Akk)
+sammeln,etw. (Akk)
+durchsetzen,etw. (Akk)
+formulieren,etw. (Akk)
+kämpfen,für/gegen etw./jdn.
+ersetzen,jdn./etw. (Akk) durch jdn./etw.
+ausmachen,etw. (Akk) / jdm. (Dat) etw.
+drängen,jdn. (Akk) zu etw.
+verbringen,etw. (Zeit) (Akk)
+warnen,jdn. (Akk) vor etw. (Dat)
+anrufen,jdn. (Akk)
+erfassen,etw. (Akk)
+gestalten,etw. (Akk)
+regeln,etw. (Akk)
+hinweisen,jdn. (Akk) auf etw. (Akk)
+zulassen,etw. (Akk)
+binden,etw. (Akk) an etw.
+anziehen,etw. (Akk) / sich (Akk) anziehen
+beenden,etw. (Akk)
+aufhören,mit etw.
+scheitern,an etw. (Dat)
+teilnehmen,an etw. (Dat)
+reduzieren,etw. (Akk) auf etw.
+äußern,etw. (Akk)
+angehen,jdn. (Akk)
+einführen,etw. (Akk) in etw.
+gelangen,zu etw.
+begleiten,jdn. (Akk)
+versichern,jdn./etw. (Akk)
+besetzen,etw. (Akk)
+pflegen,jdn./etw. (Akk)
+begrenzen,etw. (Akk) auf etw.
+akzeptieren,etw. (Akk)
+produzieren,etw. (Akk)
+reißen,etw. (Akk)
+erweisen,sich als etw.
+verweisen,jdn. (Akk) auf etw.
+fürchten,etw./jdn. (Akk) / sich vor jdm.
+springen,---
+bestellen,jdm. (Dat) etw. (Akk)
+erweitern,etw. (Akk)
+überprüfen,etw. (Akk)
+ermitteln,etw. (Akk)
+starten,mit etw. / etw. (Akk)
+berechnen,jdm. (Dat) etw. (Akk)
+zerstören,etw. (Akk)
+aufstellen,etw. (Akk)
+kritisieren,jdn./etw. (Akk)
+ablaufen,---
+üben,etw. (Akk)
+eintreten,für jdn./etw. / in etw. (Akk)
+erwerben,etw. (Akk)
+zurückgehen,auf etw.
+ausdrücken,etw. (Akk)
+anschließen,etw. (Akk) an etw. / sich jdm. (Dat)
+ergänzen,etw. (Akk)
+streichen,etw. (Akk)
+schießen,auf jdn./etw.
+bedürfen,jds./etw. (Gen)
+behalten,etw. (Akk)
+belegen,etw. (Akk)
+umgehen,mit jdm./etw. / etw. (Akk)
+herauskommen,---
+lauten,---
+stürzen,---
+absehen,von etw.
+betreten,etw. (Akk)
+überleben,etw. (Akk)
+auffallen,jdm. (Dat)
+verlaufen,---
+hören,etw./jdn. (Akk)
+vermuten,etw. (Akk)
+beweisen,jdm. (Dat) etw. (Akk)
+zukommen,auf jdn. (Akk)
+ausüben,etw. (Akk)
+realisieren,etw. (Akk)
+erzeugen,etw. (Akk)
+brennen,---
+verbergen,etw. (Akk) vor jdm.
+landen,---
+begegnen,jdm. (Dat)
+verbreiten,etw. (Akk)
+retten,jdn./etw. (Akk) vor jdm./etw.
+senken,etw. (Akk)
+packen,etw. (Akk)
+schütteln,jdm. (Dat) die Hand / etw. (Akk)
+schenken,jdm. (Dat) etw. (Akk)
+erfordern,etw. (Akk)
+erschrecken,jdn. (Akk) / vor jdm. (Dat)
+unterrichten,jdn. (Akk) in etw.
+beurteilen,jdn./etw. (Akk)
+erleichtern,jdm. (Dat) etw. (Akk)
+zurückziehen,etw. (Akk) / sich
+anerkennen,etw. (Akk)
+genießen,etw. (Akk)
+wahrnehmen,etw./jdn. (Akk)
+belasten,jdn./etw. (Akk)
+nachweisen,jdm. (Dat) etw. (Akk)
+fließen,---
+kontrollieren,jdn./etw. (Akk)
+verursachen,etw. (Akk)
+aussprechen,etw. (Akk)
+bedienen,jdn./etw. (Akk) / sich (Gen)
+vorschlagen,jdm. (Dat) etw. (Akk)
+unterbrechen,jdn./etw. (Akk)
+vertrauen,jdm. (Dat)
+beherrschen,etw. (Akk)
+leuchten,---
+mitnehmen,jdn./etw. (Akk)
+rücken,etw. (Akk)
+einschränken,etw. (Akk)
+verabschieden,jdn. (Akk) / sich von jdm.
+ausrichten,etw. (Akk) an etw.
+zusammenfassen,etw. (Akk)
+töten,jdn./etw. (Akk)
+vorlegen,jdm. (Dat) etw. (Akk)
+bedingen,etw. (Akk)
+verbieten,jdm. (Dat) etw. (Akk)
+waschen,etw./jdn. (Akk) / sich (Dat/Akk)
+ausbilden,jdn. (Akk)
+fortsetzen,etw. (Akk)
+klappen,---
+starren,auf jdn./etw. (Akk)
+anhalten,jdn./etw. (Akk)
+beantworten,jdm. (Dat) etw. (Akk)
+integrieren,jdn./etw. (Akk) in etw.
+mitbringen,jdm. (Dat) etw. (Akk)
+unternehmen,etw. (Akk)
+zeichnen,etw. (Akk)
+einkaufen,etw. (Akk)
+beruhigen,jdn. (Akk)
+verstecken,etw. (Akk) vor jdm.
+auflösen,etw. (Akk)
+anstreben,etw. (Akk)
+hingehen,---
+ausführen,etw. (Akk)
+erläutern,jdm. (Dat) etw. (Akk)
+fügen,etw. (Akk) in etw.
+vereinbaren,etw. (Akk) mit jdm.
+gucken,---
+verraten,jdm. (Dat) etw. (Akk) / jdn. (Akk)
+mitteilen,jdm. (Dat) etw. (Akk)
+schwimmen,---
+malen,jdm. (Dat) etw. (Akk)
+betreuen,jdn./etw. (Akk)
+deuten,auf etw. (Akk)
+enden,mit etw.
+probieren,etw. (Akk)
+begeistern,jdn. (Akk) für etw.
+übersetzen,etw. (Akk) in etw.
+anzeigen,jdn./etw. (Akk)
+auffordern,jdn. (Akk) zu etw.
+steuern,etw. (Akk)
+umsetzen,etw. (Akk)
+auswählen,etw./jdn. (Akk)
+sparen,etw. (Akk)
+weinen,---
+wagen,etw. (Akk)
+umdrehen,etw. (Akk) / sich
+eintragen,etw. (Akk) in etw.
+begrüßen,jdn. (Akk)
+verheiraten,jdn. (Akk) mit jdm.
+enttäuschen,jdn. (Akk)
+stützen,etw. (Akk) / sich auf etw.
+träumen,von jdm./etw.
+achten,auf jdn./etw. (Akk)
+veröffentlichen,etw. (Akk)
+ansetzen,etw. (Akk)
+zugeben,etw. (Akk)
+voraussetzen,etw. (Akk)
+befürchten,etw. (Akk)
+bevorzugen,jdn./etw. (Akk)
+aufwachsen,---
+zusammenhängen,mit etw.
+zuhören,jdm. (Dat)
+kennzeichnen,etw. (Akk)
+gefährden,jdn./etw. (Akk)
+zitieren,jdn./etw. (Akk)
+entschuldigen,jdn. (Akk) / sich bei jdm.
+erledigen,etw. (Akk)
+gewähren,jdm. (Dat) etw. (Akk)
+erstellen,etw. (Akk)
+aussetzen,etw. (Akk)
+anpassen,etw. (Akk) an etw. / sich (Dat/Akk)
+beraten,jdn. (Akk)
+beeindrucken,jdn. (Akk)
+ausgeben,etw. (Akk) für etw.
+tanzen,---
+wandern,---
+aufheben,etw. (Akk)
+befragen,jdn. (Akk) zu etw.
+zuordnen,jdm. (Dat) etw. (Akk)
+sich befassen,mit etw.
+klären,etw. (Akk)
+speichern,etw. (Akk)
+sich entschließen,zu etw.
+lehren,jdn. (Akk) etw. (Akk)
+garantieren,jdm. (Dat) etw. (Akk)
+sich engagieren,für etw.
+steigern,etw. (Akk)
+berechtigen,jdn. (Akk) zu etw.
+mischen,etw. (Akk) mit etw.
+rühren,in etw. (Dat) / etw. (Akk)
+versorgen,jdn. (Akk) mit etw.
+anstellen,jdn. (Akk) / etw. (Akk)
+anhören,jdn./etw. (Akk) / sich (Dat) etw. (Akk)
+aufführen,etw. (Akk)
+bedenken,etw. (Akk)
+vereinigen,etw. (Akk) mit etw.
+angucken,jdn./etw. (Akk) / sich (Dat) etw. (Akk)
+beruhen,auf etw. (Dat)
+investieren,in etw. (Akk)
+einbringen,etw. (Akk) in etw.
+wecken,jdn. (Akk)
+herausstellen,etw. (Akk) / sich
+bewirken,etw. (Akk)
+befreien,jdn. (Akk) von etw.
+sich verlieben,in jdn. (Akk)
+aufpassen,auf jdn./etw. (Akk)
+finanzieren,etw. (Akk)
+rechtfertigen,etw. (Akk) / sich
+antreten,zu etw. / etw. (Akk)
+aufsteigen,---
+besprechen,etw. (Akk) mit jdm.
+testen,etw. (Akk)
+einziehen,in etw. (Akk) / etw. (Akk)
+riechen,nach etw.
+ausstatten,jdn. (Akk) mit etw.
+berühren,jdn./etw. (Akk)
+vorhaben,etw. (Akk)
+vorgeben,jdm. (Dat) etw. (Akk)
+zögern,mit etw.
+unterliegen,jdm./etw. (Dat)
+aufhalten,jdn./etw. (Akk)
+ableiten,etw. (Akk) aus/von etw.
+verschieben,etw. (Akk)
+überlassen,jdm. (Dat) etw. (Akk)
+erteilen,jdm. (Dat) etw. (Akk)
+einräumen,jdm. (Dat) etw. (Akk) / etw. (Akk)
+entlassen,jdn. (Akk) aus etw.
+empfangen,jdn./etw. (Akk)
+ergreifen,etw. (Akk)
+regieren,jdn./etw. (Akk)
+stärken,jdn./etw. (Akk)
+trauen,jdm. (Dat) / sich (Akk)
+sich wehren,gegen jdn./etw.
+widmen,jdm. (Dat) etw. (Akk) / sich (Dat) jdm.
+ahnen,etw. (Akk)
+weisen,auf jdn./etw. (Akk)
+aufgehen,---
+zugehen,auf jdn. (Akk)
+sich ausziehen,sich (Dat) etw. (Akk) / sich (Akk)
+zurückführen,etw. (Akk) auf etw.
+aussuchen,jdm. (Dat) etw. (Akk) / sich (Dat) etw. (Akk)
+ausziehen,etw. (Akk) / aus etw. (Dat)
+erarbeiten,sich (Dat) etw. (Akk)
+analysieren,etw. (Akk)
+schalten,etw. (Akk)
+sich lohnen,---
+verarbeiten,etw. (Akk)
+versehen,jdn. (Akk) mit etw.
+einbeziehen,jdn./etw. (Akk) in etw.
+ausfallen,---
+abwarten,etw. (Akk)
+sich wundern,über jdn./etw. (Akk)
+abbauen,etw. (Akk)
+einbauen,etw. (Akk) in etw.
+ordnen,etw. (Akk)
+interpretieren,etw. (Akk)
+raten,jdm. (Dat) zu etw.
+vergeben,jdm. (Dat) etw. (Akk)
+schmecken,jdm. (Dat) nach etw.
+ablegen,etw. (Akk)
+ärger,jdn. (Akk) / sich über jdn./etw.
+neigen,zu etw. (Dat)
+aufregen,jdn. (Akk) / sich über jdn./etw.
+zusammensetzen,etw. (Akk) / sich aus etw.
+beugen,etw. (Akk)
+ausweisen,jdn. (Akk) / sich (Akk)
+bereiten,jdm. (Dat) etw. (Akk)
+abstimmen,über etw. (Akk) / etw. (Akk) mit jdm.
+anregen,jdn. (Akk) zu etw.
+ausbauen,etw. (Akk)
+entziehen,jdm. (Dat) etw. (Akk)
+bedecken,jdn./etw. (Akk) mit etw.
+mangeln,an etw. (Dat)
+sich gewöhnen,an jdn./etw. (Akk)
+klopfen,an etw. (Akk) / auf etw. (Akk)
+erfinden,etw. (Akk)
+herkommen,---
+grinsen,---
+rauchen,etw. (Akk)
+klagen,über jdn./etw. (Akk)
+faszinieren,jdn. (Akk)
+erbringen,etw. (Akk)
+rollen,etw. (Akk)
+zustimmen,jdm. (Dat) / etw. (Dat)
+atmen,---
+vorübergehen,an jdm./etw. (Dat)
+vereinen,etw. (Akk) mit etw.
+absolvieren,etw. (Akk)
+versetzen,jdn. (Akk)
+laden,jdn./etw. (Akk)
+überwinden,etw. (Akk)
+errichten,etw. (Akk)
+lehnen,etw. (Akk) an etw. / sich an etw.
+herausfinden,etw. (Akk)
+qualifizieren,jdn. (Akk) für etw. / sich für etw.
+bedrohen,jdn. (Akk) mit etw.
+sich bewerben,um etw. / bei jdm.
+aufmachen,jdm. (Dat) etw. (Akk)
+verleihen,jdm. (Dat) etw. (Akk)
+bewerten,etw. (Akk)
+bearbeiten,etw. (Akk)
+vermögen,---
+sich auswirken,auf etw. (Akk)
+aufbringen,etw. (Akk)
+vorgehen,gegen jdn./etw.
+eintreffen,---
+erlernen,etw. (Akk)
+decken,etw. (Akk)
+differenzieren,zwischen etw. (Dat)
+entnehmen,jdm./etw. (Dat) etw. (Akk)
+zutreffen,auf jdn./etw. (Akk)
+einsteigen,in etw. (Akk)
+murmeln,etw. (Akk)
+hinterlassen,jdm. (Dat) etw. (Akk)
+loben,jdn. (Akk) für etw.
+registrieren,etw. (Akk)
+rennen,---
+vorziehen,etw. (Akk) jdm./etw. (Dat)
+vermissen,jdn./etw. (Akk)
+senden,jdm. (Dat) etw. (Akk)
+verlängern,etw. (Akk)
+übergehen,in etw. (Akk) / zu etw.
+verschließen,etw. (Akk)
+vollziehen,etw. (Akk)
+verbleiben,---
+zuwenden,jdm. (Dat) etw. (Akk) / sich jdm./etw. (Dat)
+abbrechen,etw. (Akk)
+zusammenarbeiten,mit jdm.
+aufkommen,für etw. (Akk)
+bewahren,jdn./etw. (Akk) vor etw. (Dat)
+dominieren,jdn./etw. (Akk)
+zucken,mit etw. (Dat)
+einschalten,etw. (Akk)
+einhalten,etw. (Akk)
+sich nähern,jdm./etw. (Dat)
+klettern,---
+identifizieren,jdn./etw. (Akk) mit jdm./etw.
+gewährleisten,jdm. (Dat) etw. (Akk)
+küssen,jdn. (Akk)
+scheiden,etw. (Akk) / sich lassen
+ausbreiten,etw. (Akk) / sich
+streiten,mit jdm. über etw. (Akk)
+angreifen,jdn./etw. (Akk)
+versterben,---
+vorwerfen,jdm. (Dat) etw. (Akk)
+ansteigen,---
+winken,jdm. (Dat)
+profitieren,von etw. (Dat)
+zittern,vor etw./jdm. (Dat)
+zurückhalten,jdn./etw. (Akk)
+überschreiten,etw. (Akk)
+erlangen,etw. (Akk)
+beklagen,etw. (Akk) / sich über etw. (Akk)
+benennen,jdn./etw. (Akk)
+erwidern,jdm. (Dat) etw. (Akk)
+erstaunen,jdn. (Akk)
+danken,jdm. (Dat) für etw.
+mitmachen,etw. (Akk)
+losgehen,---
+kündigen,jdm. (Dat) / etw. (Akk)
+korrigieren,jdn./etw. (Akk)
+markieren,etw. (Akk)
+hinausgehen,über etw. (Akk)
+verwandeln,jdn./etw. (Akk) in etw. (Akk)
+transportieren,etw. (Akk)
+schildern,jdm. (Dat) etw. (Akk)
+vorschreiben,jdm. (Dat) etw. (Akk)
+widersprechen,jdm. (Dat)
+verweigern,jdm. (Dat) etw. (Akk)
+abholen,jdn./etw. (Akk)
+weggehen,---
+ausgleichen,etw. (Akk)
+einschlafen,---
+einigen,sich auf etw. (Akk) / mit jdm.
+aufsetzen,etw. (Akk)
+aufbrechen,---
+andeuten,jdm. (Dat) etw. (Akk)
+einleiten,etw. (Akk)
+anbringen,etw. (Akk) an etw. (Dat)
+absetzen,etw. (Akk)
+beantragen,etw. (Akk)
+flüstern,jdm. (Dat) etw. (Akk)
+gleiten,---
+etablieren,etw. (Akk)
+aussteigen,aus etw. (Dat)
+pressen,etw. (Akk) in/aus etw.
+trainieren,jdn./etw. (Akk)
+anmelden,jdn./etw. (Akk)
+austauschen,etw. (Akk) mit jdm.
+aufzeigen,jdm. (Dat) etw. (Akk)
+bevorstehen,jdm. (Dat)
+sich entspannen,---
+fliehen,vor jdm./etw. (Dat)
+eingreifen,in etw. (Akk)
+reinigen,etw. (Akk)
+putzen,etw. (Akk)
+resultieren,aus etw. (Dat)
+sperren,jdn./etw. (Akk)
+anfallen,jdn. (Akk)
+verdeutlichen,jdm. (Dat) etw. (Akk)
+umgeben,jdn./etw. (Akk) mit etw.
+wiegen,jdn./etw. (Akk)
+anführen,jdn./etw. (Akk)
+bestreiten,etw. (Akk)
+eindringen,in etw. (Akk)
+entfallen,jdm. (Dat)
+beauftragen,jdn. (Akk) mit etw.
+aushalten,etw. (Akk)
+dringen,auf etw. (Akk) / in etw. (Akk)
+ausbrechen,aus etw. (Dat)
+einschließen,jdn./etw. (Akk) in etw.
+notieren,sich (Dat) etw. (Akk)
+kleben,etw. (Akk) an etw.
+reizen,jdn. (Akk)
+übergeben,jdm. (Dat) etw. (Akk) / sich
+verlegen,etw. (Akk)
+beibringen,jdm. (Dat) etw. (Akk)
+verschaffen,jdm. (Dat) etw. (Akk) / sich (Dat)
+zurücktreten,von etw. (Dat)
+abhalten,jdn. (Akk) von etw. (Dat)
+befestigen,etw. (Akk) an etw. (Dat)
+sich bedanken,bei jdm. für etw.
+werben,für etw. / um jdn.
+verringern,etw. (Akk)
+vertreiben,jdn./etw. (Akk) aus etw.
+ausfüllen,etw. (Akk)
+biegen,etw. (Akk)
+abstellen,etw. (Akk)
+erregen,jdn./etw. (Akk)
+haften,für etw. (Akk) / an etw. (Dat)
+dastehen,---
+erwischen,jdn. (Akk) bei etw.
+besorgen,jdm. (Dat) etw. (Akk) / sich (Dat)
+beschleunigen,etw. (Akk)
+schleppen,etw. (Akk)
+nachfolgen,jdm. (Dat)
+hocken,---
+nachgehen,jdm./etw. (Dat)
+abspielen,etw. (Akk) / sich
+unterbringen,jdn./etw. (Akk) in etw. (Dat)
+ablösen,jdn./etw. (Akk)
+vergrößern,etw. (Akk)
+stoppen,jdn./etw. (Akk)
+abbilden,jdn./etw. (Akk)
+abdecken,etw. (Akk)
+verkünden,jdm. (Dat) etw. (Akk)
+wiedersehen,jdn./etw. (Akk)
+vernichten,jdn./etw. (Akk)
+übereinstimmen,mit jdm./etw. (Dat)
+verwirren,jdn. (Akk)
+basieren,auf etw. (Dat)
+abzeichnen,etw. (Akk) / sich
+abweichen,von etw. (Dat)
+sich abspielen,---
+entgegenkommen,jdm. (Dat)
+isolieren,jdn./etw. (Akk) von etw.
+schwingen,etw. (Akk)
+verwirklichen,etw. (Akk) / sich
+verhandeln,mit jdm. über etw.
+verbrennen,jdm. (Dat) etw. (Akk) / etw. (Akk)
+hinfahren,---
+anklagen,jdn. (Akk) wegen etw. (Gen)
+verknüpfen,etw. (Akk) mit etw.
+verzeichnen,etw. (Akk)
+tauchen,---
+übersehen,jdn./etw. (Akk)
+auskommen,mit jdm./etw. (Dat)
+entwerfen,etw. (Akk)
+aufklären,jdn. (Akk) über etw.
+bedauern,etw. (Akk)
+ruhen,---
+auftragen,jdm. (Dat) etw. (Akk) / etw. (Akk)
+aufwachen,---
+ausschalten,etw. (Akk)
+ausscheiden,aus etw. (Dat)
+backen,jdm. (Dat) etw. (Akk)
+befriedigen,jdn./etw. (Akk)
+einschätzen,jdn./etw. (Akk)
+versagen,jdm. (Dat) etw. (Akk) / ---
+erschließen,jdm. (Dat) etw. (Akk)
+formen,etw. (Akk)
+kriechen,---
+lenken,etw. (Akk)
+erziehen,jdn. (Akk) zu etw.
+jagen,jdn./etw. (Akk)
+beschädigen,etw. (Akk)
+bekämpfen,etw. (Akk)
+reiten,etw. (Akk)
+kombinieren,etw. (Akk) mit etw.
+veranstalten,etw. (Akk)
+motivieren,jdn. (Akk) zu etw.
+untergehen,---
+umbringen,jdn. (Akk) / sich
+spaziergang,---
+versammeln,jdn./etw. (Akk)
+verzweifeln,an jdm./etw. (Dat)
+verdanken,jdm. (Dat) etw. (Akk)
+wandeln,etw. (Akk) / sich
+zusehen,jdm. (Dat) bei etw.
+aktivieren,etw. (Akk)
+berufen,jdn. (Akk) zu etw. / sich auf etw.
+bewältigen,etw. (Akk)
+aufsuchen,jdn./etw. (Akk)
+zusammenkommen,mit jdm.
+zusammenleben,mit jdm.
+abziehen,jdm. (Dat) etw. (Akk) / etw. (Akk)
+sich bewähren,---
+blühen,---
+beinhalten,etw. (Akk)
+bereitstellen,jdm. (Dat) etw. (Akk)
+ausstellen,etw. (Akk)
+sich erholen,von etw. (Dat)
+sich erstrecken,über etw. (Akk)
+einreichen,etw. (Akk) bei jdm.
+erfreuen,jdn. (Akk) / sich an etw. (Dat)
+einschlagen,etw. (Akk)
+erschießen,jdn. (Akk)
+ersparen,jdm. (Dat) etw. (Akk)
+ertragen,etw. (Akk)
+gestehen,jdm. (Dat) etw. (Akk)
+löschen,etw. (Akk)
+konfrontieren,jdn. (Akk) mit etw.
+infizieren,jdn. (Akk) mit etw.
+strahlen,---
+schweben,---
+veranlassen,jdn. (Akk) zu etw. / etw. (Akk)
+telefonieren,mit jdm.
+verpassen,jdm. (Dat) etw. (Akk) / etw. (Akk)
+vorangehen,jdm. (Dat)
+unterschreiben,etw. (Akk)
+überstehen,etw. (Akk)
+trösten,jdn. (Akk)
+weitermachen,mit etw.
+weitergeben,jdm. (Dat) etw. (Akk)
+verhaften,jdn. (Akk)
+verkehren,mit jdm.
+anrichten,etw. (Akk)
+anstehen,---
+ausdehnen,etw. (Akk) / sich
+abschneiden,etw. (Akk) / bei etw.
+aufschreiben,jdm. (Dat) etw. (Akk)
+aufrufen,jdn. (Akk) zu etw.
+anordnen,etw. (Akk)
+aufspringen,auf etw. (Akk)
+abheben,etw. (Akk) / sich von jdm.
+zustehen,jdm. (Dat)
+zulegen,sich (Dat) etw. (Akk) / ---
+agieren,---
+beabsichtigen,etw. (Akk)
+ausnutzen,jdn./etw. (Akk)
+ausweichen,jdm./etw. (Dat)
+bergen,etw. (Akk)
+sich begeben,an/zu etw. (Dat)
+beeinträchtigen,etw. (Akk)
+beseitigen,etw. (Akk)
+begehen,etw. (Akk)
+ausprobieren,etw. (Akk)
+demonstrieren,etw. (Akk) / gegen/für etw.
+fressen,etw. (Akk)
+charakterisieren,jdn./etw. (Akk)
+erwecken,etw. (Akk)
+einlassen,jdn. (Akk) / sich auf etw.
+erschweren,jdm. (Dat) etw. (Akk)
+flüchten,vor jdm./etw. (Dat)
+dokumentieren,etw. (Akk)
+erwachen,---
+erschöpfen,jdn./etw. (Akk) / sich
+erforschen,etw. (Akk)
+gießen,etw. (Akk)
+lauschen,jdm./etw. (Dat)
+locken,jdn. (Akk)
+hervorgehen,aus etw. (Dat)
+irren,sich
+gleichen,jdm./etw. (Dat)
+grüßen,jdn. (Akk)
+loswerden,jdn./etw. (Akk)
+spiegeln,etw. (Akk) / sich in etw.
+sicherstellen,etw. (Akk)
+stehlen,jdm. (Dat) etw. (Akk)
+überwachen,jdn./etw. (Akk)
+umwandeln,etw. (Akk) in etw.
+überziehen,etw. (Akk)
+zusammenstellen,etw. (Akk)
+abwenden,etw. (Akk) von jdm. / sich von jdm.
+auswerten,etw. (Akk)
+zurücklegen,etw. (Akk)
+aufbewahren,etw. (Akk)
+ansiedeln,jdn. (Akk) / sich
+zusagen,jdm. (Dat) / etw. (Akk)
+aufschlagen,etw. (Akk)
+beschaffen,jdm. (Dat) etw. (Akk) / sich (Dat)
+erhoffen,sich (Dat) etw. (Akk) von jdm.
+beleben,etw. (Akk)
+entfalten,etw. (Akk) / sich
+einsehen,etw. (Akk)
+eilen,---
+erleiden,etw. (Akk)
+fixieren,etw. (Akk)
+freigeben,etw. (Akk)
+hervorrufen,etw. (Akk)
+festnehmen,jdn. (Akk)
+hassen,jdn./etw. (Akk)
+hinnehmen,etw. (Akk)
+klingeln,---
+lagern,etw. (Akk)
+kommentieren,etw. (Akk)
+seufzen,---
+regnen,---
+rauschen,---
+plädieren,auf etw. (Akk) / für etw.
+rutschen,---
+unterstreichen,etw. (Akk)
+verfallen,jdm./etw. (Dat)
+strecken,etw. (Akk) / sich
+umarmen,jdn. (Akk)
+spezialisieren,sich auf etw. (Akk)
+auflegen,etw. (Akk)
+verschärfen,etw. (Akk) / sich
+zurückgeben,jdm. (Dat) etw. (Akk)
+vernehmen,jdn./etw. (Akk)
+vermindern,etw. (Akk) / sich
+brüllen,---
+durchziehen,etw. (Akk)
+erlassen,jdm. (Dat) etw. (Akk) / etw. (Akk)
+aufreißen,etw. (Akk)
+auslegen,jdm. (Dat) etw. (Akk) / etw. (Akk)
+aufrichten,jdn./etw. (Akk) / sich
+einlegen,etw. (Akk)
+fotografieren,jdn./etw. (Akk)
+gestatten,jdm. (Dat) etw. (Akk)
+hervorheben,etw. (Akk)
+herausnehmen,jdm. (Dat) etw. (Akk) / etw. (Akk)
+lügen,jdn. (Akk) an / ---
+operieren,jdn. (Akk)
+strukturieren,etw. (Akk)
+sich schämen,für/wegen etw. (Gen)
+servieren,jdm. (Dat) etw. (Akk)
+zielen,auf jdn./etw. (Akk)
+vorbeugen,etw. (Dat)
+zutrauen,jdm. (Dat) etw. (Akk)
+zurückweisen,jdn./etw. (Akk)
+verdoppeln,etw. (Akk) / sich
+vereinfachen,etw. (Akk)
+wehen,---
+vorlesen,jdm. (Dat) etw. (Akk)
+verwundern,jdn. (Akk)
+verdrängen,jdn./etw. (Akk)
+zuführen,jdm. (Dat) etw. (Akk)
+zerreißen,etw. (Akk)
+unterdrücken,jdn./etw. (Akk)
+anmerken,jdm. (Dat) etw. (Akk)
+ausnehmen,jdn./etw. (Akk)
+beten,zu jdm. / für jdn./etw.
+abgrenzen,etw. (Akk) von etw. / sich
+aufziehen,jdn./etw. (Akk)
+ablenken,jdn. (Akk) von etw.
+abschalten,etw. (Akk)
+abreißen,etw. (Akk)
+sich benehmen,---
+bremsen,jdn./etw. (Akk)
+dulden,etw. (Akk)
+sich erkundigen,bei jdm. nach etw.
+einholen,jdn./etw. (Akk)
+bohren,in etw. (Akk/Dat)
+braten,jdm. (Dat) etw. (Akk)
+durchgehen,etw. (Akk)
+installieren,etw. (Akk)
+loslassen,jdn./etw. (Akk)
+konzipieren,etw. (Akk)
+repräsentieren,jdn./etw. (Akk)
+schreiten,---
+täuschen,jdn. (Akk) / sich in jdm.
+protestieren,gegen etw.
+spannen,etw. (Akk)
+schimpfen,mit jdm. / über jdn./etw. (Akk)
+überfordern,jdn. (Akk)
+umstellen,etw. (Akk)
+wegnehmen,jdm. (Dat) etw. (Akk)
+zurückgreifen,auf jdn./etw. (Akk)
+angehören,etw./jdm. (Dat)
+vorherrschen,---
+verfassen,etw. (Akk)
+vertiefen,etw. (Akk) / sich in etw.
+festsetzen,etw. (Akk)
+anvertrauen,jdm. (Dat) etw. (Akk)
+aufräumen,etw. (Akk)
+antun,jdm. (Dat) etw. (Akk)
+entgehen,jdm. (Dat)
+mahnen,jdn. (Akk) zu etw.
+inszenieren,etw. (Akk)
+herausgeben,jdm. (Dat) etw. (Akk) / etw. (Akk)
+verbrauchen,etw. (Akk)
+schleichen,---
+trocknen,etw. (Akk) / sich
+reflektieren,etw. (Akk)
+segeln,---
+vernachlässigen,jdn./etw. (Akk)
+unterstellen,jdm. (Dat) etw. (Akk)
+streben,nach etw. (Dat)
+überholen,jdn./etw. (Akk)
+vorbeigehen,an jdm./etw. (Dat)
+übertreiben,etw. (Akk)
+fangen,jdn./etw. (Akk)
+vortragen,jdm. (Dat) etw. (Akk)
