@@ -1,0 +1,231 @@
+OPTIMALLY ORDERED READING LIST - DECREASING WORD DENSITY
+================================================================================
+
+1. 4ABorsO9hwg.txt
+   Density: 0.143284
+   Target words in file: 48
+   New words added: 48
+   Total words in file: 335
+
+2. r34wz26HSkk.txt
+   Density: 0.137255
+   Target words in file: 28
+   New words added: 28
+   Total words in file: 204
+
+3. c8VwV5xrwQc.txt
+   Density: 0.131148
+   Target words in file: 24
+   New words added: 23
+   Total words in file: 183
+
+4. 5IpAsztfBBA.txt
+   Density: 0.110623
+   Target words in file: 126
+   New words added: 112
+   Total words in file: 1,139
+
+5. l85xFmyq3Mo.txt
+   Density: 0.104730
+   Target words in file: 31
+   New words added: 21
+   Total words in file: 296
+
+6. GSVoFZJgD9M.txt
+   Density: 0.103953
+   Target words in file: 142
+   New words added: 112
+   Total words in file: 1,366
+
+7. XABkeZSx_D4.txt
+   Density: 0.101490
+   Target words in file: 109
+   New words added: 66
+   Total words in file: 1,074
+
+8. 8vhV8ccSh7A.txt
+   Density: 0.101249
+   Target words in file: 154
+   New words added: 74
+   Total words in file: 1,521
+
+9. i9CXV2pzwzQ.txt
+   Density: 0.098790
+   Target words in file: 147
+   New words added: 52
+   Total words in file: 1,488
+
+10. _WP9Piwsexo.txt
+   Density: 0.098717
+   Target words in file: 100
+   New words added: 34
+   Total words in file: 1,013
+
+11. eQkU141e39k.txt
+   Density: 0.098361
+   Target words in file: 102
+   New words added: 31
+   Total words in file: 1,037
+
+12. iPGjNmkE7nw.txt
+   Density: 0.094565
+   Target words in file: 87
+   New words added: 24
+   Total words in file: 920
+
+13. JmD6DlJOdXo.txt
+   Density: 0.093183
+   Target words in file: 190
+   New words added: 57
+   Total words in file: 2,039
+
+14. 2gHNiqysuvs.txt
+   Density: 0.087473
+   Target words in file: 81
+   New words added: 18
+   Total words in file: 926
+
+15. WaPmJHGjmG4.txt
+   Density: 0.085016
+   Target words in file: 80
+   New words added: 22
+   Total words in file: 941
+
+16. YjKKy361zZ0.txt
+   Density: 0.082840
+   Target words in file: 154
+   New words added: 34
+   Total words in file: 1,859
+
+17. GWvq34_k7Iw.txt
+   Density: 0.079219
+   Target words in file: 69
+   New words added: 18
+   Total words in file: 871
+
+18. IOAnfChTVV4.txt
+   Density: 0.075831
+   Target words in file: 187
+   New words added: 40
+   Total words in file: 2,466
+
+19. RMP0BqUKJmk.txt
+   Density: 0.075730
+   Target words in file: 127
+   New words added: 17
+   Total words in file: 1,677
+
+20. bGTHexacG7w.txt
+   Density: 0.075395
+   Target words in file: 186
+   New words added: 33
+   Total words in file: 2,467
+
+21. spNoe-kzOto.txt
+   Density: 0.075253
+   Target words in file: 104
+   New words added: 19
+   Total words in file: 1,382
+
+22. rHMYkCU1n44.txt
+   Density: 0.074534
+   Target words in file: 12
+   New words added: 4
+   Total words in file: 161
+
+23. OWp5TfSkK7E.txt
+   Density: 0.074226
+   Target words in file: 343
+   New words added: 82
+   Total words in file: 4,621
+
+24. BXMuL4J7qA8.txt
+   Density: 0.072993
+   Target words in file: 10
+   New words added: 1
+   Total words in file: 137
+
+25. C7YSy-Mr-d8.txt
+   Density: 0.072204
+   Target words in file: 113
+   New words added: 15
+   Total words in file: 1,565
+
+26. cPUmbId4s8s.txt
+   Density: 0.068662
+   Target words in file: 156
+   New words added: 17
+   Total words in file: 2,272
+
+27. NsRtjNxsWLY.txt
+   Density: 0.063294
+   Target words in file: 254
+   New words added: 31
+   Total words in file: 4,013
+
+28. SA-Jei4sSnI.txt
+   Density: 0.061447
+   Target words in file: 62
+   New words added: 6
+   Total words in file: 1,009
+
+29. ydcPbugIUEc.txt
+   Density: 0.061069
+   Target words in file: 8
+   New words added: 2
+   Total words in file: 131
+
+30. 4sKz1_uejD4.txt
+   Density: 0.058968
+   Target words in file: 72
+   New words added: 6
+   Total words in file: 1,221
+
+31. FvzrAyXkHr0.txt
+   Density: 0.057784
+   Target words in file: 85
+   New words added: 4
+   Total words in file: 1,471
+
+32. gJbNr0rpPa8.txt
+   Density: 0.056888
+   Target words in file: 83
+   New words added: 10
+   Total words in file: 1,459
+
+33. 4D7Y0UNZxdg.txt
+   Density: 0.054348
+   Target words in file: 25
+   New words added: 5
+   Total words in file: 460
+
+34. 9AgY-D_hNk4.txt
+   Density: 0.053726
+   Target words in file: 62
+   New words added: 7
+   Total words in file: 1,154
+
+35. kSVPYpRBfkU.txt
+   Density: 0.051786
+   Target words in file: 29
+   New words added: 4
+   Total words in file: 560
+
+36. 64.Der letzte Kuss A2-B1.txt
+   Density: 0.051649
+   Target words in file: 343
+   New words added: 44
+   Total words in file: 6,641
+
+37. rBkpK2xOGo0.txt
+   Density: 0.047970
+   Target words in file: 13
+   New words added: 4
+   Total words in file: 271
+
+38. Ur0He68Ah1Y.txt
+   Density: 0.036697
+   Target words in file: 12
+   New words added: 1
+   Total words in file: 327
+

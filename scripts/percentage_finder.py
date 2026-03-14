@@ -428,14 +428,16 @@ def main():
 
         # Example: Get words from a specific file
         # Uncomment to see words from a specific file:
-        all_words = get_all_words('data/b1_parsed.txt')
+        
+        # all_words = get_all_words('data/b1_parsed.txt')
+        all_words = get_all_words()
         words = set()
 
-        for file_name in sorted(os.listdir('files/text')):
-            words_in_file = set([row['dictionary_entry'] for row in get_words_in_file(file_name)])
-            top_freq_words = [word for word in words_in_file if word in all_words]
-            words.update(top_freq_words)
-            print(len(words) / len(all_words))
+        # for file_name in sorted(os.listdir('files/text')):
+        #     words_in_file = set([row['dictionary_entry'] for row in get_words_in_file(file_name)])
+        #     top_freq_words = [word for word in words_in_file if word in all_words]
+        #     words.update(top_freq_words)
+        #     print(len(words) / len(all_words))
 
         read_files = [
             '01.Das Herz von Dresden (B1).txt', 

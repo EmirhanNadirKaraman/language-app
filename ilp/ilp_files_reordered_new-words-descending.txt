@@ -1,0 +1,249 @@
+OPTIMALLY ORDERED READING LIST - NEW WORDS (GREEDY APPROACH)
+================================================================================
+
+1. 19.Die Blaumacherin A2-B1.txt
+   Density: 0.023372
+   Target words in file: 639
+   New words added: 639
+   Total words in file: 27,340
+
+2. 37.Der rote Hahn (B1).txt
+   Density: 0.032536
+   Target words in file: 556
+   New words added: 171
+   Total words in file: 17,089
+
+3. 11.Der Taubenfuetterer (B1).txt
+   Density: 0.043220
+   Target words in file: 494
+   New words added: 90
+   Total words in file: 11,430
+
+4. OWp5TfSkK7E.txt
+   Density: 0.074226
+   Target words in file: 343
+   New words added: 66
+   Total words in file: 4,621
+
+5. _Sf9yEZt__0.txt
+   Density: 0.054331
+   Target words in file: 286
+   New words added: 45
+   Total words in file: 5,264
+
+6. 09.Der Passagier (B1).txt
+   Density: 0.040383
+   Target words in file: 418
+   New words added: 35
+   Total words in file: 10,351
+
+7. 78.Faust das Volksbuch B1.txt
+   Density: 0.022971
+   Target words in file: 349
+   New words added: 30
+   Total words in file: 15,193
+
+8. 3ZXGvYQI5Y8.txt
+   Density: 0.078147
+   Target words in file: 226
+   New words added: 25
+   Total words in file: 2,892
+
+9. 68.Gefaehrlicher Einkauf A2-B1.txt
+   Density: 0.052338
+   Target words in file: 357
+   New words added: 20
+   Total words in file: 6,821
+
+10. NsRtjNxsWLY.txt
+   Density: 0.063294
+   Target words in file: 254
+   New words added: 15
+   Total words in file: 4,013
+
+11. aQNfPNSQnsk.txt
+   Density: 0.073920
+   Target words in file: 142
+   New words added: 12
+   Total words in file: 1,921
+
+12. 71.Tatort - Krankenhaus A2-B1.txt
+   Density: 0.059120
+   Target words in file: 364
+   New words added: 11
+   Total words in file: 6,157
+
+13. 4wFxhmbmC9s.txt
+   Density: 0.076328
+   Target words in file: 148
+   New words added: 10
+   Total words in file: 1,939
+
+14. lXNS_pLFkdk.txt
+   Density: 0.077768
+   Target words in file: 184
+   New words added: 8
+   Total words in file: 2,366
+
+15. 33.Die schoene Frau Baer (B1).txt
+   Density: 0.029943
+   Target words in file: 439
+   New words added: 7
+   Total words in file: 14,661
+
+16. IOAnfChTVV4.txt
+   Density: 0.075831
+   Target words in file: 187
+   New words added: 6
+   Total words in file: 2,466
+
+17. 70.Liebe bis in den Tod A2-B1.txt
+   Density: 0.053362
+   Target words in file: 369
+   New words added: 5
+   Total words in file: 6,915
+
+18. X4JZrSkoBJI.txt
+   Density: 0.041864
+   Target words in file: 177
+   New words added: 5
+   Total words in file: 4,228
+
+19. 08.Das Wunschhaus (B1).txt
+   Density: 0.039437
+   Target words in file: 398
+   New words added: 4
+   Total words in file: 10,092
+
+20. dOBoWyyIWdI.txt
+   Density: 0.058653
+   Target words in file: 283
+   New words added: 4
+   Total words in file: 4,825
+
+21. bGTHexacG7w.txt
+   Density: 0.075395
+   Target words in file: 186
+   New words added: 4
+   Total words in file: 2,467
+
+22. a5ih71xsP2o.txt
+   Density: 0.062377
+   Target words in file: 285
+   New words added: 3
+   Total words in file: 4,569
+
+23. C7YSy-Mr-d8.txt
+   Density: 0.072204
+   Target words in file: 113
+   New words added: 3
+   Total words in file: 1,565
+
+24. 36.Besserwisser (B1).txt
+   Density: 0.041311
+   Target words in file: 392
+   New words added: 2
+   Total words in file: 9,489
+
+25. kk38o0rDw84.txt
+   Density: 0.065574
+   Target words in file: 112
+   New words added: 2
+   Total words in file: 1,708
+
+26. iPGjNmkE7nw.txt
+   Density: 0.094565
+   Target words in file: 87
+   New words added: 2
+   Total words in file: 920
+
+27. oIjlYW3eXdQ.txt
+   Density: 0.059088
+   Target words in file: 105
+   New words added: 2
+   Total words in file: 1,777
+
+28. 72.Tod in der Oper A2-B1.txt
+   Density: 0.052306
+   Target words in file: 398
+   New words added: 2
+   Total words in file: 7,609
+
+29. YjKKy361zZ0.txt
+   Density: 0.082840
+   Target words in file: 154
+   New words added: 2
+   Total words in file: 1,859
+
+30. GSVoFZJgD9M.txt
+   Density: 0.103953
+   Target words in file: 142
+   New words added: 2
+   Total words in file: 1,366
+
+31. pyXS4ytSIGY.txt
+   Density: 0.074443
+   Target words in file: 157
+   New words added: 2
+   Total words in file: 2,109
+
+32. y9vGwYCR4wY.txt
+   Density: 0.069570
+   Target words in file: 139
+   New words added: 1
+   Total words in file: 1,998
+
+33. XABkeZSx_D4.txt
+   Density: 0.101490
+   Target words in file: 109
+   New words added: 1
+   Total words in file: 1,074
+
+34. 01.Das Herz von Dresden (B1).txt
+   Density: 0.025554
+   Target words in file: 286
+   New words added: 1
+   Total words in file: 11,192
+
+35. o7_1UgCeLRE.txt
+   Density: 0.059882
+   Target words in file: 263
+   New words added: 1
+   Total words in file: 4,392
+
+36. TZE1SuTtrD0.txt
+   Density: 0.050478
+   Target words in file: 285
+   New words added: 1
+   Total words in file: 5,646
+
+37. _9Lxt7OTVx4.txt
+   Density: 0.063478
+   Target words in file: 73
+   New words added: 1
+   Total words in file: 1,150
+
+38. i9CXV2pzwzQ.txt
+   Density: 0.098790
+   Target words in file: 147
+   New words added: 1
+   Total words in file: 1,488
+
+39. 9AgY-D_hNk4.txt
+   Density: 0.053726
+   Target words in file: 62
+   New words added: 1
+   Total words in file: 1,154
+
+40. 32.Die ganze Wahrheit (B1).txt
+   Density: 0.034280
+   Target words in file: 355
+   New words added: 1
+   Total words in file: 10,356
+
+41. 07.Wiener Blut (B1).txt
+   Density: 0.045940
+   Target words in file: 271
+   New words added: 1
+   Total words in file: 5,899
+
