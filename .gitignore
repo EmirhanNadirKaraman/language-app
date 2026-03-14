@@ -10,6 +10,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+!youglish-app/frontend/dist/
 downloads/
 eggs/
 .eggs/
@@ -45,3 +46,4 @@ postprocessing/results/
 *.log
 
 files/
+client_secret.json
