@@ -21,6 +21,13 @@ export async function fetchLanguages(): Promise<string[]> {
   return res.json();
 }
 
+export async function fetchWordForms(query: string): Promise<string[]> {
+  const params = new URLSearchParams({ q: query });
+  const res = await fetch(`/api/word-forms?${params}`);
+  if (!res.ok) throw new Error(`Word forms failed: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchVideoSentences(
   videoId: string,
 ): Promise<VideoSentence[]> {

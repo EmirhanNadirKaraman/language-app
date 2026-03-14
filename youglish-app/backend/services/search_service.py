@@ -33,6 +33,23 @@ PHRASE_QUERY = """
     ORDER BY v.video_id, s.start_time
 """
 
+# Same as PHRASE_QUERY but matches $1 as a whole word (word-boundary regex).
+# Used for single-word searches so "ist" doesn't match inside "Tadschikistan".
+PHRASE_WORD_QUERY = """
+    SELECT DISTINCT ON (v.video_id)
+        v.video_id, v.title, v.thumbnail_url, v.language,
+        s.sentence_id, s.start_time, s.content,
+        stp.surface_form,
+        stp.match_type
+    FROM phrase_blueprint pb
+    JOIN sentence_to_phrase stp ON stp.blueprint_id = pb.blueprint_id
+    JOIN sentence s             ON s.sentence_id = stp.sentence_id
+    JOIN video v                ON v.video_id = s.video_id
+    WHERE pb.blueprint ~* ('\m' || $1 || '\M')
+      AND ($2::text IS NULL OR v.language = $2)
+    ORDER BY v.video_id, s.start_time
+"""
+
 SIMILARITY_THRESHOLD = 0.3
 
 
@@ -167,9 +184,18 @@ async def search(
                 # No single video has all terms — greedy set cover across videos
                 results = await greedy_set_cover_search(pool, terms, language)
     else:
-        # Single word: exact match + phrase blueprint, merged
+        # Single word: exact match + phrase blueprint, merged.
+        # Use word-boundary phrase query so "ist" doesn't match "Tadschikistan".
         word_rows = await pool.fetch(WORD_QUERY, query, language)
-        phrase_rows = await pool.fetch(PHRASE_QUERY, f"%{query}%", language)
+        phrase_rows = await pool.fetch(PHRASE_WORD_QUERY, query, language)
+
+        print(f"[search] query={query!r}")
+        print(f"[search] word_rows ({len(word_rows)}):")
+        for r in word_rows:
+            print(f"  video={r['video_id']} sentence={r['sentence_id']} t={r['start_time']:.1f} | {r['content'][:80]}")
+        print(f"[search] phrase_rows ({len(phrase_rows)}):")
+        for r in phrase_rows:
+            print(f"  video={r['video_id']} sentence={r['sentence_id']} surface={r['surface_form']!r} | {r['content'][:80]}")
 
         seen = {r["sentence_id"] for r in phrase_rows}
         extra = [r for r in word_rows if r["sentence_id"] not in seen]
@@ -294,13 +320,25 @@ async def suggest(
     limit: int = 10,
 ) -> list[dict]:
     rows = await pool.fetch("""
-        SELECT blueprint AS word, similarity(lookup_key, $1) AS score, 'phrase'::text AS type
+        SELECT blueprint AS word, strict_word_similarity($1, lookup_key) AS score, 'phrase'::text AS type
         FROM phrase_blueprint
-        WHERE similarity(lookup_key, $1) > 0.3
+        WHERE strict_word_similarity($1, lookup_key) > 0.3
+          AND lookup_key ~* ('\m' || $1 || '\M')
         ORDER BY score DESC
         LIMIT $2
     """, query, limit)
     return [{"word": r["word"], "score": float(r["score"]), "type": r["type"]} for r in rows]
+
+
+async def get_word_forms(pool: asyncpg.Pool, terms: list[str]) -> list[str]:
+    """Return all surface forms that share a lemma with any of the given terms."""
+    rows = await pool.fetch("""
+        SELECT DISTINCT w2.word
+        FROM word_table w1
+        JOIN word_table w2 ON w2.lemma = w1.lemma
+        WHERE w1.word = ANY($1) OR w1.lemma = ANY($1)
+    """, terms)
+    return [r["word"] for r in rows]
 
 
 async def get_languages(pool: asyncpg.Pool) -> list[str]:

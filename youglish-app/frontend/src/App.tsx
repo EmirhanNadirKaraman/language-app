@@ -4,11 +4,11 @@ import { PlayerView } from './components/PlayerView';
 import { useSearch } from './hooks/useSearch';
 
 export default function App() {
-  const { terms, query, addTerm, removeTerm, language, setLanguage, results, total, loading, error, hasMore, loadMore } = useSearch();
+  const { terms, query, addTerm, removeTerm, results, total, loading, error, hasMore, loadMore } = useSearch();
   const [resultIdx, setResultIdx] = useState(0);
 
   // Reset to first result on new search
-  useEffect(() => { setResultIdx(0); }, [query, language]);
+  useEffect(() => { setResultIdx(0); }, [query]);
 
   const currentResult = results[resultIdx] ?? null;
 
@@ -27,8 +27,6 @@ export default function App() {
         terms={terms}
         onAddTerm={addTerm}
         onRemoveTerm={removeTerm}
-        language={language}
-        onLanguageChange={setLanguage}
         loading={loading}
       />
 

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { fetchLanguages } from '../api/search';
 import { fetchSuggestions } from '../api/suggest';
 import type { Suggestion } from '../types';
 
@@ -7,13 +6,10 @@ interface Props {
   terms: string[];
   onAddTerm: (word: string) => void;
   onRemoveTerm: (index: number) => void;
-  language: string | null;
-  onLanguageChange: (lang: string | null) => void;
   loading: boolean;
 }
 
-export function SearchBar({ terms, onAddTerm, onRemoveTerm, language, onLanguageChange, loading }: Props) {
-  const [languages, setLanguages] = useState<string[]>([]);
+export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -21,10 +17,6 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, language, onLanguage
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    fetchLanguages().then(setLanguages).catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -35,15 +27,21 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, language, onLanguage
       return;
     }
 
+    // Show the typed word immediately while we wait for phrase suggestions
+    setSuggestions([{ word: input.trim(), score: 1, type: 'word' }]);
+    setShowDropdown(true);
+
     debounceRef.current = setTimeout(async () => {
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
 
       try {
-        const data = await fetchSuggestions(input.trim(), language, controller.signal);
-        setSuggestions(data);
-        setShowDropdown(data.length > 0);
+        const data = await fetchSuggestions(input.trim(), 'de', controller.signal);
+        const wordSuggestion: Suggestion = { word: input.trim(), score: 1, type: 'word' };
+        const phrases = data.filter(s => s.word !== input.trim());
+        setSuggestions([wordSuggestion, ...phrases]);
+        setShowDropdown(true);
         setActiveIdx(-1);
       } catch {
         // AbortError or network error — ignore
@@ -51,7 +49,7 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, language, onLanguage
     }, 200);
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [input, language]);
+  }, [input]);
 
   const selectSuggestion = useCallback((word: string) => {
     onAddTerm(word);
@@ -203,14 +201,6 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, language, onLanguage
         )}
       </div>
 
-      <select
-        value={language ?? ''}
-        onChange={e => onLanguageChange(e.target.value || null)}
-        style={{ padding: '10px', fontSize: '16px' }}
-      >
-        <option value="">All languages</option>
-        {languages.map(l => <option key={l} value={l}>{l}</option>)}
-      </select>
     </div>
   );
 }

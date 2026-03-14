@@ -6,7 +6,7 @@ const PAGE_SIZE = 20;
 
 export function useSearch() {
   const [terms, setTerms] = useState<string[]>([]);
-  const [language, setLanguage] = useState<string | null>(null);
+  const language = 'de';
   const [results, setResults] = useState<SearchResult[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -62,5 +62,5 @@ export function useSearch() {
 
   const hasMore = results.length < total;
 
-  return { terms, query, addTerm, removeTerm, language, setLanguage, results, total, loading, error, hasMore, loadMore };
+  return { terms, query, addTerm, removeTerm, results, total, loading, error, hasMore, loadMore };
 }

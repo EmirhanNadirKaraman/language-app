@@ -26,11 +26,15 @@ export function findSentenceByTime(sentences: NormalizedSentence[], time: number
     return idx;
 }
 
+export function sentenceContainsTerm(sentence: NormalizedSentence, terms: string[]): boolean {
+    return terms.some(t => new RegExp(`\\b${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(sentence.content));
+}
+
 export function highlightText(text: string, terms: string[]): React.ReactNode {
     if (!terms.length) return text;
 
     const escaped = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    const parts = text.split(new RegExp(`(${escaped.join('|')})`, 'gi'));
+    const parts = text.split(new RegExp(`\\b(${escaped.join('|')})\\b`, 'gi'));
 
     return parts.map((part, i) =>
         terms.some(t => part.toLowerCase() === t.toLowerCase())

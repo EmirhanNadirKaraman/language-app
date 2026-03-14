@@ -35,6 +35,15 @@ async def video_sentences(
     return await search_service.get_video_sentences(pool, video_id)
 
 
+@router.get("/word-forms", response_model=list[str])
+async def word_forms(
+    q: str = Query(..., min_length=1),
+    pool=Depends(get_pool),
+):
+    terms = q.strip().split()
+    return await search_service.get_word_forms(pool, terms)
+
+
 @router.get("/languages", response_model=list[str])
 async def languages(pool=Depends(get_pool)):
     return await search_service.get_languages(pool)

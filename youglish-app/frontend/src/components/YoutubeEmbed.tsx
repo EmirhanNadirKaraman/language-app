@@ -51,7 +51,9 @@ export const YoutubeEmbed = forwardRef<YoutubeEmbedHandle, Props>(
 
     useImperativeHandle(ref, () => ({
       seekTo: (seconds) => playerRef.current?.seekTo(seconds, true),
-      getCurrentTime: () => playerRef.current?.getCurrentTime() ?? 0,
+      getCurrentTime: () => typeof playerRef.current?.getCurrentTime === 'function'
+        ? playerRef.current.getCurrentTime()
+        : 0,
     }));
 
     // Create player on mount, destroy on unmount

@@ -1,23 +1,39 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SearchResult } from '../types';
 import type { YoutubeEmbedHandle } from '../components/YoutubeEmbed';
-import { fetchVideoSentences } from '../api/search';
-import { normalizeSentences, findSentenceByTime, type NormalizedSentence } from '../utils/sentenceUtils';
+import { fetchVideoSentences, fetchWordForms } from '../api/search';
+import { normalizeSentences, findSentenceByTime, sentenceContainsTerm, type NormalizedSentence } from '../utils/sentenceUtils';
 
 interface Args {
     result: SearchResult;
     query: string;
-    canPrev: boolean;
-    canNext: boolean;
     onPrev: () => void;
     onNext: () => void;
 }
 
-export function usePlayerSentences({ result, query, canPrev, canNext, onPrev, onNext }: Args) {
+export function usePlayerSentences({ result, query, onPrev, onNext }: Args) {
     const [sentences, setSentences] = useState<NormalizedSentence[]>([]);
     const [sentenceIdx, setSentenceIdx] = useState(0);
 
     const playerRef = useRef<YoutubeEmbedHandle>(null);
+
+    const baseTerms = result.surface_form
+        ? [result.surface_form]
+        : query.split(' ').filter(t => t.length > 0);
+
+    const [highlightTerms, setHighlightTerms] = useState<string[]>(baseTerms);
+
+    // For word searches, expand terms to all conjugated/inflected forms
+    useEffect(() => {
+        if (result.surface_form) {
+            setHighlightTerms([result.surface_form]);
+            return;
+        }
+        if (!query) return;
+        fetchWordForms(query)
+            .then(forms => setHighlightTerms(forms.length > 0 ? forms : baseTerms))
+            .catch(() => setHighlightTerms(baseTerms));
+    }, [query, result.surface_form]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Fetch sentences when the video/query changes
     useEffect(() => {
@@ -34,7 +50,7 @@ export function usePlayerSentences({ result, query, canPrev, canNext, onPrev, on
                 const idx = normalized.findIndex(s => Math.floor(s.timeSec) === result.start_time_int);
                 setSentenceIdx(idx >= 0 ? idx : 0);
             })
-            .catch(err => console.error('fetchVideoSentences failed', err));
+            .catch(() => {});
     }, [result.video_id, result.start_time_int, query]);
 
     // Refs so the interval callback always sees fresh values
@@ -63,18 +79,33 @@ export function usePlayerSentences({ result, query, canPrev, canNext, onPrev, on
 
     const seekTo = useCallback((newIdx: number, sents: NormalizedSentence[]) => {
         setSentenceIdx(newIdx);
-        playerRef.current?.seekTo(Math.floor(sents[newIdx].timeSec));
+        const LEAD_IN = 0.5;
+        playerRef.current?.seekTo(Math.max(0, Math.floor(sents[newIdx].timeSec) - LEAD_IN));
     }, []);
 
-    const handlePrev = useCallback(() => {
-        if (sentenceIdx > 0) seekTo(sentenceIdx - 1, sentences);
-        else onPrev();
-    }, [sentenceIdx, sentences, seekTo, onPrev]);
+    // Navigate to the previous sentence that contains a highlight term,
+    // or fall through to the previous video result if none exists
+    const handlePrevMatch = useCallback(() => {
+        for (let i = sentenceIdx - 1; i >= 0; i--) {
+            if (sentenceContainsTerm(sentences[i], highlightTerms)) {
+                seekTo(i, sentences);
+                return;
+            }
+        }
+        onPrev();
+    }, [sentenceIdx, sentences, highlightTerms, seekTo, onPrev]);
 
-    const handleNext = useCallback(() => {
-        if (sentenceIdx < sentences.length - 1) seekTo(sentenceIdx + 1, sentences);
-        else onNext();
-    }, [sentenceIdx, sentences, seekTo, onNext]);
+    // Navigate to the next sentence that contains a highlight term,
+    // or fall through to the next video result if none exists
+    const handleNextMatch = useCallback(() => {
+        for (let i = sentenceIdx + 1; i < sentences.length; i++) {
+            if (sentenceContainsTerm(sentences[i], highlightTerms)) {
+                seekTo(i, sentences);
+                return;
+            }
+        }
+        onNext();
+    }, [sentenceIdx, sentences, highlightTerms, seekTo, onNext]);
 
     const current = sentences[sentenceIdx];
 
@@ -83,18 +114,19 @@ export function usePlayerSentences({ result, query, canPrev, canNext, onPrev, on
         playerRef.current?.seekTo(Math.floor(time));
     }, [current, result.start_time_int]);
 
-    const atFirstEver = !canPrev && sentenceIdx === 0;
-    const atLastEver = !canNext && sentenceIdx >= sentences.length - 1;
+    const hasPrevMatch = sentences.slice(0, sentenceIdx).some(s => sentenceContainsTerm(s, highlightTerms));
+    const hasNextMatch = sentences.slice(sentenceIdx + 1).some(s => sentenceContainsTerm(s, highlightTerms));
 
     return {
         sentences,
         sentenceIdx,
         playerRef,
         current,
-        handlePrev,
-        handleNext,
+        highlightTerms,
+        handlePrevMatch,
+        handleNextMatch,
         handleReplay,
-        atFirstEver,
-        atLastEver,
+        hasPrevMatch,
+        hasNextMatch,
     };
 }
