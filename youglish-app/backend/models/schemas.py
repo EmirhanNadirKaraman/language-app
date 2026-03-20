@@ -241,3 +241,31 @@ class Correction(BaseModel):
 class SendMessageResponse(BaseModel):
     user_message: ChatMessageRead
     assistant_message: ChatMessageRead
+
+
+# ---------------------------------------------------------------------------
+# Analytics
+# ---------------------------------------------------------------------------
+
+
+class ItemFrequency(BaseModel):
+    item_id: int
+    item_type: str
+    word: str | None = None
+    event_count: int
+
+
+class FailedItemStats(BaseModel):
+    item_id: int
+    item_type: str
+    word: str | None = None
+    fail_count: int
+    last_failed: datetime
+
+
+class InteractedItemStats(BaseModel):
+    item_id: int
+    item_type: str
+    word: str | None = None
+    total_interactions: int
+    last_seen: datetime

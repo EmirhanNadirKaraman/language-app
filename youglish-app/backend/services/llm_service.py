@@ -2,9 +2,13 @@ import os
 import random
 
 import anthropic
+import asyncpg
+
+from . import llm_cache_service
 
 _client = anthropic.AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 _MOCK = os.getenv("MOCK_LLM", "").lower() in ("1", "true", "yes")
+_MODEL = "claude-haiku-4-5-20251001"
 
 _MOCK_REPLIES = [
     "Das ist gut! Kannst du mir mehr erzählen?",
@@ -96,13 +100,30 @@ _GUIDED_OPEN_TOOL: anthropic.types.ToolParam = {
 }
 
 
-async def guided_open(target_word: str, language: str) -> str:
+async def guided_open(
+    target_word: str,
+    language: str,
+    *,
+    pool: asyncpg.Pool | None = None,
+) -> str:
     """
     Generate an opening scenario that naturally invites the target word without revealing it.
     Returns the opening message text.
+
+    Cached permanently in llm_cache when pool is provided — the same
+    word+language always produces a pedagogically valid opener.
     """
     if _MOCK:
         return random.choice(_MOCK_OPENINGS)
+
+    cache_key: str | None = None
+    if pool is not None:
+        cache_key = llm_cache_service.make_cache_key(
+            "guided_open", _MODEL, {"target_word": target_word, "language": language}
+        )
+        cached = await llm_cache_service.get_cached(pool, cache_key)
+        if cached is not None:
+            return cached["opening"]
 
     system = (
         f"You are a warm, engaging {language} conversation partner starting a role-play. "
@@ -115,7 +136,7 @@ async def guided_open(target_word: str, language: str) -> str:
     )
 
     response = await _client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=_MODEL,
         max_tokens=256,
         system=system,
         tools=[_GUIDED_OPEN_TOOL],
@@ -124,7 +145,14 @@ async def guided_open(target_word: str, language: str) -> str:
     )
 
     tool_block = next(b for b in response.content if b.type == "tool_use")
-    return tool_block.input["opening"]
+    opening = tool_block.input["opening"]
+
+    if pool is not None and cache_key is not None:
+        await llm_cache_service.set_cached(
+            pool, cache_key, "guided_open", _MODEL, {"opening": opening}
+        )
+
+    return opening
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +273,7 @@ async def guided_evaluate(
     messages.append({"role": "user", "content": user_content})
 
     response = await _client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=_MODEL,
         max_tokens=1024,
         system=system,
         tools=[_GUIDED_EVAL_TOOL],
@@ -296,7 +324,7 @@ async def evaluate_and_reply(
     messages.append({"role": "user", "content": user_content})
 
     response = await _client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=_MODEL,
         max_tokens=1024,
         system=_SYSTEM,
         tools=[_EVAL_TOOL],

@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..core.deps import get_current_user
@@ -11,7 +13,7 @@ from ..models.schemas import (
     GuidedSessionRead,
     SendMessageResponse,
 )
-from ..services import chat_service, guided_chat_service, llm_service
+from ..services import chat_service, guided_chat_service, llm_service, usage_events_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -77,7 +79,7 @@ async def create_guided_session(
         target_item_type=target["item_type"],
     )
 
-    opening_text = await llm_service.guided_open(target["word"], body.language)
+    opening_text = await llm_service.guided_open(target["word"], body.language, pool=pool)
     opening_msg = await chat_service.save_message(
         pool, session["session_id"], "assistant", opening_text
     )
@@ -114,6 +116,7 @@ async def send_message(
         return await _handle_guided_message(pool, session, history, body.content, current_user)
 
     # --- Free chat ---
+    user_id = str(current_user["user_id"])
     user_msg = await chat_service.save_message(pool, session_id, "user", body.content)
 
     result = await llm_service.evaluate_and_reply(
@@ -127,6 +130,19 @@ async def send_message(
         corrections=result["corrections"],
         word_matches=result["word_matches"],
     )
+
+    # Record a 'used' event for each matched word (fire-and-forget)
+    for match in result.get("word_matches", []):
+        if isinstance(match, dict) and "item_id" in match:
+            asyncio.create_task(
+                usage_events_service.record_event(
+                    pool, user_id,
+                    match["item_id"],
+                    match.get("item_type", "word"),
+                    context="free_chat",
+                    outcome="used",
+                )
+            )
 
     return SendMessageResponse(user_message=user_msg, assistant_message=assistant_msg)
 
@@ -158,14 +174,28 @@ async def _handle_guided_message(
         language,
     )
 
-    # Update SRS / mastery progress when the target was used
-    if eval_result["target_used"]:
-        await guided_chat_service.update_progress(
+    # Update passive/active progression for every guided turn
+    await guided_chat_service.update_progress(
+        pool, user_id,
+        session["target_item_id"],
+        session["target_item_type"],
+        target_used=eval_result["target_used"],
+        target_counted=eval_result["target_counted"],
+    )
+
+    # Record usage event (fire-and-forget)
+    _guided_outcome = "correct" if eval_result["target_counted"] else (
+        "used" if eval_result["target_used"] else "seen"
+    )
+    asyncio.create_task(
+        usage_events_service.record_event(
             pool, user_id,
             session["target_item_id"],
             session["target_item_type"],
-            target_counted=eval_result["target_counted"],
+            context="guided_chat",
+            outcome=_guided_outcome,
         )
+    )
 
     # Persist user message with structured evaluation
     evaluation_snapshot = {

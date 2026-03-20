@@ -6,16 +6,12 @@ Target selection priority:
   2. Any 'learning' word not yet in srs_cards for active direction
   3. Random word from word_table not yet in user_word_knowledge
 
-Progress update reuses:
-  - srs_cards SM-2 scheduling (interval_days, ease_factor)
-  - upsert_word_status from word_service for status promotion
+Progress update delegates to progression_service, which is the single source
+of truth for passive/active rule application.
 """
 import asyncpg
 
-from . import word_service
-
-# active_level threshold before a word is promoted to 'known'
-MASTERY_THRESHOLD = 3
+from . import progression_service
 
 
 async def get_next_target(
@@ -97,124 +93,24 @@ async def update_progress(
     item_id: int,
     item_type: str,
     *,
+    target_used: bool,
     target_counted: bool,
 ) -> None:
     """
     Update mastery progress after a guided turn.
 
-    target_counted=True  → increment active_level + times_used_correctly,
-                           advance SRS card (SM-2 correct),
-                           promote to 'known' if active_level >= MASTERY_THRESHOLD.
-    target_counted=False → touch last_seen only,
-                           penalise SRS card (SM-2 incorrect) if card exists.
+    Maps the turn outcome to a progression event and delegates to
+    progression_service.apply_progression, which owns all passive/active rules.
+
+    target_used=True, target_counted=True  → guided_counted
+    target_used=True, target_counted=False → guided_used
+    target_used=False                      → guided_not_used
     """
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            if target_counted:
-                row = await conn.fetchrow(
-                    """
-                    INSERT INTO user_word_knowledge
-                        (user_id, item_id, item_type, status,
-                         active_level, times_used_correctly, last_seen)
-                    VALUES ($1::uuid, $2, $3, 'learning', 1, 1, NOW())
-                    ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET
-                        active_level         = user_word_knowledge.active_level + 1,
-                        times_used_correctly = user_word_knowledge.times_used_correctly + 1,
-                        last_seen            = NOW()
-                    RETURNING active_level
-                    """,
-                    user_id, item_id, item_type,
-                )
-                new_level = row["active_level"]
-
-                await _update_active_srs(conn, user_id, item_id, item_type, correct=True)
-
-                if new_level >= MASTERY_THRESHOLD:
-                    # Reuse the shared status-promotion path (runs on pool, not conn,
-                    # so outside this transaction — acceptable: active_level is committed)
-                    await conn.execute(
-                        """
-                        INSERT INTO user_word_knowledge
-                            (user_id, item_id, item_type, status, last_seen)
-                        VALUES ($1::uuid, $2, $3, 'known', NOW())
-                        ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET
-                            status    = 'known',
-                            last_seen = NOW()
-                        """,
-                        user_id, item_id, item_type,
-                    )
-            else:
-                # Touch last_seen; penalise SRS if card exists
-                await conn.execute(
-                    """
-                    INSERT INTO user_word_knowledge
-                        (user_id, item_id, item_type, status, last_seen)
-                    VALUES ($1::uuid, $2, $3, 'unknown', NOW())
-                    ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET
-                        last_seen = NOW()
-                    """,
-                    user_id, item_id, item_type,
-                )
-                await _update_active_srs(conn, user_id, item_id, item_type, correct=False)
-
-
-async def _update_active_srs(
-    conn: asyncpg.Connection,
-    user_id: str,
-    item_id: int,
-    item_type: str,
-    *,
-    correct: bool,
-) -> None:
-    """Create or update the active-direction SRS card using SM-2 rules."""
-    card = await conn.fetchrow(
-        """
-        SELECT interval_days, ease_factor, repetitions
-        FROM srs_cards
-        WHERE user_id = $1::uuid
-          AND item_id = $2
-          AND item_type = $3
-          AND direction = 'active'
-        """,
-        user_id, item_id, item_type,
-    )
-
-    if card is None:
-        if correct:
-            await conn.execute(
-                """
-                INSERT INTO srs_cards
-                    (user_id, item_id, item_type, direction,
-                     due_date, interval_days, ease_factor, repetitions, last_review)
-                VALUES ($1::uuid, $2, $3, 'active',
-                        NOW() + INTERVAL '1 day', 1.0, 2.5, 1, NOW())
-                ON CONFLICT DO NOTHING
-                """,
-                user_id, item_id, item_type,
-            )
-        return
-
-    if correct:
-        new_interval = card["interval_days"] * card["ease_factor"]
-        new_ease     = min(card["ease_factor"] + 0.05, 3.0)
-        new_reps     = card["repetitions"] + 1
+    if target_used and target_counted:
+        event = "guided_counted"
+    elif target_used:
+        event = "guided_used"
     else:
-        new_interval = 1.0
-        new_ease     = max(card["ease_factor"] - 0.15, 1.3)
-        new_reps     = 0
+        event = "guided_not_used"
 
-    await conn.execute(
-        """
-        UPDATE srs_cards SET
-            interval_days = $1,
-            ease_factor   = $2,
-            repetitions   = $3,
-            due_date      = NOW() + ($1::float * INTERVAL '1 day'),
-            last_review   = NOW()
-        WHERE user_id   = $4::uuid
-          AND item_id   = $5
-          AND item_type = $6
-          AND direction = 'active'
-        """,
-        new_interval, new_ease, new_reps, user_id, item_id, item_type,
-    )
+    await progression_service.apply_progression(pool, user_id, item_id, item_type, event)
