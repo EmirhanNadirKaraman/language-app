@@ -1,6 +1,24 @@
 fastapi
+spacy
 uvicorn[standard]
 asyncpg
 python-dotenv
-pydantic
+pydantic[email]
 aiofiles
+
+# auth
+bcrypt
+pyjwt
+
+# migrations (alembic uses sqlalchemy's connection layer; no ORM models are used)
+alembic
+sqlalchemy
+psycopg2-binary
+
+# llm
+anthropic
+
+# dev / test
+httpx
+pytest
+pytest-asyncio
