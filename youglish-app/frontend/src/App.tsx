@@ -4,7 +4,9 @@ import { PlayerView } from './components/PlayerView';
 import { LoginForm } from './components/LoginForm';
 import { FreeChatPage } from './components/FreeChatPage';
 import { GuidedChatPage } from './components/GuidedChatPage';
+import { SettingsPanel } from './components/SettingsPanel';
 import { useSearch } from './hooks/useSearch';
+import { usePreferences } from './hooks/usePreferences';
 import { getToken } from './auth';
 
 export default function App() {
@@ -12,6 +14,14 @@ export default function App() {
   const [resultIdx, setResultIdx] = useState(0);
   const [token, setToken] = useState<string | null>(getToken);
   const [showChat, setShowChat] = useState<'free' | 'guided' | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+
+  const { prefs, savePreferences } = usePreferences(token);
+  const wordColors = {
+    known:    { color: prefs.known_word_color },
+    learning: { color: prefs.learning_word_color },
+    unknown:  { color: prefs.unknown_word_color },
+  };
 
   // Reset to first result on new search; close chat when result changes
   useEffect(() => { setResultIdx(0); setShowChat(null); }, [query]);
@@ -32,12 +42,34 @@ export default function App() {
       {/* Header row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <h1 style={{ fontSize: '24px', margin: 0 }}>YouGlish Clone</h1>
-        <LoginForm
-          token={token}
-          onLogin={newToken => setToken(newToken)}
-          onLogout={() => setToken(null)}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {token && (
+            <button
+              onClick={() => setShowSettings(s => !s)}
+              style={{
+                padding: '6px 14px', borderRadius: '6px',
+                border: '1px solid #c5cae9', background: showSettings ? '#e8eaf6' : '#fff',
+                color: '#1a237e', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              Settings
+            </button>
+          )}
+          <LoginForm
+            token={token}
+            onLogin={newToken => { setToken(newToken); setShowSettings(false); }}
+            onLogout={() => { setToken(null); setShowSettings(false); }}
+          />
+        </div>
       </div>
+
+      {token && showSettings && (
+        <SettingsPanel
+          prefs={prefs}
+          onSave={savePreferences}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
 
       <SearchBar
         terms={terms}
@@ -65,6 +97,7 @@ export default function App() {
             canNext={resultIdx < total - 1}
             onPrev={handlePrev}
             onNext={handleNext}
+            wordColors={wordColors}
           />
 
           {token && !showChat && (

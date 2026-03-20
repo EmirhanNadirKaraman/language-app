@@ -1,4 +1,5 @@
 import { highlightText, renderClickableText } from '../utils/sentenceUtils';
+import type { WordColorScheme } from '../config/wordColors';
 
 interface Props {
     text: string;
@@ -6,11 +7,12 @@ interface Props {
     onWordClick?: (word: string) => void;
     onWordRightClick?: (word: string) => void;
     wordStatuses?: Record<string, string>;
+    wordColors?: WordColorScheme;
 }
 
-export function SubtitleDisplay({ text, highlightTerms, onWordClick, onWordRightClick, wordStatuses = {} }: Props) {
+export function SubtitleDisplay({ text, highlightTerms, onWordClick, onWordRightClick, wordStatuses = {}, wordColors }: Props) {
     const content = onWordClick
-        ? renderClickableText(text, highlightTerms, onWordClick, wordStatuses, onWordRightClick)
+        ? renderClickableText(text, highlightTerms, onWordClick, wordStatuses, onWordRightClick, wordColors)
         : highlightText(text, highlightTerms);
 
     return (

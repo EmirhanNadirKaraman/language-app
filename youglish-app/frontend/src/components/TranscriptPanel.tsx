@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { NormalizedSentence } from '../utils/sentenceUtils';
 import { renderClickableText } from '../utils/sentenceUtils';
 import { ReadingStatsPanel } from './ReadingStatsPanel';
+import type { WordColorScheme } from '../config/wordColors';
 
 interface Props {
     sentences: NormalizedSentence[];
@@ -14,6 +15,7 @@ interface Props {
     videoId: string;
     token: string | null;
     refreshKey: number;
+    wordColors?: WordColorScheme;
 }
 
 export function TranscriptPanel({
@@ -27,6 +29,7 @@ export function TranscriptPanel({
     videoId,
     token,
     refreshKey,
+    wordColors,
 }: Props) {
     const activeRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +68,7 @@ export function TranscriptPanel({
                                 transition: 'background 0.15s',
                             }}
                         >
-                            {renderClickableText(sentence.content, highlightTerms, onWordClick, wordStatuses, onWordRightClick)}
+                            {renderClickableText(sentence.content, highlightTerms, onWordClick, wordStatuses, onWordRightClick, wordColors)}
                         </div>
                     );
                 })}

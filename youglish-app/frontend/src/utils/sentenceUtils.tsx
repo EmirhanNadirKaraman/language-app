@@ -31,22 +31,24 @@ export function sentenceContainsTerm(sentence: NormalizedSentence, terms: string
     return terms.some(t => new RegExp(`(?<![\\p{L}\\p{N}])${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'iu').test(sentence.content));
 }
 
-function ClickableWord({ word, isHighlighted, status, onClick, onRightClick }: {
+function ClickableWord({ word, isHighlighted, status, onClick, onRightClick, wordColors }: {
     word: string;
     isHighlighted: boolean;
     status: string | null;
     onClick: () => void;
     onRightClick?: () => void;
+    wordColors?: WordColorScheme;
 }) {
     const [hovered, setHovered] = useState(false);
+    const colors = wordColors ?? WORD_COLORS;
 
     // Priority: search highlight > hover > knowledge status > default
     const style: React.CSSProperties = isHighlighted
         ? { cursor: 'pointer', padding: '0 2px', borderRadius: '3px', background: '#fff176' }
         : hovered
             ? { cursor: 'pointer', padding: '0 2px', borderRadius: '3px', background: '#e8eaf6' }
-            : status && status in WORD_COLORS
-                ? { cursor: 'pointer', padding: '0 2px', borderRadius: '3px', ...WORD_COLORS[status as keyof typeof WORD_COLORS] }
+            : status && status in colors
+                ? { cursor: 'pointer', padding: '0 2px', borderRadius: '3px', ...colors[status as keyof typeof colors] }
                 : { cursor: 'pointer', padding: '0 2px' };
 
     return (
@@ -68,6 +70,7 @@ export function renderClickableText(
     onWordClick: (word: string) => void,
     wordStatuses: Record<string, string> = {},
     onWordRightClick?: (word: string) => void,
+    wordColors?: WordColorScheme,
 ): React.ReactNode {
     const parts = text.split(/(\p{L}+)/u);
     return parts.map((part, i) => {
@@ -82,6 +85,7 @@ export function renderClickableText(
                 status={status}
                 onClick={() => onWordClick(part)}
                 onRightClick={onWordRightClick ? () => onWordRightClick(part) : undefined}
+                wordColors={wordColors}
             />
         );
     });

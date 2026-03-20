@@ -5,6 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from .database import create_pool, close_pool
 from .routers.analytics import router as analytics_router
+from .routers.playlists import router as playlists_router
+from .routers.recommendations import router as recommendations_router
+from .routers.settings import router as settings_router
 from .routers.auth import router as auth_router
 from .routers.chat import router as chat_router
 from .routers.matcher import router as matcher_router
@@ -37,7 +40,10 @@ app.include_router(videos_router,  prefix="/api/v1")     # /api/v1/videos/{video
 app.include_router(matcher_router, prefix="/api/v1")     # /api/v1/sentences/match
 app.include_router(srs_router,     prefix="/api/v1")     # /api/v1/srs/check-answer, /magic-sentences, /cloze-questions
 app.include_router(chat_router,    prefix="/api/v1")     # /api/v1/chat/sessions, /api/v1/chat/sessions/{id}/messages
-app.include_router(analytics_router, prefix="/api/v1")  # /api/v1/analytics/...
+app.include_router(analytics_router,  prefix="/api/v1")  # /api/v1/analytics/...
+app.include_router(playlists_router,      prefix="/api/v1")  # /api/v1/playlists/generate
+app.include_router(recommendations_router, prefix="/api/v1")  # /api/v1/recommendations/sentences, /videos
+app.include_router(settings_router,        prefix="/api/v1")  # /api/v1/settings/preferences
 
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():

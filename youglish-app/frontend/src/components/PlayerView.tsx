@@ -9,6 +9,7 @@ import { WordStatusPicker } from './WordStatusPicker';
 import { usePlayerSentences } from '../hooks/usePlayerSentences';
 import { useWordStatus } from '../hooks/useWordStatus';
 import { useWordColors } from '../hooks/useWordColors';
+import type { WordColorScheme } from '../config/wordColors';
 
 interface Props {
     result: SearchResult;
@@ -18,9 +19,10 @@ interface Props {
     canNext: boolean;
     onPrev: () => void;
     onNext: () => void;
+    wordColors?: WordColorScheme;
 }
 
-export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onNext }: Props) {
+export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onNext, wordColors }: Props) {
     const {
         sentences,
         sentenceIdx,
@@ -110,6 +112,7 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
                         onWordClick={token ? (word) => { playerRef.current?.pauseVideo(); selectWord(word); } : undefined}
                         onWordRightClick={token ? (word) => { toggleWordStatus(word); } : undefined}
                         wordStatuses={wordStatuses}
+                        wordColors={wordColors}
                     />
                 </div>
             )}
@@ -122,6 +125,7 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
                     wordStatuses={wordStatuses}
                     onWordClick={token ? (word) => { playerRef.current?.pauseVideo(); selectWord(word); } : () => {}}
                     onWordRightClick={token ? (word) => { toggleWordStatus(word); } : () => {}}
+                    wordColors={wordColors}
                     onSentenceClick={(idx) => {
                         const s = sentences[idx];
                         if (s) playerRef.current?.seekTo(Math.max(0, Math.floor(s.timeSec) - 0.5));
