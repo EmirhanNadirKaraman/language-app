@@ -3,6 +3,7 @@ import { forwardRef, useEffect, useRef, useImperativeHandle } from 'react';
 export interface YoutubeEmbedHandle {
   seekTo: (seconds: number) => void;
   getCurrentTime: () => number;
+  pauseVideo: () => void;
 }
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 interface YTPlayer {
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   getCurrentTime(): number;
+  pauseVideo(): void;
   loadVideoById(opts: { videoId: string; startSeconds?: number }): void;
   cueVideoById(opts: { videoId: string; startSeconds?: number }): void;
   destroy(): void;
@@ -54,6 +56,7 @@ export const YoutubeEmbed = forwardRef<YoutubeEmbedHandle, Props>(
       getCurrentTime: () => typeof playerRef.current?.getCurrentTime === 'function'
         ? playerRef.current.getCurrentTime()
         : 0,
+      pauseVideo: () => playerRef.current?.pauseVideo(),
     }));
 
     // Create player on mount, destroy on unmount

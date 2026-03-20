@@ -18,13 +18,14 @@ const btnStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '36px',
-    height: '36px',
+    width: '44px',
+    height: '44px',
     border: '1px solid #ccc',
     borderRadius: '6px',
     background: '#fff',
     cursor: 'pointer',
     color: '#333',
+    touchAction: 'manipulation',
 };
 
 export function PlayerControls({

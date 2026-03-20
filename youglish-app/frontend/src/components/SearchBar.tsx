@@ -121,7 +121,7 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
               {term}
               <button
                 onClick={(e) => { e.stopPropagation(); onRemoveTerm(i); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', fontSize: '12px', color: '#555', lineHeight: 1 }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: '14px', color: '#555', lineHeight: 1, touchAction: 'manipulation' }}
               >
                 ×
               </button>
@@ -179,9 +179,9 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
                 onMouseDown={() => selectSuggestion(s.word)}
                 onMouseEnter={() => setActiveIdx(i)}
                 style={{
-                  padding: '8px 12px',
+                  padding: '12px',
                   cursor: 'pointer',
-                  fontSize: '14px',
+                  fontSize: '15px',
                   background: i === activeIdx ? '#e3f2fd' : '#fff',
                   display: 'flex',
                   justifyContent: 'space-between',

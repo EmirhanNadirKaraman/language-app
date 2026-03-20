@@ -27,7 +27,7 @@ function highlightText(text: string, terms: string[]): React.ReactNode {
   );
 }
 
-export function ResultCard({ result, query, language }: Props) {
+export function ResultCard({ result, query }: Props) {
   const [playing, setPlaying] = useState(false);
   const [sentences, setSentences] = useState<VideoSentence[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -43,7 +43,7 @@ export function ResultCard({ result, query, language }: Props) {
   const handlePlay = async () => {
     setPlaying(true);
     try {
-      const data = await fetchVideoSentences(result.video_id, query, language);
+      const data = await fetchVideoSentences(result.video_id);
       setSentences(data);
       const idx = data.findIndex(s => s.start_time_int === result.start_time_int);
       setCurrentIdx(idx >= 0 ? idx : 0);

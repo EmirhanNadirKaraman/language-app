@@ -1,11 +1,18 @@
-import { highlightText } from '../utils/sentenceUtils';
+import { highlightText, renderClickableText } from '../utils/sentenceUtils';
 
 interface Props {
     text: string;
     highlightTerms: string[];
+    onWordClick?: (word: string) => void;
+    onWordRightClick?: (word: string) => void;
+    wordStatuses?: Record<string, string>;
 }
 
-export function SubtitleDisplay({ text, highlightTerms }: Props) {
+export function SubtitleDisplay({ text, highlightTerms, onWordClick, onWordRightClick, wordStatuses = {} }: Props) {
+    const content = onWordClick
+        ? renderClickableText(text, highlightTerms, onWordClick, wordStatuses, onWordRightClick)
+        : highlightText(text, highlightTerms);
+
     return (
         <div
             style={{
@@ -37,7 +44,7 @@ export function SubtitleDisplay({ text, highlightTerms }: Props) {
                     wordBreak: 'break-word',
                 }}
             >
-                {highlightText(text, highlightTerms)}
+                {content}
             </p>
         </div>
     );
