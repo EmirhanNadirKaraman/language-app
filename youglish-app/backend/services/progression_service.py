@@ -45,6 +45,8 @@ from dataclasses import dataclass
 
 import asyncpg
 
+from backend.services import settings_service
+
 # ---------------------------------------------------------------------------
 # Thresholds
 # ---------------------------------------------------------------------------
@@ -153,6 +155,9 @@ async def apply_progression(
       3. Update SRS cards in the affected direction(s).
     """
     delta = compute_delta(event)
+    prefs = await settings_service.get_preferences(pool, user_id)
+    passive_threshold = prefs["passive_reps_for_known"]
+    active_threshold = prefs["active_reps_for_known"]
 
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -181,7 +186,8 @@ async def apply_progression(
                     delta.times_seen_delta, delta.times_used_correctly_delta,
                 )
 
-                await _maybe_promote(conn, user_id, item_id, item_type, row)
+                await _maybe_promote(conn, user_id, item_id, item_type, row,
+                                     passive_threshold, active_threshold)
 
             if delta.passive_srs:
                 await _update_srs(conn, user_id, item_id, item_type, "passive", delta.passive_srs)
@@ -199,13 +205,15 @@ async def _maybe_promote(
     item_id: int,
     item_type: str,
     row: asyncpg.Record,
+    passive_threshold: int = PASSIVE_PROMOTION_THRESHOLD,
+    active_threshold: int = ACTIVE_MASTERY_THRESHOLD,
 ) -> None:
     """Promote status if levels cross thresholds. Active mastery takes precedence."""
     passive_level = row["passive_level"]
     active_level = row["active_level"]
     current_status = row["status"]
 
-    if active_level >= ACTIVE_MASTERY_THRESHOLD and current_status != "known":
+    if active_level >= active_threshold and current_status != "known":
         await conn.execute(
             """
             UPDATE user_word_knowledge
@@ -214,7 +222,7 @@ async def _maybe_promote(
             """,
             user_id, item_id, item_type,
         )
-    elif passive_level >= PASSIVE_PROMOTION_THRESHOLD and current_status == "unknown":
+    elif passive_level >= passive_threshold and current_status == "unknown":
         await conn.execute(
             """
             UPDATE user_word_knowledge

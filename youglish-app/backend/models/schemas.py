@@ -151,6 +151,10 @@ class WordLookupResult(BaseModel):
     word: str
     lemma: str
     current_status: str | None = None
+    passive_level: int = 0
+    active_level: int = 0
+    passive_due: datetime | None = None
+    active_due: datetime | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -218,6 +222,12 @@ class GuidedSessionCreate(BaseModel):
     language: str  # target language code, e.g. "de"
 
 
+class GuidedHints(BaseModel):
+    intent_hint: str   # English: what concept to express, no target word
+    anchor_hint: str   # German: partial clue — related word or prefix hint
+    example:     str   # Complete German sentence using the target word
+
+
 class GuidedSessionRead(BaseModel):
     session_id: str
     session_type: str           # 'guided'
@@ -226,6 +236,7 @@ class GuidedSessionRead(BaseModel):
     target_word: str
     started_at: datetime
     opening_message: ChatMessageRead
+    hints: GuidedHints | None = None
 
 
 class ChatSendMessage(BaseModel):
@@ -364,6 +375,27 @@ class PrioritizedItemRead(BaseModel):
     item_type: str
     score:     float
     reasons:   list[str]
+
+
+class ItemRecommendation(BaseModel):
+    item_id:        int
+    item_type:      str            # 'word' | 'phrase' | 'grammar_rule'
+    score:          float
+    display_text:   str
+    secondary_text: str | None = None
+    current_status: str | None = None   # None = no knowledge row yet
+    passive_level:  int = 0
+    active_level:   int = 0
+    due_date:       datetime | None = None
+    signals:        dict[str, float]    # is_due, mistake_recency, freq_rank, is_learning
+    reasons:        list[str]           # from explain_signals()
+
+
+class ItemRecommendationsResponse(BaseModel):
+    items:     list[ItemRecommendation]
+    item_type: str
+    language:  str
+    total:     int
 
 
 # ---------------------------------------------------------------------------

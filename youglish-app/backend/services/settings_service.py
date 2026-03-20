@@ -37,8 +37,8 @@ import asyncpg
 DEFAULTS: dict = {
     "liked_genres":           [],
     "liked_channels":         [],
-    "passive_reps_for_known": 3,
-    "active_reps_for_known":  5,
+    "passive_reps_for_known": 5,
+    "active_reps_for_known":  3,
     "known_word_color":       "#388e3c",
     "learning_word_color":    "#f57c00",
     "unknown_word_color":     "#d32f2f",

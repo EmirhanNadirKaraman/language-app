@@ -39,7 +39,7 @@ export function TranscriptPanel({
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <ReadingStatsPanel videoId={videoId} token={token} refreshKey={refreshKey} />
+            <ReadingStatsPanel videoId={videoId} token={token} refreshKey={refreshKey} wordColors={wordColors} />
             <div
                 style={{
                     maxHeight: '420px',

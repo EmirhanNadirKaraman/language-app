@@ -288,6 +288,113 @@ async def recommend_sentences(
     }
 
 
+# ---------------------------------------------------------------------------
+# Item recommendation helpers
+# ---------------------------------------------------------------------------
+
+_ENRICH_ITEMS_SQL = """
+SELECT
+    w.word_id,
+    w.word,
+    w.lemma,
+    uwk.status          AS current_status,
+    uwk.passive_level,
+    uwk.active_level,
+    sc.due_date
+FROM word_table w
+LEFT JOIN user_word_knowledge uwk
+       ON uwk.item_id   = w.word_id
+      AND uwk.item_type = 'word'
+      AND uwk.user_id   = $1::uuid
+LEFT JOIN srs_cards sc
+       ON sc.item_id    = w.word_id
+      AND sc.item_type  = 'word'
+      AND sc.user_id    = $1::uuid
+      AND sc.direction  = 'passive'
+WHERE w.word_id = ANY($2::int[])
+  AND w.language = $3
+"""
+
+
+async def enrich_items(
+    pool: asyncpg.Pool,
+    user_id: str,
+    item_ids: list[int],
+    language: str,
+) -> dict[int, dict]:
+    """
+    Fetch display text and knowledge metadata for a list of word item_ids.
+
+    Returns item_id → enrichment dict.  Items not found in word_table for the
+    given language are absent from the result — the caller skips them.
+
+    Only handles item_type='word'.  Phrase and grammar_rule enrichment is a
+    TODO: add their lookup tables here when available.
+    """
+    if not item_ids:
+        return {}
+    rows = await pool.fetch(_ENRICH_ITEMS_SQL, user_id, item_ids, language)
+    return {
+        r["word_id"]: {
+            "display_text":   r["word"],
+            "secondary_text": r["lemma"] if r["lemma"] != r["word"] else None,
+            "current_status": r["current_status"],
+            "passive_level":  r["passive_level"] or 0,
+            "active_level":   r["active_level"] or 0,
+            "due_date":       r["due_date"],
+        }
+        for r in rows
+    }
+
+
+async def recommend_items(
+    pool: asyncpg.Pool,
+    user_id: str,
+    language: str,
+    item_type: str,
+    limit: int,
+) -> dict:
+    """
+    Return ranked item recommendations enriched with display text.
+
+    Delegates scoring entirely to get_prioritized_items(), then enriches
+    with word_table + user_word_knowledge + srs_cards data for display.
+
+    For item_type != 'word', returns an empty list — phrase and grammar_rule
+    signal pipelines are not wired yet (see prioritization_service docstring).
+    Items whose item_id is not found in word_table for the given language are
+    silently skipped (cross-language IDs can legitimately appear in signals).
+    """
+    items = await get_prioritized_items(pool, user_id, item_type=item_type, limit=limit)
+
+    if not items or item_type != "word":
+        return {"items": [], "item_type": item_type, "language": language, "total": 0}
+
+    item_ids = [item.item_id for item in items]
+    enrichment = await enrich_items(pool, user_id, item_ids, language)
+
+    result = []
+    for item in items:
+        meta = enrichment.get(item.item_id)
+        if meta is None:
+            continue
+        result.append({
+            "item_id":        item.item_id,
+            "item_type":      item.item_type,
+            "score":          item.score,
+            "display_text":   meta["display_text"],
+            "secondary_text": meta["secondary_text"],
+            "current_status": meta["current_status"],
+            "passive_level":  meta["passive_level"],
+            "active_level":   meta["active_level"],
+            "due_date":       meta["due_date"],
+            "signals":        item.signals,
+            "reasons":        item.reasons,
+        })
+
+    return {"items": result, "item_type": item_type, "language": language, "total": len(result)}
+
+
 async def recommend_videos(
     pool: asyncpg.Pool,
     user_id: str,

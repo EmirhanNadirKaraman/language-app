@@ -107,7 +107,7 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                     onChange={e => setLikedGenres(e.target.value)}
                     placeholder="e.g. news, comedy, sports"
                 />
-                <span style={hint}>Comma-separated. Used to weight video recommendations.</span>
+                <span style={hint}>Comma-separated. Saved but not yet used — channel/genre data not available in the current video index.</span>
             </div>
 
             <div style={field}>
@@ -118,7 +118,7 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                     onChange={e => setLikedChannels(e.target.value)}
                     placeholder="e.g. DW Nachrichten, Galileo"
                 />
-                <span style={hint}>Comma-separated. Used to weight video recommendations.</span>
+                <span style={hint}>Comma-separated. Saved but not yet used — channel/genre data not available in the current video index.</span>
             </div>
 
             {/* SRS */}

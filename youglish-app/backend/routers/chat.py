@@ -79,7 +79,22 @@ async def create_guided_session(
         target_item_type=target["item_type"],
     )
 
-    opening_text = await llm_service.guided_open(target["word"], body.language, pool=pool)
+    # Generate opening + hints in parallel; hints failure is non-fatal
+    opening_text, hints_raw = await asyncio.gather(
+        llm_service.guided_open(target["word"], body.language, pool=pool),
+        llm_service.guided_hints(target["word"], body.language, pool=pool),
+        return_exceptions=True,
+    )
+
+    # If opening failed (an Exception), re-raise it; hints failure is silenced
+    if isinstance(opening_text, BaseException):
+        raise opening_text
+
+    hints_data = None
+    if not isinstance(hints_raw, BaseException):
+        from ..models.schemas import GuidedHints
+        hints_data = GuidedHints(**hints_raw)
+
     opening_msg = await chat_service.save_message(
         pool, session["session_id"], "assistant", opening_text
     )
@@ -92,6 +107,7 @@ async def create_guided_session(
         target_word=target["word"],
         started_at=session["started_at"],
         opening_message=opening_msg,
+        hints=hints_data,
     )
 
 

@@ -20,9 +20,11 @@ interface Props {
     onPrev: () => void;
     onNext: () => void;
     wordColors?: WordColorScheme;
+    passiveMax?: number;
+    activeMax?: number;
 }
 
-export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onNext, wordColors }: Props) {
+export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onNext, wordColors, passiveMax, activeMax }: Props) {
     const {
         sentences,
         sentenceIdx,
@@ -144,12 +146,14 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
                     saving={state.saving}
                     onSelect={updateStatus}
                     onDismiss={dismiss}
+                    passiveMax={passiveMax}
+                    activeMax={activeMax}
                 />
             )}
 
             {view === 'player' && (
                 <div data-debug="stats-box">
-                    <ReadingStatsPanel videoId={result.video_id} token={token} refreshKey={refreshKey} />
+                    <ReadingStatsPanel videoId={result.video_id} token={token} refreshKey={refreshKey} wordColors={wordColors} />
                 </div>
             )}
         </div>

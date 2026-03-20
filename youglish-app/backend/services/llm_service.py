@@ -26,6 +26,12 @@ _MOCK_CORRECTIONS = [
     [],
 ]
 
+_MOCK_HINTS = {
+    "intent_hint": "Try expressing that you used up or consumed something.",
+    "anchor_hint": "Tipp: Denke an ein Verb, das mit 'ver' beginnt…",
+    "example": "Ich habe gestern Abend mein ganzes Taschengeld verbraucht.",
+}
+
 _MOCK_OPENINGS = [
     "Hallo! Ich plane gerade ein Wochenendausflug und bin mir noch nicht sicher, wohin ich fahren soll. Hast du irgendwelche Empfehlungen?",
     "Hey! Ich war gerade im Café und habe einen wirklich interessanten Menschen getroffen. Was machst du so am Wochenende?",
@@ -153,6 +159,106 @@ async def guided_open(
         )
 
     return opening
+
+
+# ---------------------------------------------------------------------------
+# Guided chat — progressive hints
+# ---------------------------------------------------------------------------
+
+_GUIDED_HINTS_TOOL: anthropic.types.ToolParam = {
+    "name": "generate_hints",
+    "description": "Generate three progressive learning hints for a target word/phrase.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "intent_hint": {
+                "type": "string",
+                "description": (
+                    "One sentence in English describing the concept or action to express. "
+                    "Must NOT name the target word, its direct translation, or a clear synonym. "
+                    "Describes what kind of meaning the learner should convey."
+                ),
+            },
+            "anchor_hint": {
+                "type": "string",
+                "description": (
+                    "A short German clue — a related word, a prefix hint (e.g. 'beginnt mit ver…'), "
+                    "or a closely related concept — that narrows the search without giving the full answer. "
+                    "Must NOT be the target word itself."
+                ),
+            },
+            "example": {
+                "type": "string",
+                "description": (
+                    "A complete, natural German sentence that uses the target word in a realistic context. "
+                    "The target word must appear exactly as-is or in a natural inflected form."
+                ),
+            },
+        },
+        "required": ["intent_hint", "anchor_hint", "example"],
+    },
+}
+
+
+async def guided_hints(
+    target_word: str,
+    language: str,
+    *,
+    pool: asyncpg.Pool | None = None,
+) -> dict:
+    """
+    Generate three progressive hints for a guided-chat target word.
+
+    Returns:
+        {"intent_hint": str, "anchor_hint": str, "example": str}
+
+    Cached permanently by (target_word, language) — the same word always gets
+    the same hints, so re-opening a session is instant.
+    """
+    if _MOCK:
+        return dict(_MOCK_HINTS)
+
+    cache_key: str | None = None
+    if pool is not None:
+        cache_key = llm_cache_service.make_cache_key(
+            "guided_hints", _MODEL, {"target_word": target_word, "language": language}
+        )
+        cached = await llm_cache_service.get_cached(pool, cache_key)
+        if cached is not None:
+            return cached
+
+    system = (
+        f'You are creating pedagogical hints for a language learner whose hidden target word/phrase is "{target_word}" in {language}.\n\n'
+        f"Generate exactly three hints in order of increasing explicitness:\n"
+        f"1. intent_hint — English only. Describe what concept or action to express WITHOUT naming the target or its translation.\n"
+        f"2. anchor_hint — German only. Give a partial clue: a related word, a prefix hint, or a semantic neighbour. "
+        f"Do NOT use the target word itself.\n"
+        f"3. example — A full natural German sentence using the target word in a realistic everyday context.\n\n"
+        f"You MUST call the generate_hints tool."
+    )
+
+    response = await _client.messages.create(
+        model=_MODEL,
+        max_tokens=512,
+        system=system,
+        tools=[_GUIDED_HINTS_TOOL],
+        tool_choice={"type": "tool", "name": "generate_hints"},
+        messages=[{"role": "user", "content": "Generate the hints now."}],
+    )
+
+    tool_block = next(b for b in response.content if b.type == "tool_use")
+    result = {
+        "intent_hint": tool_block.input["intent_hint"],
+        "anchor_hint":  tool_block.input["anchor_hint"],
+        "example":      tool_block.input["example"],
+    }
+
+    if pool is not None and cache_key is not None:
+        await llm_cache_service.set_cached(
+            pool, cache_key, "guided_hints", _MODEL, result
+        )
+
+    return result
 
 
 # ---------------------------------------------------------------------------

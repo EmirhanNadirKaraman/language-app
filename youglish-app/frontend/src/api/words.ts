@@ -29,3 +29,17 @@ export async function setWordStatus(
     });
     if (!res.ok) throw new Error('Failed to update status');
 }
+
+export async function setItemStatus(
+    token: string,
+    itemType: string,
+    itemId: number,
+    status: string,
+): Promise<void> {
+    const res = await fetch(`/api/v1/words/${itemType}/${itemId}/status`, {
+        method: 'PUT',
+        headers: authHeaders(token),
+        body: JSON.stringify({ status }),
+    });
+    if (!res.ok) throw new Error('Failed to update status');
+}

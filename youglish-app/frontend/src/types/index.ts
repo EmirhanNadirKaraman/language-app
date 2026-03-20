@@ -34,6 +34,10 @@ export interface WordLookupResult {
   word: string;
   lemma: string;
   current_status: string | null;
+  passive_level: number;
+  active_level: number;
+  passive_due: string | null;
+  active_due: string | null;
 }
 
 export interface Correction {
@@ -69,6 +73,113 @@ export interface ChatSession {
   started_at: string;
 }
 
+// ---------------------------------------------------------------------------
+// Recommendations
+// ---------------------------------------------------------------------------
+
+export interface VideoRecommendation {
+  video_id: string;
+  title: string;
+  thumbnail_url: string;
+  language: string;
+  duration: number;
+  start_time: number;
+  start_time_int: number;
+  priority_score: number;
+  covered_item_ids: number[];
+  covered_count: number;
+  score: number;
+}
+
+export interface SentenceRecommendation {
+  sentence_id: number;
+  content: string;
+  video_id: string;
+  video_title: string;
+  thumbnail_url: string;
+  start_time: number;
+  start_time_int: number;
+  unknown_count: number;
+  due_count: number;
+  priority_count: number;
+  score: number;
+}
+
+export interface VideoRecommendationsResponse {
+  videos: VideoRecommendation[];
+  target_item_count: number;
+  reason: string | null;
+}
+
+export interface SentenceRecommendationsResponse {
+  sentences: SentenceRecommendation[];
+  target_unknown: number;
+  total: number;
+}
+
+export interface ItemSignals {
+  is_due: number;
+  mistake_recency: number;
+  freq_rank: number;
+  is_learning: number;
+}
+
+export interface ItemRecommendation {
+  item_id: number;
+  item_type: 'word' | 'phrase' | 'grammar_rule';
+  score: number;
+  display_text: string;
+  secondary_text: string | null;
+  current_status: 'unknown' | 'learning' | 'known' | null;
+  passive_level: number;
+  active_level: number;
+  due_date: string | null;
+  signals: ItemSignals;
+  reasons: string[];
+}
+
+export interface ItemRecommendationsResponse {
+  items: ItemRecommendation[];
+  item_type: string;
+  language: string;
+  total: number;
+}
+
+// ---------------------------------------------------------------------------
+// Playlist
+// ---------------------------------------------------------------------------
+
+export interface PlaylistVideo {
+  video_id: string;
+  title: string;
+  thumbnail_url: string;
+  language: string;
+  start_time: number;
+  start_time_int: number;
+  content: string;
+  covered_item_ids: number[];
+  covered_count: number;
+}
+
+export interface PlaylistCoverageStats {
+  target_count: number;
+  covered_count: number;
+  coverage_pct: number;
+  uncovered_item_ids: number[];
+  video_count: number;
+}
+
+export interface PlaylistResult {
+  videos: PlaylistVideo[];
+  coverage: PlaylistCoverageStats;
+}
+
+export interface GuidedHints {
+  intent_hint: string;
+  anchor_hint: string;
+  example: string;
+}
+
 export interface GuidedSession {
   session_id: string;
   session_type: 'guided';
@@ -77,4 +188,5 @@ export interface GuidedSession {
   target_word: string;
   started_at: string;
   opening_message: ChatMessage;
+  hints: GuidedHints | null;
 }

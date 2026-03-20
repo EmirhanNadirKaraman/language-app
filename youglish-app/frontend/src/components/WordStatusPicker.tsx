@@ -1,4 +1,5 @@
 import type { WordLookupResult } from '../types';
+import { formatDueDate, progressDots, PASSIVE_MAX, ACTIVE_MAX } from '../utils/progressUtils';
 
 const STATUSES = [
     { value: 'unknown',  label: 'Unknown',  color: '#e53935', bg: '#ffebee' },
@@ -13,9 +14,11 @@ interface Props {
     saving: boolean;
     onSelect: (wordId: number, status: string) => void;
     onDismiss: () => void;
+    passiveMax?: number;
+    activeMax?: number;
 }
 
-export function WordStatusPicker({ word, lookup, loading, saving, onSelect, onDismiss }: Props) {
+export function WordStatusPicker({ word, lookup, loading, saving, onSelect, onDismiss, passiveMax = PASSIVE_MAX, activeMax = ACTIVE_MAX }: Props) {
     return (
         <div style={{
             display: 'flex',
@@ -86,6 +89,88 @@ export function WordStatusPicker({ word, lookup, loading, saving, onSelect, onDi
             >
                 ×
             </button>
+
+            {!loading && lookup?.current_status != null && (
+                <ProgressSection
+                    passiveLevel={lookup.passive_level}
+                    activeLevel={lookup.active_level}
+                    passiveDue={lookup.passive_due}
+                    activeDue={lookup.active_due}
+                    isKnown={lookup.current_status === 'known'}
+                    passiveMax={passiveMax}
+                    activeMax={activeMax}
+                />
+            )}
+        </div>
+    );
+}
+
+interface ProgressSectionProps {
+    passiveLevel: number;
+    activeLevel: number;
+    passiveDue: string | null;
+    activeDue: string | null;
+    isKnown: boolean;
+    passiveMax: number;
+    activeMax: number;
+}
+
+function Dots({ filled, empty }: { filled: number; empty: number }) {
+    return (
+        <span style={{ letterSpacing: '2px', fontSize: '13px' }}>
+            {Array.from({ length: filled }, (_, i) => (
+                <span key={`f${i}`} style={{ color: '#5c6bc0' }}>●</span>
+            ))}
+            {Array.from({ length: empty }, (_, i) => (
+                <span key={`e${i}`} style={{ color: '#c5cae9' }}>●</span>
+            ))}
+        </span>
+    );
+}
+
+function ProgressSection({ passiveLevel, activeLevel, passiveDue, activeDue, isKnown, passiveMax, activeMax }: ProgressSectionProps) {
+    const passiveDots = progressDots(passiveLevel, passiveMax);
+    const activeDots = progressDots(activeLevel, activeMax);
+    const passiveDueText = !isKnown ? formatDueDate(passiveDue) : null;
+    const activeDueText = !isKnown ? formatDueDate(activeDue) : null;
+
+    return (
+        <div style={{
+            width: '100%',
+            borderTop: '1px solid #e8eaf6',
+            marginTop: '6px',
+            paddingTop: '6px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '3px',
+        }}>
+            <ProgressRow label="Understood" dots={passiveDots} dueText={passiveDueText} />
+            <ProgressRow label="Can use" dots={activeDots} dueText={activeDueText} />
+        </div>
+    );
+}
+
+function ProgressRow({ label, dots, dueText }: {
+    label: string;
+    dots: { filled: number; empty: number };
+    dueText: string | null;
+}) {
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+            <span style={{ color: '#757575', width: '72px', flexShrink: 0 }}>{label}</span>
+            <Dots filled={dots.filled} empty={dots.empty} />
+            {dueText && (
+                <span style={{
+                    fontSize: '11px',
+                    color: '#e65100',
+                    background: '#fff3e0',
+                    borderRadius: '8px',
+                    padding: '1px 7px',
+                    flexShrink: 0,
+                }}>
+                    {dueText}
+                </span>
+            )}
         </div>
     );
 }

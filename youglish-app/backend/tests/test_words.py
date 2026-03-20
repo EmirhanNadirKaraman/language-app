@@ -12,6 +12,7 @@ from httpx import AsyncClient
 REGISTER = "/api/v1/auth/register"
 LOGIN = "/api/v1/auth/login"
 KNOWLEDGE = "/api/v1/words/knowledge"
+BY_TEXT = "/api/v1/words/by-text"
 
 
 def make_email() -> str:
@@ -149,3 +150,73 @@ async def test_invalid_item_type_returns_422(client: AsyncClient, db_pool):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# GET /by-text — progress fields
+# ---------------------------------------------------------------------------
+
+
+async def _get_word_text_and_language(db_pool) -> tuple[str, str]:
+    """Return (word, language) for any word in word_table, skipping if empty."""
+    row = await db_pool.fetchrow("SELECT word, language FROM word_table LIMIT 1")
+    if row is None:
+        pytest.skip("word_table is empty — run the subtitle pipeline first")
+    return row["word"], row["language"]
+
+
+async def test_by_text_returns_progress_fields_for_unknown_word(client: AsyncClient, db_pool):
+    """A word with no knowledge row returns zero levels and null due dates."""
+    word, language = await _get_word_text_and_language(db_pool)
+    token = await _registered_token(client)
+
+    resp = await client.get(
+        BY_TEXT,
+        params={"word": word, "language": language},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["passive_level"] == 0
+    assert data["active_level"] == 0
+    assert data["passive_due"] is None
+    assert data["active_due"] is None
+
+
+async def test_by_text_returns_nonzero_levels_after_status_update(client: AsyncClient, db_pool):
+    """After marking a word 'learning', passive_level should be > 0."""
+    word, language = await _get_word_text_and_language(db_pool)
+    token = await _registered_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # First get the word_id
+    lookup = await client.get(BY_TEXT, params={"word": word, "language": language}, headers=headers)
+    assert lookup.status_code == 200
+    word_id = lookup.json()["word_id"]
+
+    # Mark it as learning (fires status_marked_learning → passive_delta=1)
+    await client.put(
+        f"/api/v1/words/word/{word_id}/status",
+        json={"status": "learning"},
+        headers=headers,
+    )
+
+    # Re-fetch and check levels advanced
+    resp = await client.get(BY_TEXT, params={"word": word, "language": language}, headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["passive_level"] > 0
+    assert data["current_status"] == "learning"
+
+
+async def test_by_text_returns_null_for_unknown_word_not_in_db(client: AsyncClient):
+    """A word that doesn't exist in word_table returns null."""
+    token = await _registered_token(client)
+
+    resp = await client.get(
+        BY_TEXT,
+        params={"word": "xyzzy_no_such_word_123", "language": "de"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() is None

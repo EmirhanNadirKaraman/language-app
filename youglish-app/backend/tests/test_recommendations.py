@@ -44,8 +44,10 @@ import uuid
 import pytest
 
 from backend.services.recommendation_service import (
+    enrich_items,
     rank_sentences,
     rank_videos,
+    recommend_items,
     recommend_sentences,
     recommend_videos,
     score_sentence,
@@ -513,3 +515,226 @@ async def test_videos_new_user_returns_no_target_items(client, db_pool):
     assert body["videos"] == []
     assert body["reason"] == "no_target_items"
     assert body["target_item_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Item recommendation — integration tests
+# ---------------------------------------------------------------------------
+
+async def test_recommend_items_new_user_returns_empty(db_pool):
+    language = await _any_language(db_pool)
+    user_id = await _create_user(db_pool)
+
+    result = await recommend_items(
+        db_pool, user_id=user_id, language=language, item_type="word", limit=10,
+    )
+
+    assert result["items"] == []
+    assert result["item_type"] == "word"
+    assert result["language"] == language
+    assert result["total"] == 0
+
+
+async def test_recommend_items_unsupported_type_returns_empty(db_pool):
+    language = await _any_language(db_pool)
+    user_id = await _create_user(db_pool)
+
+    for item_type in ("phrase", "grammar_rule"):
+        result = await recommend_items(
+            db_pool, user_id=user_id, language=language, item_type=item_type, limit=10,
+        )
+        assert result["items"] == [], f"expected empty for item_type={item_type!r}"
+        assert result["total"] == 0
+
+
+async def test_recommend_items_with_learning_words(db_pool):
+    language = await _any_language(db_pool)
+    user_id = await _create_user(db_pool)
+
+    word_rows = await db_pool.fetch(
+        """
+        SELECT DISTINCT wts.word_id
+        FROM word_to_sentence wts
+        JOIN sentence s ON s.sentence_id = wts.sentence_id
+        JOIN video v    ON v.video_id = s.video_id
+        WHERE v.language = $1
+        LIMIT 3
+        """,
+        language,
+    )
+    if not word_rows:
+        pytest.skip("No word_to_sentence data for this language")
+
+    for row in word_rows:
+        await db_pool.execute(
+            """
+            INSERT INTO user_word_knowledge (user_id, item_id, item_type, status)
+            VALUES ($1::uuid, $2, 'word', 'learning')
+            ON CONFLICT DO NOTHING
+            """,
+            user_id, row["word_id"],
+        )
+
+    result = await recommend_items(
+        db_pool, user_id=user_id, language=language, item_type="word", limit=10,
+    )
+
+    assert isinstance(result["items"], list)
+    assert result["total"] == len(result["items"])
+    for item in result["items"]:
+        assert "item_id" in item
+        assert "display_text" in item
+        assert "signals" in item
+        assert "reasons" in item
+        assert item["item_type"] == "word"
+        assert item["score"] >= 0
+
+
+async def test_recommend_items_each_item_has_required_fields(db_pool):
+    language = await _any_language(db_pool)
+    user_id = await _create_user(db_pool)
+
+    word_rows = await db_pool.fetch(
+        """
+        SELECT DISTINCT wts.word_id
+        FROM word_to_sentence wts
+        JOIN sentence s ON s.sentence_id = wts.sentence_id
+        JOIN video v    ON v.video_id = s.video_id
+        WHERE v.language = $1
+        LIMIT 5
+        """,
+        language,
+    )
+    if not word_rows:
+        pytest.skip("No word_to_sentence data for this language")
+
+    for row in word_rows:
+        await db_pool.execute(
+            """
+            INSERT INTO user_word_knowledge (user_id, item_id, item_type, status)
+            VALUES ($1::uuid, $2, 'word', 'learning')
+            ON CONFLICT DO NOTHING
+            """,
+            user_id, row["word_id"],
+        )
+
+    result = await recommend_items(
+        db_pool, user_id=user_id, language=language, item_type="word", limit=10,
+    )
+
+    for item in result["items"]:
+        for field in ("item_id", "item_type", "score", "display_text",
+                      "current_status", "passive_level", "active_level",
+                      "signals", "reasons"):
+            assert field in item, f"missing field {field!r} in item result"
+        for signal_key in ("is_due", "mistake_recency", "freq_rank", "is_learning"):
+            assert signal_key in item["signals"], f"missing signal {signal_key!r}"
+
+
+async def test_enrich_items_empty_ids_returns_empty(db_pool):
+    language = await _any_language(db_pool)
+    user_id = await _create_user(db_pool)
+
+    result = await enrich_items(db_pool, user_id=user_id, item_ids=[], language=language)
+    assert result == {}
+
+
+async def test_enrich_items_unknown_ids_returns_empty(db_pool):
+    language = await _any_language(db_pool)
+    user_id = await _create_user(db_pool)
+
+    result = await enrich_items(
+        db_pool, user_id=user_id, item_ids=[999_999_999], language=language,
+    )
+    assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# Item recommendation — HTTP tests
+# ---------------------------------------------------------------------------
+
+async def test_items_endpoint_returns_200(client, db_pool):
+    token = await _auth_token(client)
+    language = await _language_param(db_pool)
+
+    resp = await client.get(
+        "/api/v1/recommendations/items",
+        params={"language": language},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200
+
+
+async def test_items_endpoint_requires_auth(client, db_pool):
+    language = await _language_param(db_pool)
+    resp = await client.get(
+        "/api/v1/recommendations/items",
+        params={"language": language},
+    )
+    assert resp.status_code == 403
+
+
+async def test_items_endpoint_rejects_invalid_item_type(client, db_pool):
+    token = await _auth_token(client)
+    language = await _language_param(db_pool)
+
+    resp = await client.get(
+        "/api/v1/recommendations/items",
+        params={"language": language, "item_type": "nonsense"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_items_response_shape(client, db_pool):
+    token = await _auth_token(client)
+    language = await _language_param(db_pool)
+
+    resp = await client.get(
+        "/api/v1/recommendations/items",
+        params={"language": language, "limit": 5},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    body = resp.json()
+
+    assert resp.status_code == 200
+    assert "items" in body
+    assert "item_type" in body
+    assert "language" in body
+    assert "total" in body
+    assert body["item_type"] == "word"
+    assert body["language"] == language
+    assert isinstance(body["items"], list)
+    assert body["total"] == len(body["items"])
+
+
+async def test_items_new_user_returns_empty_list(client, db_pool):
+    token = await _auth_token(client)
+    language = await _language_param(db_pool)
+
+    resp = await client.get(
+        "/api/v1/recommendations/items",
+        params={"language": language},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    body = resp.json()
+
+    assert resp.status_code == 200
+    assert body["items"] == []
+    assert body["total"] == 0
+
+
+async def test_items_phrase_type_returns_empty(client, db_pool):
+    token = await _auth_token(client)
+    language = await _language_param(db_pool)
+
+    resp = await client.get(
+        "/api/v1/recommendations/items",
+        params={"language": language, "item_type": "phrase"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    body = resp.json()
+
+    assert resp.status_code == 200
+    assert body["items"] == []
+    assert body["item_type"] == "phrase"
