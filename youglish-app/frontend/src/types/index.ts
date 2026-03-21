@@ -174,6 +174,57 @@ export interface PlaylistResult {
   coverage: PlaylistCoverageStats;
 }
 
+// ---------------------------------------------------------------------------
+// Insights
+// ---------------------------------------------------------------------------
+
+export interface InsightSignals {
+  is_due: number;
+  mistake_recency: number;
+  freq_rank: number;
+  is_learning: number;
+}
+
+export interface InsightItem {
+  item_id: number;
+  item_type: 'word' | 'phrase';
+  display_text: string;
+  secondary_text: string | null;
+  score: number;
+  reasons: string[];
+  signals: InsightSignals;
+  extra: Record<string, unknown>;
+}
+
+export interface InsightCard {
+  card_type: 'frequent_unknowns' | 'recent_mistakes';
+  title: string;
+  explanation: string;
+  items: InsightItem[];
+}
+
+export interface InsightCardsResponse {
+  cards: InsightCard[];
+  language: string;
+}
+
+export interface PrepViewData {
+  item_id: number;
+  item_type: string;
+  display_text: string;
+  translation: string;
+  grammar_structure: string | null;
+  grammar_explanation: string;
+  example: string | null;
+  templates: string[];
+  has_examples: boolean;
+}
+
+export interface GenerateExamplesResponse {
+  example: string;
+  templates: string[];
+}
+
 export interface GuidedHints {
   intent_hint: string;
   anchor_hint: string;
@@ -189,4 +240,22 @@ export interface GuidedSession {
   started_at: string;
   opening_message: ChatMessage;
   hints: GuidedHints | null;
+}
+
+export interface GuidedSessionSummary {
+  session_id: string;
+  target_word: string;
+  target_item_id: number;
+  target_item_type: string;
+  // Deterministic signals
+  target_used: boolean;
+  target_counted: boolean;
+  target_counted_count: number;
+  total_turns: number;
+  hint_level: number;
+  sentence_quality: 'excellent' | 'good' | 'needs_work';
+  // LLM feedback (empty string = nothing to show)
+  what_went_well: string;
+  what_to_improve: string;
+  corrective_note: string;
 }

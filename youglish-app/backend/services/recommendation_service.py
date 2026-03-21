@@ -358,20 +358,28 @@ async def recommend_items(
     Return ranked item recommendations enriched with display text.
 
     Delegates scoring entirely to get_prioritized_items(), then enriches
-    with word_table + user_word_knowledge + srs_cards data for display.
+    with the appropriate table depending on item_type:
+      'word'   → word_table via enrich_items()
+      'phrase' → phrase_table via phrase_service.enrich_phrases()
+      other    → returns empty (not yet supported)
 
-    For item_type != 'word', returns an empty list — phrase and grammar_rule
-    signal pipelines are not wired yet (see prioritization_service docstring).
-    Items whose item_id is not found in word_table for the given language are
-    silently skipped (cross-language IDs can legitimately appear in signals).
+    Items not found in the relevant table for the given language are silently
+    skipped (cross-language IDs can legitimately appear in signals).
     """
     items = await get_prioritized_items(pool, user_id, item_type=item_type, limit=limit)
 
-    if not items or item_type != "word":
+    if not items:
         return {"items": [], "item_type": item_type, "language": language, "total": 0}
 
     item_ids = [item.item_id for item in items]
-    enrichment = await enrich_items(pool, user_id, item_ids, language)
+
+    if item_type == "word":
+        enrichment = await enrich_items(pool, user_id, item_ids, language)
+    elif item_type == "phrase":
+        from .phrase_service import enrich_phrases
+        enrichment = await enrich_phrases(pool, user_id, item_ids, language)
+    else:
+        return {"items": [], "item_type": item_type, "language": language, "total": 0}
 
     result = []
     for item in items:

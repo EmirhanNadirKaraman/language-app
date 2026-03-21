@@ -134,6 +134,15 @@ class MatchPhraseResult(BaseModel):
     logic: str
     match_type: str
     indices: list[int]
+    phrase_id: int | None = None  # populated when canonical is in phrase_table
+
+
+class PhraseLookupResult(BaseModel):
+    phrase_id: int
+    canonical: str       # blueprint: "freuen sich über etw."
+    surface_form: str    # display form: "sich freuen über"
+    phrase_type: str     # 'reflexive_verb' | 'verb_pattern' | 'collocation'
+    language: str = "de"
 
 
 class MatchResponse(BaseModel):
@@ -220,6 +229,8 @@ class ChatSessionCreate(BaseModel):
 
 class GuidedSessionCreate(BaseModel):
     language: str  # target language code, e.g. "de"
+    target_item_id: int | None = None    # override auto-selection (from prep view)
+    target_item_type: str | None = None  # 'word' | 'phrase'
 
 
 class GuidedHints(BaseModel):
@@ -237,6 +248,28 @@ class GuidedSessionRead(BaseModel):
     started_at: datetime
     opening_message: ChatMessageRead
     hints: GuidedHints | None = None
+
+
+class GuidedCompleteRequest(BaseModel):
+    hint_level: int = Field(default=0, ge=0, le=3)
+
+
+class GuidedSessionSummary(BaseModel):
+    session_id: str
+    target_word: str
+    target_item_id: int
+    target_item_type: str
+    # Deterministic signals
+    target_used: bool
+    target_counted: bool
+    target_counted_count: int
+    total_turns: int
+    hint_level: int
+    sentence_quality: Literal["excellent", "good", "needs_work"]
+    # LLM feedback (empty string = nothing to report)
+    what_went_well: str
+    what_to_improve: str
+    corrective_note: str
 
 
 class ChatSendMessage(BaseModel):
@@ -396,6 +429,57 @@ class ItemRecommendationsResponse(BaseModel):
     item_type: str
     language:  str
     total:     int
+
+
+# ---------------------------------------------------------------------------
+# Insights
+# ---------------------------------------------------------------------------
+
+
+class InsightItem(BaseModel):
+    item_id: int
+    item_type: str                  # 'word' | 'phrase'
+    display_text: str
+    secondary_text: str | None = None
+    score: float
+    reasons: list[str]
+    signals: dict[str, float]       # is_due, mistake_recency, freq_rank, is_learning
+    extra: dict[str, Any] = {}      # card-type specific: event_count / fail_count / last_failed
+
+
+class InsightCard(BaseModel):
+    card_type: str                  # 'frequent_unknowns' | 'recent_mistakes'
+    title: str
+    explanation: str
+    items: list[InsightItem]
+
+
+class InsightCardsResponse(BaseModel):
+    cards: list[InsightCard]
+    language: str
+
+
+class PrepViewData(BaseModel):
+    item_id: int
+    item_type: str
+    display_text: str
+    translation: str
+    grammar_structure: str | None = None
+    grammar_explanation: str
+    example: str | None = None
+    templates: list[str] = []
+    has_examples: bool
+
+
+class GenerateExamplesRequest(BaseModel):
+    item_id: int
+    item_type: str
+    language: str
+
+
+class GenerateExamplesResponse(BaseModel):
+    example: str
+    templates: list[str]
 
 
 # ---------------------------------------------------------------------------

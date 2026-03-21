@@ -24,6 +24,7 @@ export default function App() {
     () => localStorage.getItem('recLanguage') ?? '',
   );
   const [recResult, setRecResult] = useState<SearchResult | null>(null);
+  const [guidedTarget, setGuidedTarget] = useState<{ itemId: number; itemType: string } | null>(null);
 
   const { prefs, savePreferences } = usePreferences(token);
   const wordColors = {
@@ -33,7 +34,7 @@ export default function App() {
   };
 
   // Reset to first result on new search; close chat when result changes
-  useEffect(() => { setResultIdx(0); setShowChat(null); setRecResult(null); }, [query]);
+  useEffect(() => { setResultIdx(0); setShowChat(null); setRecResult(null); setGuidedTarget(null); }, [query]);
   useEffect(() => { setShowChat(null); }, [resultIdx]);
 
   const currentResult = results[resultIdx] ?? null;
@@ -137,6 +138,17 @@ export default function App() {
             setShowChat(null);
           }}
           onPractice={(lang) => {
+            setGuidedTarget(null);
+            setRecResult({
+              video_id: '', title: '', thumbnail_url: '',
+              language: lang, start_time: 0, start_time_int: 0,
+              content: '', surface_form: null, match_type: 'recommendation',
+            });
+            setShowRecs(false);
+            setShowChat('guided');
+          }}
+          onPracticeItem={(itemId, itemType, lang) => {
+            setGuidedTarget({ itemId, itemType });
             setRecResult({
               video_id: '', title: '', thumbnail_url: '',
               language: lang, start_time: 0, start_time_int: 0,
@@ -146,6 +158,7 @@ export default function App() {
             setShowChat('guided');
           }}
           onPracticeSentence={(result) => {
+            setGuidedTarget(null);
             setRecResult(result);
             setShowRecs(false);
             setShowChat('guided');
@@ -227,7 +240,14 @@ export default function App() {
             <GuidedChatPage
               result={activeResult}
               token={token}
-              onClose={() => setShowChat(null)}
+              targetItemId={guidedTarget?.itemId}
+              targetItemType={guidedTarget?.itemType}
+              onClose={() => { setShowChat(null); setGuidedTarget(null); }}
+              onSessionComplete={() => {
+                setShowChat(null);
+                setGuidedTarget(null);
+                setShowRecs(true);
+              }}
             />
           )}
         </>

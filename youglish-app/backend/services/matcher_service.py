@@ -17,6 +17,8 @@ import os
 import sys
 from pathlib import Path
 
+import asyncpg
+
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 _SCRAPER_PATH = str(_PROJECT_ROOT / "subtitle-scraper")
 
@@ -38,3 +40,47 @@ async def match_sentence(sentence: str) -> list[dict]:
     doesn't block the event loop."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _pf.extract_german_logic, sentence)
+
+
+def get_blueprint_map() -> dict[str, str]:
+    """Expose the verb blueprint dict loaded at module import time.
+
+    Used by phrase_service.seed_from_blueprint_map() at application startup
+    to populate phrase_table without re-reading the file from disk.
+    """
+    return _pf.verb_blueprint_map
+
+
+async def match_sentence_with_ids(
+    pool: asyncpg.Pool,
+    sentence: str,
+    language: str = "de",
+) -> list[dict]:
+    """Match a sentence and attach a phrase_id to each result where available.
+
+    phrase_id is None when the canonical blueprint is not in phrase_table —
+    for example, single nouns or verbs that matched via trigram fuzzy fallback
+    to an unseeded entry.
+
+    A single batch query looks up all canonical forms so there is at most one
+    round-trip to the DB regardless of sentence length.
+    """
+    phrases = await match_sentence(sentence)
+    if not phrases:
+        return phrases
+
+    unique_canonicals = list({p["dictionary_entry"] for p in phrases})
+    rows = await pool.fetch(
+        """
+        SELECT phrase_id, canonical
+        FROM phrase_table
+        WHERE canonical = ANY($1::text[]) AND language = $2
+        """,
+        unique_canonicals, language,
+    )
+    canonical_to_id: dict[str, int] = {r["canonical"]: r["phrase_id"] for r in rows}
+
+    return [
+        {**p, "phrase_id": canonical_to_id.get(p["dictionary_entry"])}
+        for p in phrases
+    ]

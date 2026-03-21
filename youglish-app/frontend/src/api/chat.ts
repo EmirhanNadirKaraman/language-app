@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatSession, GuidedSession } from '../types';
+import type { ChatMessage, ChatSession, GuidedSession, GuidedSessionSummary } from '../types';
 
 function authHeaders(token: string): HeadersInit {
     return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
@@ -26,11 +26,19 @@ export async function createSession(token: string): Promise<ChatSession> {
     return res.json();
 }
 
-export async function createGuidedSession(token: string, language: string): Promise<GuidedSession> {
+export async function createGuidedSession(
+    token: string,
+    language: string,
+    targetItemId?: number,
+    targetItemType?: string,
+): Promise<GuidedSession> {
+    const body: Record<string, unknown> = { language };
+    if (targetItemId !== undefined) body.target_item_id = targetItemId;
+    if (targetItemType !== undefined) body.target_item_type = targetItemType;
     const res = await fetch('/api/v1/chat/guided-sessions', {
         method: 'POST',
         headers: authHeaders(token),
-        body: JSON.stringify({ language }),
+        body: JSON.stringify(body),
     });
     await checkOk(res);
     return res.json();
@@ -53,6 +61,20 @@ export async function sendMessage(
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ content }),
+    });
+    await checkOk(res);
+    return res.json();
+}
+
+export async function completeGuidedSession(
+    token: string,
+    sessionId: string,
+    hintLevel: number,
+): Promise<GuidedSessionSummary> {
+    const res = await fetch(`/api/v1/chat/guided-sessions/${sessionId}/complete`, {
+        method: 'POST',
+        headers: authHeaders(token),
+        body: JSON.stringify({ hint_level: hintLevel }),
     });
     await checkOk(res);
     return res.json();

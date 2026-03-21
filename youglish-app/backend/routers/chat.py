@@ -9,8 +9,10 @@ from ..models.schemas import (
     ChatSendMessage,
     ChatSessionCreate,
     ChatSessionRead,
+    GuidedCompleteRequest,
     GuidedSessionCreate,
     GuidedSessionRead,
+    GuidedSessionSummary,
     SendMessageResponse,
 )
 from ..services import chat_service, guided_chat_service, llm_service, usage_events_service
@@ -66,7 +68,16 @@ async def create_guided_session(
 ):
     user_id = str(current_user["user_id"])
 
-    target = await guided_chat_service.get_next_target(pool, user_id, body.language)
+    # Use caller-specified target (from prep view handoff) when provided
+    target = None
+    if body.target_item_id is not None and body.target_item_type is not None:
+        target = await guided_chat_service.get_target_by_id(
+            pool, body.target_item_id, body.target_item_type, body.language
+        )
+
+    if target is None:
+        target = await guided_chat_service.get_next_target(pool, user_id, body.language)
+
     if target is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -170,17 +181,7 @@ async def _handle_guided_message(
     session_id = session["session_id"]
     user_id    = str(current_user["user_id"])
 
-    # Look up target word + language from word_table
-    target_row = await pool.fetchrow(
-        "SELECT word, language FROM word_table WHERE word_id = $1",
-        session["target_item_id"],
-    )
-    if target_row is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                            detail="Target word no longer in vocabulary.")
-
-    target_word = target_row["word"]
-    language    = target_row["language"]
+    target_word, language = await _fetch_target_word(pool, session)
 
     # Evaluate user turn (structured eval + reply in one LLM call)
     eval_result = await llm_service.guided_evaluate(
@@ -236,8 +237,81 @@ async def _handle_guided_message(
     return SendMessageResponse(user_message=user_msg, assistant_message=assistant_msg)
 
 
+@router.post(
+    "/guided-sessions/{session_id}/complete",
+    response_model=GuidedSessionSummary,
+)
+async def complete_guided_session(
+    session_id: str,
+    body: GuidedCompleteRequest,
+    pool=Depends(get_pool),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Complete a guided session and return a result summary.
+
+    Computes deterministic signals (target_used, sentence_quality, etc.) from the
+    stored per-turn evaluation data, then calls the LLM once for concise feedback.
+    No new DB state is written — all progression updates already happened per-turn.
+    """
+    session = await _require_session(pool, session_id, current_user)
+    if session["session_type"] != "guided":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Session is not a guided session.",
+        )
+
+    target_word, language = await _fetch_target_word(pool, session)
+    messages = await chat_service.get_messages(pool, session_id)
+
+    # --- Deterministic signals from stored per-turn evaluations ---
+    user_messages = [m for m in messages if m["role"] == "user"]
+    evaluations   = [m["evaluation"] for m in user_messages if m.get("evaluation")]
+
+    target_used         = any(e.get("target_used")    for e in evaluations)
+    target_counted      = any(e.get("target_counted") for e in evaluations)
+    target_counted_count = sum(1 for e in evaluations if e.get("target_counted"))
+    total_turns         = len(user_messages)
+
+    naturalness_list = [e["naturalness"] for e in evaluations if e.get("naturalness")]
+    sentence_quality = _compute_sentence_quality(naturalness_list)
+
+    # Aggregate corrections from all messages (both user and assistant carry them)
+    all_corrections: list[dict] = []
+    for m in messages:
+        if m.get("corrections"):
+            all_corrections.extend(m["corrections"])
+
+    # --- LLM feedback (one call) ---
+    feedback = await llm_service.guided_summarize(
+        target_word=target_word,
+        language=language,
+        target_used=target_used,
+        target_counted=target_counted,
+        sentence_quality=sentence_quality,
+        all_corrections=all_corrections,
+        total_turns=total_turns,
+    )
+
+    return GuidedSessionSummary(
+        session_id=session_id,
+        target_word=target_word,
+        target_item_id=session["target_item_id"],
+        target_item_type=session["target_item_type"],
+        target_used=target_used,
+        target_counted=target_counted,
+        target_counted_count=target_counted_count,
+        total_turns=total_turns,
+        hint_level=body.hint_level,
+        sentence_quality=sentence_quality,
+        what_went_well=feedback["what_went_well"],
+        what_to_improve=feedback["what_to_improve"],
+        corrective_note=feedback["corrective_note"],
+    )
+
+
 # ---------------------------------------------------------------------------
-# Internal helper
+# Internal helpers
 # ---------------------------------------------------------------------------
 
 async def _require_session(pool, session_id: str, current_user: dict) -> dict:
@@ -246,3 +320,39 @@ async def _require_session(pool, session_id: str, current_user: dict) -> dict:
     if not session or session["user_id"] != str(current_user["user_id"]):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     return session
+
+
+async def _fetch_target_word(pool, session: dict) -> tuple[str, str]:
+    """Return (word, language) for the session's target item. Raises 422 if not found."""
+    target_row = await pool.fetchrow(
+        "SELECT word, language FROM word_table WHERE word_id = $1",
+        session["target_item_id"],
+    )
+    if target_row is None and session.get("target_item_type") == "phrase":
+        target_row = await pool.fetchrow(
+            "SELECT surface_form AS word, language FROM phrase_table WHERE phrase_id = $1",
+            session["target_item_id"],
+        )
+    if target_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Target item no longer in vocabulary.",
+        )
+    return target_row["word"], target_row["language"]
+
+
+def _compute_sentence_quality(naturalness_list: list[str]) -> str:
+    """
+    Deterministic quality label from per-turn naturalness scores.
+    ≥60% 'high' → excellent, ≥50% 'low' → needs_work, else good.
+    """
+    if not naturalness_list:
+        return "needs_work"
+    n = len(naturalness_list)
+    highs = naturalness_list.count("high")
+    lows  = naturalness_list.count("low")
+    if highs >= n * 0.6:
+        return "excellent"
+    if lows >= n * 0.5:
+        return "needs_work"
+    return "good"

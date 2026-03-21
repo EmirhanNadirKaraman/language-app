@@ -3,22 +3,26 @@ import type { GuidedHints, SearchResult, WordLookupResult } from '../types';
 import { useGuidedChat } from '../hooks/useGuidedChat';
 import { ChatWindow } from './ChatWindow';
 import { MessageInput } from './MessageInput';
+import { SessionSummaryCard } from './SessionSummaryCard';
 import { lookupWord } from '../api/words';
 import { formatDueDate, progressDots, PASSIVE_MAX, ACTIVE_MAX } from '../utils/progressUtils';
 
 interface Props {
     result: SearchResult;
     token: string;
+    targetItemId?: number;
+    targetItemType?: string;
     onClose: () => void;
+    onSessionComplete?: () => void;
 }
 
-export function GuidedChatPage({ result, token, onClose }: Props) {
-    const { session, messages, targetAchieved, sending, error, startSession, send } = useGuidedChat(token);
+export function GuidedChatPage({ result, token, targetItemId, targetItemType, onClose, onSessionComplete }: Props) {
+    const { session, messages, summary, targetAchieved, sending, completing, error, startSession, send, complete } = useGuidedChat(token);
     const [targetLookup, setTargetLookup] = useState<WordLookupResult | null>(null);
     const [hintLevel, setHintLevel] = useState<0 | 1 | 2 | 3>(0);
 
     useEffect(() => {
-        startSession(result.language);
+        startSession(result.language, targetItemId, targetItemType);
     }, [startSession, result.language]);  // eslint-disable-line react-hooks/exhaustive-deps
 
     // Reset hints when a new session starts
@@ -48,11 +52,13 @@ export function GuidedChatPage({ result, token, onClose }: Props) {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '10px 16px',
-                background: '#f57f17',
+                background: summary ? '#4caf50' : '#f57f17',
                 color: '#fff',
                 flexShrink: 0,
             }}>
-                <span style={{ fontWeight: 600, fontSize: '15px' }}>Guided Practice</span>
+                <span style={{ fontWeight: 600, fontSize: '15px' }}>
+                    {summary ? 'Session Summary' : 'Guided Practice'}
+                </span>
                 <button
                     onClick={onClose}
                     style={{
@@ -65,54 +71,92 @@ export function GuidedChatPage({ result, token, onClose }: Props) {
                 </button>
             </div>
 
-            {/* Target word badge */}
-            <div style={{
-                padding: '8px 16px',
-                background: '#fff8e1',
-                borderBottom: hintLevel > 0 ? 'none' : '1px solid #ffe082',
-                flexShrink: 0,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                flexWrap: 'wrap',
-            }}>
-                <span style={{ fontSize: '12px', color: '#795548' }}>Target:</span>
-                <span style={{
-                    fontWeight: 700,
-                    fontSize: '15px',
-                    color: '#e65100',
-                    letterSpacing: '0.5px',
+            {/* Target word badge — hidden when summary is shown */}
+            {!summary && (
+                <div style={{
+                    padding: '8px 16px',
+                    background: '#fff8e1',
+                    borderBottom: hintLevel > 0 ? 'none' : '1px solid #ffe082',
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    flexWrap: 'wrap',
                 }}>
-                    {session?.target_word ?? '…'}
-                </span>
-                {targetLookup?.current_status != null && !targetAchieved && (
-                    <TargetProgress lookup={targetLookup} />
-                )}
-                {targetAchieved && (
+                    <span style={{ fontSize: '12px', color: '#795548' }}>Target:</span>
                     <span style={{
-                        marginLeft: 'auto',
-                        fontSize: '12px',
-                        background: '#e8f5e9',
-                        color: '#2e7d32',
-                        borderRadius: '10px',
-                        padding: '2px 10px',
-                        fontWeight: 600,
+                        fontWeight: 700,
+                        fontSize: '15px',
+                        color: '#e65100',
+                        letterSpacing: '0.5px',
                     }}>
-                        ✓ Ziel erreicht!
+                        {session?.target_word ?? '…'}
                     </span>
-                )}
-                {session?.hints && !targetAchieved && (
-                    <HintButton hintLevel={hintLevel} onAdvance={() => setHintLevel(l => Math.min(3, l + 1) as 0 | 1 | 2 | 3)} />
-                )}
-            </div>
+                    {targetLookup?.current_status != null && !targetAchieved && (
+                        <TargetProgress lookup={targetLookup} />
+                    )}
+                    {targetAchieved && (
+                        <span style={{
+                            fontSize: '12px',
+                            background: '#e8f5e9',
+                            color: '#2e7d32',
+                            borderRadius: '10px',
+                            padding: '2px 10px',
+                            fontWeight: 600,
+                        }}>
+                            ✓ Ziel erreicht!
+                        </span>
+                    )}
+                    {session?.hints && !targetAchieved && (
+                        <HintButton hintLevel={hintLevel} onAdvance={() => setHintLevel(l => Math.min(3, l + 1) as 0 | 1 | 2 | 3)} />
+                    )}
+                    {/* End session button — only shown once the user has at least one turn */}
+                    {messages.filter(m => m.role === 'user').length > 0 && (
+                        <button
+                            onClick={() => complete(hintLevel)}
+                            disabled={completing || sending}
+                            style={{
+                                marginLeft: 'auto',
+                                background: 'none',
+                                border: '1px solid #aaa',
+                                borderRadius: '10px',
+                                padding: '2px 10px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                color: '#555',
+                                cursor: completing || sending ? 'not-allowed' : 'pointer',
+                                opacity: completing || sending ? 0.5 : 1,
+                                flexShrink: 0,
+                            }}
+                        >
+                            {completing ? 'Finishing…' : 'End Session'}
+                        </button>
+                    )}
+                </div>
+            )}
 
-            {/* Hint panel */}
-            {session?.hints && hintLevel > 0 && (
+            {/* Hint panel — hidden when summary is shown */}
+            {!summary && session?.hints && hintLevel > 0 && (
                 <HintPanel hints={session.hints} hintLevel={hintLevel} onAdvance={() => setHintLevel(l => Math.min(3, l + 1) as 0 | 1 | 2 | 3)} />
             )}
 
-            {/* Body */}
-            {!session ? (
+            {/* Summary view */}
+            {summary && (
+                <SessionSummaryCard
+                    summary={summary}
+                    onNextItem={() => {
+                        onClose();
+                        onSessionComplete?.();
+                    }}
+                    onPracticeAgain={() => {
+                        startSession(result.language, summary.target_item_id, summary.target_item_type);
+                    }}
+                    onClose={onClose}
+                />
+            )}
+
+            {/* Body — chat or loading state */}
+            {!summary && !session && (
                 <div style={{
                     flex: 1,
                     display: 'flex',
@@ -123,7 +167,9 @@ export function GuidedChatPage({ result, token, onClose }: Props) {
                 }}>
                     {error ?? 'Starting session…'}
                 </div>
-            ) : (
+            )}
+
+            {!summary && session && (
                 <>
                     <ChatWindow messages={messages} />
                     {error && (
@@ -131,7 +177,7 @@ export function GuidedChatPage({ result, token, onClose }: Props) {
                             {error}
                         </p>
                     )}
-                    <MessageInput onSend={send} disabled={sending} />
+                    <MessageInput onSend={send} disabled={sending || completing} />
                 </>
             )}
         </div>

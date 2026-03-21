@@ -87,6 +87,43 @@ async def get_next_target(
         return dict(row) if row else None
 
 
+async def get_target_by_id(
+    pool: asyncpg.Pool,
+    item_id: int,
+    item_type: str,
+    language: str,
+) -> dict | None:
+    """
+    Return {item_id, item_type, word, lemma} for a specific practice target.
+
+    Used when the prep view directly hands off a target instead of letting
+    get_next_target() choose automatically.
+    """
+    if item_type == "word":
+        row = await pool.fetchrow(
+            """
+            SELECT word_id AS item_id, 'word'::text AS item_type, word, lemma
+            FROM word_table
+            WHERE word_id = $1 AND language = $2
+            """,
+            item_id, language,
+        )
+    elif item_type == "phrase":
+        row = await pool.fetchrow(
+            """
+            SELECT phrase_id AS item_id, 'phrase'::text AS item_type,
+                   surface_form AS word, canonical AS lemma
+            FROM phrase_table
+            WHERE phrase_id = $1 AND language = $2
+            """,
+            item_id, language,
+        )
+    else:
+        return None
+
+    return dict(row) if row else None
+
+
 async def update_progress(
     pool: asyncpg.Pool,
     user_id: str,

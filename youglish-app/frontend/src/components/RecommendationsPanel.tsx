@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { useRecommendations } from '../hooks/useRecommendations';
 import {
     ItemRecommendationCard,
     VideoRecommendationCard,
     SentenceRecommendationCard,
 } from './RecommendationCards';
-import type { SearchResult } from '../types';
+import { InsightsSection } from './InsightsSection';
+import { PrepView } from './PrepView';
+import type { InsightItem, SearchResult } from '../types';
 import type { WordColorScheme } from '../config/wordColors';
 
 const LANGUAGES = [
@@ -23,24 +26,26 @@ const LANGUAGES = [
 ];
 
 interface Props {
-    token:            string;
-    language:         string;
-    onLanguageChange: (lang: string) => void;
-    onWatch:          (result: SearchResult) => void;
-    onPractice:       (language: string) => void;
+    token:              string;
+    language:           string;
+    onLanguageChange:   (lang: string) => void;
+    onWatch:            (result: SearchResult) => void;
+    onPractice:         (language: string) => void;
+    onPracticeItem:     (itemId: number, itemType: string, language: string) => void;
     onPracticeSentence: (result: SearchResult) => void;
-    onSearch:         (term: string) => void;
-    onClose:          () => void;
-    wordColors?:      WordColorScheme;
-    passiveMax?:      number;
+    onSearch:           (term: string) => void;
+    onClose:            () => void;
+    wordColors?:        WordColorScheme;
+    passiveMax?:        number;
 }
 
 export function RecommendationsPanel({
     token, language, onLanguageChange,
-    onWatch, onPractice, onPracticeSentence, onSearch, onClose, wordColors, passiveMax,
+    onWatch, onPractice, onPracticeItem, onPracticeSentence, onSearch, onClose, wordColors, passiveMax,
 }: Props) {
-    const { items, videos, sentences, noTargetItems, loading, error, refresh } =
+    const { items, phrases, videos, sentences, noTargetItems, loading, error, refresh } =
         useRecommendations(token, language);
+    const [prepItem, setPrepItem] = useState<InsightItem | null>(null);
 
     const sectionLabel: React.CSSProperties = {
         fontSize: '11px',
@@ -126,8 +131,31 @@ export function RecommendationsPanel({
                 <p style={{ fontSize: '13px', color: '#c62828', marginTop: '10px' }}>{error}</p>
             )}
 
+            {/* Prep view — replaces panel content when an insight item is selected */}
+            {language && prepItem && (
+                <PrepView
+                    token={token}
+                    item={prepItem}
+                    language={language}
+                    onClose={() => setPrepItem(null)}
+                    onStartPractice={(itemId, itemType, lang) => {
+                        setPrepItem(null);
+                        onPracticeItem(itemId, itemType, lang);
+                    }}
+                />
+            )}
+
+            {/* Insights section — always visible when language is set and prep is not open */}
+            {language && !prepItem && (
+                <InsightsSection
+                    token={token}
+                    language={language}
+                    onItemClick={setPrepItem}
+                />
+            )}
+
             {/* Content */}
-            {language && !loading && !error && (
+            {language && !loading && !error && !prepItem && (
                 <>
                     {/* Words */}
                     <p style={sectionLabel}>Words</p>
@@ -140,6 +168,30 @@ export function RecommendationsPanel({
                             {items.map(rec => (
                                 <ItemRecommendationCard
                                     key={`${rec.item_type}-${rec.item_id}`}
+                                    rec={rec}
+                                    token={token}
+                                    language={language}
+                                    onSearch={onSearch}
+                                    onPractice={onPractice}
+                                    onStatusChange={refresh}
+                                    wordColors={wordColors}
+                                    passiveMax={passiveMax}
+                                />
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Phrases */}
+                    <p style={sectionLabel}>Phrases</p>
+                    {phrases.length === 0 ? (
+                        <p style={emptyText}>
+                            Browse phrases via Search, mark them as &ldquo;learning&rdquo; to start tracking them here.
+                        </p>
+                    ) : (
+                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                            {phrases.map(rec => (
+                                <ItemRecommendationCard
+                                    key={`phrase-${rec.item_id}`}
                                     rec={rec}
                                     token={token}
                                     language={language}

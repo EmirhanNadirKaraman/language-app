@@ -12,6 +12,7 @@ import type {
 
 interface State {
     items:         ItemRecommendation[];
+    phrases:       ItemRecommendation[];
     videos:        VideoRecommendation[];
     sentences:     SentenceRecommendation[];
     noTargetItems: boolean;   // true when videos reason === 'no_target_items'
@@ -20,7 +21,7 @@ interface State {
 }
 
 const INITIAL: State = {
-    items: [], videos: [], sentences: [],
+    items: [], phrases: [], videos: [], sentences: [],
     noTargetItems: false, loading: false, error: null,
 };
 
@@ -40,13 +41,15 @@ export function useRecommendations(token: string | null, language: string) {
         setState(s => ({ ...s, loading: true, error: null }));
 
         Promise.all([
-            fetchItemRecommendations(token, language),
+            fetchItemRecommendations(token, language, 'word'),
+            fetchItemRecommendations(token, language, 'phrase'),
             fetchVideoRecommendations(token, language),
             fetchSentenceRecommendations(token, language),
         ])
-            .then(([itemsRes, videosRes, sentencesRes]) => {
+            .then(([itemsRes, phrasesRes, videosRes, sentencesRes]) => {
                 setState({
                     items:         itemsRes.items,
+                    phrases:       phrasesRes.items,
                     videos:        videosRes.videos,
                     sentences:     sentencesRes.sentences,
                     noTargetItems: videosRes.reason === 'no_target_items',

@@ -3,8 +3,10 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from .database import create_pool, close_pool
+from .database import create_pool, close_pool, get_pool
 from .routers.analytics import router as analytics_router
+from .routers.insights import router as insights_router
+from .routers.phrases import router as phrases_router
 from .routers.playlists import router as playlists_router
 from .routers.recommendations import router as recommendations_router
 from .routers.settings import router as settings_router
@@ -20,6 +22,20 @@ from .routers.words import router as words_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await create_pool()
+
+    # Seed phrase_table from the verb dict already loaded by matcher_service.
+    # ON CONFLICT DO NOTHING makes this safe on every restart.
+    try:
+        from .services import matcher_service, phrase_service
+        pool = get_pool()
+        await phrase_service.seed_from_blueprint_map(
+            pool, matcher_service.get_blueprint_map(), language="de"
+        )
+    except Exception:
+        # Seed failure is non-fatal — app still starts; seed manually via POST /api/v1/phrases/seed
+        import logging
+        logging.getLogger(__name__).warning("Phrase table seed failed at startup", exc_info=True)
+
     yield
     await close_pool()
 
@@ -33,17 +49,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(search_router,  prefix="/api")        # existing: /api/search, /api/suggest, etc.
-app.include_router(auth_router,    prefix="/api/v1")     # /api/v1/auth/register, /api/v1/auth/login
-app.include_router(words_router,   prefix="/api/v1")     # /api/v1/words/knowledge, /api/v1/words/{type}/{id}/status
-app.include_router(videos_router,  prefix="/api/v1")     # /api/v1/videos/{video_id}/reading-stats
-app.include_router(matcher_router, prefix="/api/v1")     # /api/v1/sentences/match
-app.include_router(srs_router,     prefix="/api/v1")     # /api/v1/srs/check-answer, /magic-sentences, /cloze-questions
-app.include_router(chat_router,    prefix="/api/v1")     # /api/v1/chat/sessions, /api/v1/chat/sessions/{id}/messages
-app.include_router(analytics_router,  prefix="/api/v1")  # /api/v1/analytics/...
-app.include_router(playlists_router,      prefix="/api/v1")  # /api/v1/playlists/generate
-app.include_router(recommendations_router, prefix="/api/v1")  # /api/v1/recommendations/sentences, /videos
-app.include_router(settings_router,        prefix="/api/v1")  # /api/v1/settings/preferences
+app.include_router(search_router,          prefix="/api")       # /api/search, /api/suggest, etc.
+app.include_router(auth_router,            prefix="/api/v1")    # /api/v1/auth/register, /api/v1/auth/login
+app.include_router(words_router,           prefix="/api/v1")    # /api/v1/words/knowledge, /api/v1/words/{type}/{id}/status
+app.include_router(videos_router,          prefix="/api/v1")    # /api/v1/videos/{video_id}/reading-stats
+app.include_router(matcher_router,         prefix="/api/v1")    # /api/v1/sentences/match
+app.include_router(phrases_router,         prefix="/api/v1")    # /api/v1/phrases, /api/v1/phrases/match, /api/v1/phrases/seed
+app.include_router(srs_router,             prefix="/api/v1")    # /api/v1/srs/check-answer, /magic-sentences, /cloze-questions
+app.include_router(chat_router,            prefix="/api/v1")    # /api/v1/chat/sessions, /api/v1/chat/sessions/{id}/messages
+app.include_router(analytics_router,       prefix="/api/v1")    # /api/v1/analytics/...
+app.include_router(insights_router,        prefix="/api/v1")    # /api/v1/insights/cards, /prep, /prep/generate-examples
+app.include_router(playlists_router,       prefix="/api/v1")    # /api/v1/playlists/generate
+app.include_router(recommendations_router, prefix="/api/v1")    # /api/v1/recommendations/sentences, /videos, /items
+app.include_router(settings_router,        prefix="/api/v1")    # /api/v1/settings/preferences
 
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():

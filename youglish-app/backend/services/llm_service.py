@@ -402,6 +402,348 @@ async def guided_evaluate(
 
 
 # ---------------------------------------------------------------------------
+# Prep view — item info (translation + grammar explanation)
+# ---------------------------------------------------------------------------
+
+_PREP_INFO_TOOL: anthropic.types.ToolParam = {
+    "name": "item_prep_info",
+    "description": "Provide structured language-learning prep information for a vocabulary item.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "translation": {
+                "type": "string",
+                "description": "Concise English translation. For verbs include the base form (e.g. 'to spend (time)').",
+            },
+            "grammar_structure": {
+                "type": "string",
+                "description": (
+                    "The core grammatical pattern in compact form. "
+                    "Examples: 'verbringen + Akkusativ', 'sich freuen + über + Akkusativ', "
+                    "'Nomen (der/die/das)'. Keep it under 60 characters."
+                ),
+            },
+            "grammar_explanation": {
+                "type": "string",
+                "description": (
+                    "2–4 sentences covering: (1) meaning and grammatical role, "
+                    "(2) required case/preposition/reflexive structure, "
+                    "(3) one common learner mistake to avoid."
+                ),
+            },
+        },
+        "required": ["translation", "grammar_structure", "grammar_explanation"],
+    },
+}
+
+
+async def prep_item_info(
+    display_text: str,
+    item_type: str,
+    language: str,
+    *,
+    pool: asyncpg.Pool | None = None,
+) -> dict:
+    """
+    Return {translation, grammar_structure, grammar_explanation} for a vocabulary item.
+
+    Cached permanently in llm_cache by (display_text, item_type, language).
+    Called as part of GET /insights/prep — always loads, never deferred.
+    """
+    if _MOCK:
+        return {
+            "translation": "to spend (time)",
+            "grammar_structure": f"{display_text} + Akkusativ",
+            "grammar_explanation": (
+                f"Mock: '{display_text}' is a common {language} {item_type}. "
+                f"It typically requires the accusative case. "
+                f"Common mistake: confusing it with a similar-sounding word."
+            ),
+        }
+
+    cache_key: str | None = None
+    if pool is not None:
+        cache_key = llm_cache_service.make_cache_key(
+            "prep_item_info", _MODEL,
+            {"display_text": display_text, "item_type": item_type, "language": language},
+        )
+        cached = await llm_cache_service.get_cached(pool, cache_key)
+        if cached is not None:
+            return cached
+
+    system = (
+        f"You are a concise {language} language learning assistant. "
+        f"Provide structured prep information for a {item_type} the learner is about to practise. "
+        f"Be precise, practical, and production-oriented. "
+        f"You MUST call the item_prep_info tool."
+    )
+
+    response = await _client.messages.create(
+        model=_MODEL,
+        max_tokens=512,
+        system=system,
+        tools=[_PREP_INFO_TOOL],
+        tool_choice={"type": "tool", "name": "item_prep_info"},
+        messages=[{
+            "role": "user",
+            "content": f"Provide prep information for the {language} {item_type}: \"{display_text}\"",
+        }],
+    )
+
+    tool_block = next(b for b in response.content if b.type == "tool_use")
+    result = {
+        "translation":         tool_block.input["translation"],
+        "grammar_structure":   tool_block.input["grammar_structure"],
+        "grammar_explanation": tool_block.input["grammar_explanation"],
+    }
+
+    if pool is not None and cache_key is not None:
+        await llm_cache_service.set_cached(pool, cache_key, "prep_item_info", _MODEL, result)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Prep view — examples + templates (on-demand)
+# ---------------------------------------------------------------------------
+
+_PREP_EXAMPLES_TOOL: anthropic.types.ToolParam = {
+    "name": "item_examples",
+    "description": "Generate a usage example and two reusable production templates for a vocabulary item.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "example": {
+                "type": "string",
+                "description": "One clear, natural sentence in the target language using the item in a realistic context.",
+            },
+            "templates": {
+                "type": "array",
+                "description": (
+                    "Exactly 2 reusable sentence templates for production practice. "
+                    "Use [square bracket slots] for variable parts (e.g. [Zeit], [Person], [Ort]). "
+                    "Each template should be a complete sentence skeleton."
+                ),
+                "items": {"type": "string"},
+                "minItems": 2,
+                "maxItems": 2,
+            },
+        },
+        "required": ["example", "templates"],
+    },
+}
+
+
+async def prep_generate_examples(
+    display_text: str,
+    item_type: str,
+    language: str,
+    *,
+    pool: asyncpg.Pool | None = None,
+) -> dict:
+    """
+    Return {example: str, templates: [str, str]}.
+    Cached permanently by (display_text, item_type, language).
+    Called only when the user explicitly requests example generation.
+    """
+    if _MOCK:
+        return {
+            "example": f"Ich verwende '{display_text}' in einem Beispielsatz.",
+            "templates": [
+                f"Ich [Verb] {display_text} [Ergänzung].",
+                f"[Person] hat {display_text} [Kontext] [Verb].",
+            ],
+        }
+
+    cache_key: str | None = None
+    if pool is not None:
+        cache_key = llm_cache_service.make_cache_key(
+            "prep_examples", _MODEL,
+            {"display_text": display_text, "item_type": item_type, "language": language},
+        )
+        cached = await llm_cache_service.get_cached(pool, cache_key)
+        if cached is not None:
+            return cached
+
+    system = (
+        f"You are a {language} language learning assistant focused on production practice. "
+        f"Generate a usage example and two reusable sentence templates for a {language} {item_type}. "
+        f"Templates use [square bracket slots] for variable parts. "
+        f"Favour everyday, naturalistic contexts. You MUST call the item_examples tool."
+    )
+
+    response = await _client.messages.create(
+        model=_MODEL,
+        max_tokens=256,
+        system=system,
+        tools=[_PREP_EXAMPLES_TOOL],
+        tool_choice={"type": "tool", "name": "item_examples"},
+        messages=[{
+            "role": "user",
+            "content": f"Generate an example and templates for the {language} {item_type}: \"{display_text}\"",
+        }],
+    )
+
+    tool_block = next(b for b in response.content if b.type == "tool_use")
+    result = {
+        "example":   tool_block.input["example"],
+        "templates": tool_block.input["templates"][:2],
+    }
+
+    if pool is not None and cache_key is not None:
+        await llm_cache_service.set_cached(pool, cache_key, "prep_examples", _MODEL, result)
+
+    return result
+
+
+async def get_examples_if_cached(
+    display_text: str,
+    item_type: str,
+    language: str,
+    *,
+    pool: asyncpg.Pool | None = None,
+) -> dict | None:
+    """
+    Return cached examples/templates without generating.
+    Returns None if not in cache — the caller shows a "Generate examples" button.
+    """
+    if pool is None:
+        return None
+    cache_key = llm_cache_service.make_cache_key(
+        "prep_examples", _MODEL,
+        {"display_text": display_text, "item_type": item_type, "language": language},
+    )
+    return await llm_cache_service.get_cached(pool, cache_key)
+
+
+# ---------------------------------------------------------------------------
+# Guided chat — post-session summary
+# ---------------------------------------------------------------------------
+
+_GUIDED_SUMMARY_TOOL: anthropic.types.ToolParam = {
+    "name": "guided_session_summary",
+    "description": "Generate concise post-session feedback for a completed guided practice session.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "what_went_well": {
+                "type": "string",
+                "description": "One specific sentence about what the learner did well.",
+            },
+            "what_to_improve": {
+                "type": "string",
+                "description": (
+                    "One sentence on the single most important thing to improve. "
+                    "Empty string if there is nothing significant."
+                ),
+            },
+            "corrective_note": {
+                "type": "string",
+                "description": (
+                    "A direct corrective comment on the most critical grammar or usage error observed. "
+                    "Format: 'Use X instead of Y because...' "
+                    "Empty string if no significant errors were observed."
+                ),
+            },
+        },
+        "required": ["what_went_well", "what_to_improve", "corrective_note"],
+    },
+}
+
+
+async def guided_summarize(
+    target_word: str,
+    language: str,
+    target_used: bool,
+    target_counted: bool,
+    sentence_quality: str,
+    all_corrections: list[dict],
+    total_turns: int,
+) -> dict:
+    """
+    Generate concise post-session feedback after a guided chat session ends.
+
+    Returns:
+        {
+            what_went_well: str,
+            what_to_improve: str,   # empty string = nothing significant
+            corrective_note: str,   # empty string = no corrections
+        }
+    """
+    if _MOCK:
+        if target_counted:
+            return {
+                "what_went_well": f"You used '{target_word}' naturally and correctly — well done.",
+                "what_to_improve": "",
+                "corrective_note": "",
+            }
+        elif target_used:
+            return {
+                "what_went_well": "You engaged with the topic confidently.",
+                "what_to_improve": f"Make sure to use '{target_word}' in correct, natural {language} next time.",
+                "corrective_note": "",
+            }
+        else:
+            return {
+                "what_went_well": "You kept the conversation going.",
+                "what_to_improve": f"Try to work '{target_word}' into your response.",
+                "corrective_note": "",
+            }
+
+    # Deduplicate corrections by original form, cap at 4 for prompt brevity
+    seen: set[str] = set()
+    unique_corrections: list[dict] = []
+    for c in all_corrections:
+        key = c.get("original", "")
+        if key and key not in seen:
+            seen.add(key)
+            unique_corrections.append(c)
+            if len(unique_corrections) >= 4:
+                break
+
+    corrections_text = "\n".join(
+        f'  • "{c["original"]}" → "{c["corrected"]}": {c["explanation"]}'
+        for c in unique_corrections
+    ) or "  (none)"
+
+    if target_counted:
+        target_status = "used correctly in natural context"
+    elif target_used:
+        target_status = "used but not in correct/natural target-language context"
+    else:
+        target_status = "not used"
+
+    system = (
+        f"You are a concise, critical {language} language tutor writing a post-session summary.\n"
+        f"Session details:\n"
+        f"  Target word/phrase: \"{target_word}\"\n"
+        f"  Target usage: {target_status}\n"
+        f"  Overall sentence quality: {sentence_quality}\n"
+        f"  Turns taken: {total_turns}\n"
+        f"  Corrections observed:\n{corrections_text}\n\n"
+        f"Write direct, honest, specific feedback. One sentence per field. "
+        f"Be encouraging but critical — no empty praise.\n"
+        f"You MUST call the guided_session_summary tool."
+    )
+
+    response = await _client.messages.create(
+        model=_MODEL,
+        max_tokens=384,
+        system=system,
+        tools=[_GUIDED_SUMMARY_TOOL],
+        tool_choice={"type": "tool", "name": "guided_session_summary"},
+        messages=[{"role": "user", "content": "Generate the session summary now."}],
+    )
+
+    tool_block = next(b for b in response.content if b.type == "tool_use")
+    return {
+        "what_went_well":  tool_block.input.get("what_went_well", ""),
+        "what_to_improve": tool_block.input.get("what_to_improve", ""),
+        "corrective_note": tool_block.input.get("corrective_note", ""),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Free chat — evaluate and reply
 # ---------------------------------------------------------------------------
 

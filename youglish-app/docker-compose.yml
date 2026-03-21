@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: youglish
+      POSTGRES_USER: youglish
+      POSTGRES_PASSWORD: youglish
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U youglish -d youglish"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ../.env
+    environment:
+      # These override the .env file so the backend connects to the Docker DB
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: youglish
+      DB_USER: youglish
+      DB_PASSWORD: youglish
+
+volumes:
+  postgres_data:
