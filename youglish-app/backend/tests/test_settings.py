@@ -75,14 +75,22 @@ class TestApplyDefaults:
         overrides = {
             "liked_genres":           ["sports"],
             "liked_channels":         ["channel1"],
+            "disliked_genres":        ["drama"],
+            "followed_channels":      ["channel2"],
+            "disliked_channels":      ["channel3"],
+            "channel_names":          {"channel1": "Sports Channel"},
             "passive_reps_for_known": 10,
             "active_reps_for_known":  8,
             "known_word_color":       "#111111",
             "learning_word_color":    "#222222",
             "unknown_word_color":     "#333333",
+            "reminders_enabled":      False,
         }
         result = apply_defaults(overrides)
-        assert result == overrides
+        # apply_defaults returns all default keys with provided overrides applied
+        assert set(result.keys()) == set(DEFAULTS.keys())
+        for key, value in overrides.items():
+            assert result[key] == value
 
 
 # ---------------------------------------------------------------------------
@@ -166,9 +174,11 @@ async def _auth_token(client) -> str:
 
 
 ALL_PREFERENCE_KEYS = {
-    "liked_genres", "liked_channels",
+    "liked_genres", "liked_channels", "disliked_genres",
+    "followed_channels", "disliked_channels", "channel_names",
     "passive_reps_for_known", "active_reps_for_known",
     "known_word_color", "learning_word_color", "unknown_word_color",
+    "reminders_enabled",
 }
 
 

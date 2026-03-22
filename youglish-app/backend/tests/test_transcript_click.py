@@ -177,4 +177,4 @@ async def test_transcript_click_requires_auth(client: AsyncClient, db_pool):
 
     resp = await client.post(f"/api/v1/words/word/{word_id}/transcript-click")
 
-    assert resp.status_code == 401
+    assert resp.status_code == 403

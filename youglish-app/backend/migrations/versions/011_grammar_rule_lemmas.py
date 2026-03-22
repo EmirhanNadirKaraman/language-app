@@ -17,8 +17,18 @@ def upgrade() -> None:
         ALTER TABLE grammar_rule_table
         ADD COLUMN IF NOT EXISTS applicable_lemmas TEXT[] NOT NULL DEFAULT '{}'
     """)
-    op.execute("CREATE INDEX IF NOT EXISTS ON grammar_rule_table USING GIN (applicable_lemmas)")
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_grammar_rule_table_applicable_lemmas
+        ON grammar_rule_table
+        USING GIN (applicable_lemmas)
+    """)
 
 
 def downgrade() -> None:
-    op.execute("ALTER TABLE grammar_rule_table DROP COLUMN IF EXISTS applicable_lemmas")
+    op.execute("""
+        DROP INDEX IF EXISTS ix_grammar_rule_table_applicable_lemmas
+    """)
+    op.execute("""
+        ALTER TABLE grammar_rule_table
+        DROP COLUMN IF EXISTS applicable_lemmas
+    """)
