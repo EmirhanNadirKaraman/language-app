@@ -89,6 +89,9 @@ export interface VideoRecommendation {
   covered_item_ids: number[];
   covered_count: number;
   score: number;
+  channel_id:   string | null;
+  channel_name: string | null;
+  genre:        string | null;
 }
 
 export interface SentenceRecommendation {
@@ -109,6 +112,11 @@ export interface VideoRecommendationsResponse {
   videos: VideoRecommendation[];
   target_item_count: number;
   reason: string | null;
+}
+
+export interface FollowedChannelVideosResponse {
+  videos: VideoRecommendation[];
+  total: number;
 }
 
 export interface SentenceRecommendationsResponse {
@@ -208,6 +216,24 @@ export interface InsightCardsResponse {
   language: string;
 }
 
+export interface GrammarRuleRef {
+  rule_id: number;
+  slug: string;
+  title: string;
+  rule_type: string;
+  short_explanation: string;
+  pattern_hint: string | null;
+}
+
+export interface GrammarRuleDetail extends GrammarRuleRef {
+  long_explanation: string | null;  // null = not yet generated
+}
+
+export interface GrammarRuleExplainResponse {
+  slug: string;
+  long_explanation: string;
+}
+
 export interface PrepViewData {
   item_id: number;
   item_type: string;
@@ -218,6 +244,7 @@ export interface PrepViewData {
   example: string | null;
   templates: string[];
   has_examples: boolean;
+  linked_grammar_rules: GrammarRuleRef[];
 }
 
 export interface GenerateExamplesResponse {
@@ -258,4 +285,123 @@ export interface GuidedSessionSummary {
   what_went_well: string;
   what_to_improve: string;
   corrective_note: string;
+}
+
+// ---------------------------------------------------------------------------
+// Book reading mode
+// ---------------------------------------------------------------------------
+
+export type BookStatus = 'pending' | 'processing' | 'ready' | 'error';
+export type BlockType = 'text' | 'ignored';
+export type CorrectionStatus = 'none' | 'suggested' | 'approved' | 'rejected';
+export type SourceType = 'pdf_text' | 'pdf_scan' | 'mixed' | 'unknown';
+
+export interface BookDocument {
+  doc_id: string;
+  user_id: string;
+  title: string;
+  filename: string;
+  total_pages: number | null;
+  language: string;
+  source_type: SourceType;
+  status: BookStatus;
+  error_message: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BookPageSummary {
+  page_id: number;
+  page_number: number;
+  is_scanned: boolean;
+  has_image: boolean;
+  block_count: number;
+}
+
+export interface BookBlock {
+  block_id: number;
+  block_index: number;
+  block_type: BlockType;
+  bbox_x0: number | null;
+  bbox_y0: number | null;
+  bbox_x1: number | null;
+  bbox_y1: number | null;
+  ocr_text: string | null;
+  clean_text: string | null;
+  corrected_text: string | null;
+  correction_status: CorrectionStatus;
+  ocr_confidence: number | null;
+  is_header_footer: boolean;
+  user_text_override: string | null;
+  display_text: string;
+}
+
+export interface BookPageDetail {
+  page_id: number;
+  page_number: number;
+  is_scanned: boolean;
+  has_image: boolean;
+  width_pt: number | null;
+  height_pt: number | null;
+  blocks: BookBlock[];
+}
+
+export interface LLMRepairResponse {
+  block_id: number;
+  ocr_text: string | null;
+  corrected_text: string;
+  correction_status: CorrectionStatus;
+}
+
+// ---------------------------------------------------------------------------
+// Interactive reading — selections (custom learning units)
+// ---------------------------------------------------------------------------
+
+export interface ReadingSelectionAnchor {
+  block_id: number;
+  token_index: number;
+  surface: string;
+}
+
+export interface ReadingSelection {
+  selection_id: string;
+  doc_id: string;
+  canonical: string;
+  surface_text: string;
+  sentence_text: string;
+  anchors: ReadingSelectionAnchor[];
+  note: string | null;
+  status: string;
+  review_count: number;
+  next_review_at: string | null;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// SRS review
+// ---------------------------------------------------------------------------
+
+export interface SRSReviewCard {
+  card_id: number;
+  item_id: number;
+  item_type: 'word' | 'phrase' | 'grammar_rule';
+  direction: 'passive' | 'active';
+  due_date: string;
+  repetitions: number;
+  passive_level: number;
+  active_level: number;
+  display_text: string;
+}
+
+export interface DueSelectionItem {
+  selection_id: string;
+  doc_id: string;
+  doc_title: string;
+  canonical: string;
+  surface_text: string;
+  sentence_text: string;
+  note: string | null;
+  review_count: number;
+  next_review_at: string | null;
+  created_at: string;
 }

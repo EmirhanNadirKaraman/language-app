@@ -744,6 +744,116 @@ async def guided_summarize(
 
 
 # ---------------------------------------------------------------------------
+# Grammar rule — long explanation (on-demand, cached permanently)
+# ---------------------------------------------------------------------------
+
+_GRAMMAR_EXPLAIN_TOOL: anthropic.types.ToolParam = {
+    "name": "grammar_rule_explanation",
+    "description": "Generate a detailed, learner-friendly explanation of a grammar rule.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "long_explanation": {
+                "type": "string",
+                "description": (
+                    "3–5 sentences covering: (1) what the rule is and why it matters, "
+                    "(2) how it works with concrete examples, "
+                    "(3) the most common learner mistake and how to avoid it. "
+                    "Write directly for an intermediate language learner. "
+                    "Include at least two example sentences in the target language."
+                ),
+            },
+        },
+        "required": ["long_explanation"],
+    },
+}
+
+
+async def grammar_rule_explanation(
+    slug: str,
+    title: str,
+    short_explanation: str,
+    language: str,
+    *,
+    pool: asyncpg.Pool | None = None,
+) -> str:
+    """
+    Generate and cache a detailed explanation for a grammar rule.
+
+    Returns the long_explanation string.
+    Cached permanently by (slug, language) — grammar rules don't change.
+    Called only when the user explicitly clicks "Learn more" in the UI.
+    """
+    if _MOCK:
+        return (
+            f"Mock: {title} is an important {language} grammar rule. "
+            f"{short_explanation} "
+            f"Example: 'Ich freue mich über das Geschenk.' "
+            f"Common mistake: forgetting the reflexive pronoun or using the wrong case."
+        )
+
+    cache_key: str | None = None
+    if pool is not None:
+        cache_key = llm_cache_service.make_cache_key(
+            "grammar_rule_explanation", _MODEL, {"slug": slug, "language": language}
+        )
+        cached = await llm_cache_service.get_cached(pool, cache_key)
+        if cached is not None:
+            return cached["long_explanation"]
+
+    system = (
+        f"You are a concise {language} grammar tutor writing learner-friendly rule explanations. "
+        f"Be specific, practical, and include real example sentences. "
+        f"You MUST call the grammar_rule_explanation tool."
+    )
+
+    response = await _client.messages.create(
+        model=_MODEL,
+        max_tokens=512,
+        system=system,
+        tools=[_GRAMMAR_EXPLAIN_TOOL],
+        tool_choice={"type": "tool", "name": "grammar_rule_explanation"},
+        messages=[{
+            "role": "user",
+            "content": (
+                f"Explain the {language} grammar rule '{title}'.\n"
+                f"Short summary: {short_explanation}"
+            ),
+        }],
+    )
+
+    tool_block = next(b for b in response.content if b.type == "tool_use")
+    long_explanation: str = tool_block.input["long_explanation"]
+
+    if pool is not None and cache_key is not None:
+        await llm_cache_service.set_cached(
+            pool, cache_key, "grammar_rule_explanation", _MODEL,
+            {"long_explanation": long_explanation},
+        )
+
+    return long_explanation
+
+
+async def get_grammar_explanation_if_cached(
+    slug: str,
+    language: str,
+    *,
+    pool: asyncpg.Pool | None = None,
+) -> str | None:
+    """
+    Return the cached long_explanation for a grammar rule without generating it.
+    Returns None if not in cache — the caller surfaces a "Learn more" button.
+    """
+    if pool is None:
+        return None
+    cache_key = llm_cache_service.make_cache_key(
+        "grammar_rule_explanation", _MODEL, {"slug": slug, "language": language}
+    )
+    cached = await llm_cache_service.get_cached(pool, cache_key)
+    return cached["long_explanation"] if cached else None
+
+
+# ---------------------------------------------------------------------------
 # Free chat — evaluate and reply
 # ---------------------------------------------------------------------------
 

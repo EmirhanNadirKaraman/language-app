@@ -3,11 +3,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from ..core.deps import get_current_user
 from ..database import get_pool
 from ..models.schemas import (
+    FollowedChannelVideosResponse,
     ItemRecommendationsResponse,
     SentenceRecommendationsResponse,
     VideoRecommendationsResponse,
 )
-from ..services import recommendation_service
+from ..services import recommendation_service, settings_service
 
 _VALID_ITEM_TYPES = {"word", "phrase", "grammar_rule"}
 
@@ -68,5 +69,23 @@ async def get_video_recommendations(
         pool,
         user_id=current_user["user_id"],
         language=language,
+        limit=limit,
+    )
+
+
+@router.get("/followed-channel-videos", response_model=FollowedChannelVideosResponse)
+async def get_followed_channel_videos(
+    language: str = Query(...),
+    limit: int = Query(default=10, ge=1, le=30),
+    pool=Depends(get_pool),
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = str(current_user["user_id"])
+    prefs   = await settings_service.get_preferences(pool, user_id)
+    return await recommendation_service.recommend_followed_channel_videos(
+        pool,
+        user_id=user_id,
+        language=language,
+        prefs=prefs,
         limit=limit,
     )

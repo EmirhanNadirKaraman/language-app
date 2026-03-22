@@ -15,7 +15,7 @@ from ..models.schemas import (
     GuidedSessionSummary,
     SendMessageResponse,
 )
-from ..services import chat_service, guided_chat_service, llm_service, usage_events_service
+from ..services import chat_service, guided_chat_service, llm_service, progression_service, usage_events_service
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -158,16 +158,34 @@ async def send_message(
         word_matches=result["word_matches"],
     )
 
-    # Record a 'used' event for each matched word (fire-and-forget)
-    for match in result.get("word_matches", []):
-        if isinstance(match, dict) and "item_id" in match:
+    # Server-side vocabulary matching: find learning-status words that appear in
+    # the user's message.  language_detected drives the event:
+    #   'de'    → free_chat_used_correctly  (German production — both tracks advance)
+    #   'mixed' → free_chat_mixed_lang      (passive credit only)
+    #   'en'    → skip                      (user wasn't practising German)
+    #
+    # Free chat is German-only (system prompt hardcoded); language='de' is correct here.
+    language_detected = result.get("language_detected", "en")
+    if language_detected in ("de", "mixed"):
+        _event = (
+            "free_chat_used_correctly" if language_detected == "de"
+            else "free_chat_mixed_lang"
+        )
+        _analytics_outcome = "used" if language_detected == "de" else "seen"
+        matched = await chat_service.match_learning_words(pool, user_id, body.content, "de")
+
+        for match in matched:
+            # Progression update — awaited; these are primary knowledge-state changes
+            await progression_service.apply_progression(
+                pool, user_id, match["item_id"], match["item_type"], _event,
+            )
+            # Analytics — fire-and-forget; logging failure must not fail the request
             asyncio.create_task(
                 usage_events_service.record_event(
                     pool, user_id,
-                    match["item_id"],
-                    match.get("item_type", "word"),
+                    match["item_id"], match["item_type"],
                     context="free_chat",
-                    outcome="used",
+                    outcome=_analytics_outcome,
                 )
             )
 

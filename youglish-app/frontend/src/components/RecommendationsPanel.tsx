@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRecommendations } from '../hooks/useRecommendations';
 import {
     ItemRecommendationCard,
@@ -7,8 +7,11 @@ import {
 } from './RecommendationCards';
 import { InsightsSection } from './InsightsSection';
 import { PrepView } from './PrepView';
-import type { InsightItem, SearchResult } from '../types';
+import { FollowedChannelsSection } from './FollowedChannelsSection';
+import type { InsightItem, SearchResult, DueSelectionItem } from '../types';
 import type { WordColorScheme } from '../config/wordColors';
+import type { ChannelAction, GenreAction, UserPreferences } from '../api/settings';
+import { getDueSelections } from '../api/reading';
 
 const LANGUAGES = [
     { code: 'de', label: 'German' },
@@ -35,13 +38,18 @@ interface Props {
     onPracticeSentence: (result: SearchResult) => void;
     onSearch:           (term: string) => void;
     onClose:            () => void;
+    onOpenBooks?:       () => void;
     wordColors?:        WordColorScheme;
     passiveMax?:        number;
+    prefs?:             UserPreferences;
+    onChannelAction?:   (channelId: string, channelName: string, action: ChannelAction) => Promise<void>;
+    onGenreAction?:     (genre: string, action: GenreAction) => Promise<void>;
 }
 
 export function RecommendationsPanel({
     token, language, onLanguageChange,
-    onWatch, onPractice, onPracticeItem, onPracticeSentence, onSearch, onClose, wordColors, passiveMax,
+    onWatch, onPractice, onPracticeItem, onPracticeSentence, onSearch, onClose, onOpenBooks,
+    wordColors, passiveMax, prefs, onChannelAction, onGenreAction,
 }: Props) {
     const { items, phrases, videos, sentences, noTargetItems, loading, error, refresh } =
         useRecommendations(token, language);
@@ -157,6 +165,11 @@ export function RecommendationsPanel({
             {/* Content */}
             {language && !loading && !error && !prepItem && (
                 <>
+                    {/* Reading units due */}
+                    {onOpenBooks && (
+                        <ReadingUnitsDueCard token={token} onOpenBooks={onOpenBooks} />
+                    )}
+
                     {/* Words */}
                     <p style={sectionLabel}>Words</p>
                     {items.length === 0 ? (
@@ -205,6 +218,24 @@ export function RecommendationsPanel({
                         </div>
                     )}
 
+                    {/* Followed channels */}
+                    {prefs && onChannelAction && onGenreAction && (
+                        <FollowedChannelsSection
+                            token={token}
+                            language={language}
+                            prefs={prefs}
+                            onWatch={onWatch}
+                            onChannelAction={async (cid, cname, action) => {
+                                await onChannelAction(cid, cname, action);
+                                refresh();
+                            }}
+                            onGenreAction={async (genre, action) => {
+                                await onGenreAction(genre, action);
+                                refresh();
+                            }}
+                        />
+                    )}
+
                     {/* Videos */}
                     <p style={sectionLabel}>Videos</p>
                     {videos.length === 0 ? (
@@ -220,6 +251,15 @@ export function RecommendationsPanel({
                                     key={rec.video_id}
                                     rec={rec}
                                     onWatch={onWatch}
+                                    prefs={prefs}
+                                    onChannelAction={onChannelAction && (async (cid, cname, action) => {
+                                        await onChannelAction(cid, cname, action);
+                                        refresh();
+                                    })}
+                                    onGenreAction={onGenreAction && (async (genre, action) => {
+                                        await onGenreAction(genre, action);
+                                        refresh();
+                                    })}
                                 />
                             ))}
                         </div>
@@ -246,6 +286,69 @@ export function RecommendationsPanel({
                     )}
                 </>
             )}
+        </div>
+    );
+}
+
+// ── Reading units due card ────────────────────────────────────────────────────
+
+function ReadingUnitsDueCard({
+    token,
+    onOpenBooks,
+}: {
+    token: string;
+    onOpenBooks: () => void;
+}) {
+    const [due, setDue] = useState<DueSelectionItem[]>([]);
+
+    useEffect(() => {
+        getDueSelections(token, 10)
+            .then(setDue)
+            .catch(() => {}); // non-fatal
+    }, [token]);
+
+    if (due.length === 0) return null;
+
+    return (
+        <div style={{
+            background: '#fff8e1',
+            border: '1px solid #ffe082',
+            borderRadius: '6px',
+            padding: '10px 14px',
+            marginTop: '12px',
+            marginBottom: '4px',
+        }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#e65100', flex: 1 }}>
+                    Reading Units — {due.length} due
+                </span>
+                <button
+                    onClick={onOpenBooks}
+                    style={{
+                        fontSize: '11px', fontWeight: 600,
+                        color: '#e65100', background: 'none',
+                        border: '1px solid #f57c00', borderRadius: '4px',
+                        padding: '3px 8px', cursor: 'pointer',
+                    }}
+                >
+                    Open Books →
+                </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {due.slice(0, 4).map(item => (
+                    <div key={item.selection_id} style={{ fontSize: '12px', color: '#333' }}>
+                        <span style={{ fontWeight: 600 }}>{item.surface_text}</span>
+                        <span style={{ color: '#999', marginLeft: '6px', fontSize: '11px' }}>
+                            {item.doc_title.length > 30
+                                ? item.doc_title.slice(0, 30) + '…'
+                                : item.doc_title}
+                        </span>
+                    </div>
+                ))}
+                {due.length > 4 && (
+                    <span style={{ fontSize: '11px', color: '#aaa' }}>+{due.length - 4} more</span>
+                )}
+            </div>
         </div>
     );
 }

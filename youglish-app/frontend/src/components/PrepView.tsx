@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { InsightItem, PrepViewData, GenerateExamplesResponse } from '../types';
+import type { GrammarRuleRef, InsightItem, PrepViewData, GenerateExamplesResponse } from '../types';
 import { fetchPrepData, generateExamples } from '../api/insights';
+import { GrammarRulePanel } from './GrammarRulePanel';
 
 interface Props {
     token: string;
@@ -17,12 +18,14 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
     const [grammarOpen, setGrammarOpen] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [generated, setGenerated] = useState<GenerateExamplesResponse | null>(null);
+    const [openRuleSlug, setOpenRuleSlug] = useState<string | null>(null);
 
     useEffect(() => {
         setLoading(true);
         setError(null);
         setGrammarOpen(false);
         setGenerated(null);
+        setOpenRuleSlug(null);
         fetchPrepData(token, item.item_id, item.item_type, language)
             .then(data => { setPrep(data); setLoading(false); })
             .catch(() => { setError('Failed to load prep info.'); setLoading(false); });
@@ -225,6 +228,17 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                         )}
                     </div>
 
+                    {/* Linked grammar rules — shown for phrases only */}
+                    {prep.linked_grammar_rules.length > 0 && (
+                        <LinkedGrammarRules
+                            token={token}
+                            rules={prep.linked_grammar_rules}
+                            language={language}
+                            openSlug={openRuleSlug}
+                            onToggle={slug => setOpenRuleSlug(s => s === slug ? null : slug)}
+                        />
+                    )}
+
                     {/* CTA */}
                     <button
                         onClick={() => onStartPractice(item.item_id, item.item_type, language)}
@@ -244,6 +258,81 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                     </button>
                 </>
             )}
+        </div>
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Linked grammar rules
+// ---------------------------------------------------------------------------
+
+function LinkedGrammarRules({
+    token,
+    rules,
+    language,
+    openSlug,
+    onToggle,
+}: {
+    token: string;
+    rules: GrammarRuleRef[];
+    language: string;
+    openSlug: string | null;
+    onToggle: (slug: string) => void;
+}) {
+    return (
+        <div style={{ marginBottom: '20px' }}>
+            <div style={{
+                fontSize: '11px', fontWeight: 700, color: '#888',
+                textTransform: 'uppercase', letterSpacing: '0.06em',
+                marginBottom: '8px',
+            }}>
+                Grammar Rules
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {rules.map(rule => (
+                    <div key={rule.slug}>
+                        <button
+                            onClick={() => onToggle(rule.slug)}
+                            style={{
+                                padding: '5px 12px',
+                                borderRadius: '14px',
+                                border: '1px solid #c8e6c9',
+                                background: openSlug === rule.slug ? '#e8f5e9' : '#f9fbe7',
+                                color: '#1b5e20',
+                                fontSize: '12px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '5px',
+                            }}
+                        >
+                            <span>⊕</span>
+                            {rule.title}
+                            {rule.pattern_hint && (
+                                <span style={{
+                                    fontFamily: 'monospace',
+                                    fontWeight: 400,
+                                    color: '#388e3c',
+                                    fontSize: '11px',
+                                    marginLeft: '2px',
+                                }}>
+                                    · {rule.pattern_hint}
+                                </span>
+                            )}
+                        </button>
+
+                        {openSlug === rule.slug && (
+                            <GrammarRulePanel
+                                token={token}
+                                rule={rule}
+                                language={language}
+                                onClose={() => onToggle(rule.slug)}
+                            />
+                        )}
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

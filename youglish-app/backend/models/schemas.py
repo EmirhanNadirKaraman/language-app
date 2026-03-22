@@ -390,6 +390,9 @@ class VideoRecommendation(BaseModel):
     covered_item_ids: list[int]
     covered_count: int
     score: float
+    channel_id:   str | None = None
+    channel_name: str | None = None
+    genre:        str | None = None
 
 
 class VideoRecommendationsResponse(BaseModel):
@@ -459,6 +462,32 @@ class InsightCardsResponse(BaseModel):
     language: str
 
 
+class GrammarRuleRef(BaseModel):
+    """Compact grammar rule reference included in prep view responses."""
+    rule_id: int
+    slug: str
+    title: str
+    rule_type: str
+    short_explanation: str
+    pattern_hint: str | None = None
+
+
+class GrammarRuleDetail(BaseModel):
+    """Full grammar rule info returned by GET /insights/grammar/{slug}."""
+    rule_id: int
+    slug: str
+    title: str
+    rule_type: str
+    short_explanation: str
+    pattern_hint: str | None = None
+    long_explanation: str | None = None   # None = not yet generated
+
+
+class GrammarRuleExplainResponse(BaseModel):
+    slug: str
+    long_explanation: str
+
+
 class PrepViewData(BaseModel):
     item_id: int
     item_type: str
@@ -469,6 +498,7 @@ class PrepViewData(BaseModel):
     example: str | None = None
     templates: list[str] = []
     has_examples: bool
+    linked_grammar_rules: list[GrammarRuleRef] = []
 
 
 class GenerateExamplesRequest(BaseModel):
@@ -496,14 +526,27 @@ def _hex_color(v: object) -> object:
     return v
 
 
+class ReminderSummary(BaseModel):
+    srs_due_count:       int
+    reading_due_count:   int
+    learning_item_count: int
+    total_due:           int
+    has_anything_due:    bool
+
+
 class UserPreferences(BaseModel):
-    liked_genres:           list[str] = []
-    liked_channels:         list[str] = []
-    passive_reps_for_known: int       = 3
-    active_reps_for_known:  int       = 5
-    known_word_color:       str       = "#388e3c"
-    learning_word_color:    str       = "#f57c00"
-    unknown_word_color:     str       = "#d32f2f"
+    liked_genres:           list[str]        = []
+    liked_channels:         list[str]        = []
+    disliked_genres:        list[str]        = []
+    followed_channels:      list[str]        = []
+    disliked_channels:      list[str]        = []
+    channel_names:          dict[str, str]   = {}
+    passive_reps_for_known: int              = 3
+    active_reps_for_known:  int              = 5
+    known_word_color:       str              = "#388e3c"
+    learning_word_color:    str              = "#f57c00"
+    unknown_word_color:     str              = "#d32f2f"
+    reminders_enabled:      bool             = True
 
 
 class UserPreferencesUpdate(BaseModel):
@@ -513,13 +556,203 @@ class UserPreferencesUpdate(BaseModel):
     """
     liked_genres:           list[str] | None = None
     liked_channels:         list[str] | None = None
+    disliked_genres:        list[str] | None = None
+    followed_channels:      list[str] | None = None
+    disliked_channels:      list[str] | None = None
+    channel_names:          dict[str, str] | None = None
     passive_reps_for_known: int | None = Field(default=None, ge=1, le=20)
     active_reps_for_known:  int | None = Field(default=None, ge=1, le=20)
     known_word_color:       str | None = None
     learning_word_color:    str | None = None
     unknown_word_color:     str | None = None
+    reminders_enabled:      bool | None = None
 
     @field_validator("known_word_color", "learning_word_color", "unknown_word_color", mode="before")
     @classmethod
     def validate_hex_color(cls, v: object) -> object:
         return _hex_color(v)
+
+
+class ChannelPreferenceRequest(BaseModel):
+    channel_id:   str
+    channel_name: str
+    action:       Literal["follow", "like", "dislike", "clear"]
+
+
+class GenrePreferenceRequest(BaseModel):
+    genre:  str
+    action: Literal["like", "dislike", "clear"]
+
+
+class FollowedChannelVideosResponse(BaseModel):
+    videos: list[VideoRecommendation]
+    total:  int
+
+
+# ---------------------------------------------------------------------------
+# Book reading mode
+# ---------------------------------------------------------------------------
+
+
+class BookDocumentRead(BaseModel):
+    doc_id: str
+    user_id: str
+    title: str
+    filename: str
+    total_pages: int | None = None
+    language: str
+    source_type: str   # 'pdf_text' | 'pdf_scan' | 'mixed' | 'unknown'
+    status: str        # 'pending' | 'processing' | 'ready' | 'error'
+    error_message: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class BookPageSummary(BaseModel):
+    page_id: int
+    page_number: int
+    is_scanned: bool
+    has_image: bool
+    block_count: int
+
+
+class BookBlockRead(BaseModel):
+    block_id: int
+    block_index: int
+    block_type: str       # 'text' | 'ignored'
+    bbox_x0: float | None = None
+    bbox_y0: float | None = None
+    bbox_x1: float | None = None
+    bbox_y1: float | None = None
+    ocr_text: str | None = None
+    clean_text: str | None = None
+    corrected_text: str | None = None
+    correction_status: str            # 'none' | 'suggested' | 'approved' | 'rejected'
+    ocr_confidence: float | None = None
+    is_header_footer: bool
+    user_text_override: str | None = None
+    display_text: str                 # computed: override > approved correction > clean_text
+
+
+class BookPageDetail(BaseModel):
+    page_id: int
+    page_number: int
+    is_scanned: bool
+    has_image: bool
+    width_pt: float | None = None
+    height_pt: float | None = None
+    blocks: list[BookBlockRead]
+
+
+class BlockPatchRequest(BaseModel):
+    block_type: str | None = None          # 'text' | 'ignored'
+    user_text_override: str | None = None  # empty string clears the override
+    correction_status: str | None = None   # 'approved' | 'rejected'
+
+
+class LLMRepairResponse(BaseModel):
+    block_id: int
+    ocr_text: str | None
+    corrected_text: str
+    correction_status: str  # 'suggested'
+
+
+# ---------------------------------------------------------------------------
+# Interactive reading — selections (custom learning units)
+# ---------------------------------------------------------------------------
+
+
+class ReadingSelectionAnchor(BaseModel):
+    block_id: int
+    token_index: int
+    surface: str
+
+
+class ReadingSelectionCreate(BaseModel):
+    canonical: str                          # lowercase surface text
+    surface_text: str                       # exact surface form, tokens in order
+    sentence_text: str                      # full block text (context container)
+    anchors: list[ReadingSelectionAnchor] = []
+    note: str | None = None
+
+
+class ReadingSelectionRead(BaseModel):
+    selection_id: str
+    doc_id: str
+    canonical: str
+    surface_text: str
+    sentence_text: str
+    anchors: list[ReadingSelectionAnchor]
+    note: str | None
+    status: str
+    review_count: int = 0
+    next_review_at: datetime | None = None
+    created_at: datetime
+
+
+class ReadingSelectionPatch(BaseModel):
+    note: str | None = None
+    status: str | None = None
+
+
+class ReviewRequest(BaseModel):
+    outcome: Literal["got_it", "still_learning", "mastered"]
+
+
+class DueSelectionItem(BaseModel):
+    """Compact selection returned by the cross-book due-items endpoint."""
+    selection_id: str
+    doc_id: str
+    doc_title: str
+    canonical: str
+    surface_text: str
+    sentence_text: str
+    note: str | None
+    review_count: int
+    next_review_at: datetime | None
+    created_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# SRS review
+# ---------------------------------------------------------------------------
+
+
+class SRSReviewCard(BaseModel):
+    card_id:       int
+    item_id:       int
+    item_type:     str   # 'word' | 'phrase' | 'grammar_rule'
+    direction:     str   # 'passive' | 'active'
+    due_date:      datetime
+    repetitions:   int
+    passive_level: int
+    active_level:  int
+    display_text:  str
+
+
+class SRSAnswerRequest(BaseModel):
+    correct: bool
+
+
+class SRSAnswerResponse(BaseModel):
+    card_id: int
+    success: bool
+
+
+class TranslateRequest(BaseModel):
+    sentence: str
+    language: str
+
+
+class TranslateResponse(BaseModel):
+    translation: str
+
+
+class ExplainRequest(BaseModel):
+    selection: str
+    sentence: str
+    language: str
+
+
+class ExplainResponse(BaseModel):
+    explanation: str

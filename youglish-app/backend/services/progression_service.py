@@ -20,18 +20,24 @@ active_level  >= ACTIVE_MASTERY_THRESHOLD    (3)  AND status != 'known'
 
 Implemented event hooks (wired to existing code paths)
 -------------------------------------------------------
-  guided_counted        — guided chat, target_used AND target_counted
-  guided_used           — guided chat, target_used AND NOT target_counted
-  guided_not_used       — guided chat, NOT target_used
+  guided_counted         — guided chat, target_used AND target_counted
+  guided_used            — guided chat, target_used AND NOT target_counted
+  guided_not_used        — guided chat, NOT target_used
   status_marked_learning — user set status → 'learning'
   status_marked_known    — user set status → 'known'
   status_marked_unknown  — user set status → 'unknown'
+  passive_review_correct  — SRS passive card answered correctly
+  passive_review_incorrect — SRS passive card answered incorrectly
+  active_review_correct   — SRS active card answered correctly
+  active_review_incorrect — SRS active card answered incorrectly
+
+Implemented event hooks (continued)
+------------------------------------
+  transcript_clicked     — user left-clicked a word in subtitle/transcript panel
 
 Planned but deferred (no code path fires these yet)
 ---------------------------------------------------
-  transcript_seen, transcript_clicked
-  free_chat_matched, free_chat_used_correctly, free_chat_mixed_lang
-  passive_review_correct/incorrect, active_review_correct/incorrect
+  transcript_seen
 
 SRS actions
 -----------
@@ -105,20 +111,29 @@ _RULES: dict[str, ProgressionDelta] = {
     # Marking 'unknown': reset intention, but keep accumulated level data
     "status_marked_unknown": ProgressionDelta(),
 
-    # --- Future: transcript ---
-    # "transcript_seen":    ProgressionDelta(passive_delta=1, times_seen_delta=1, passive_srs="correct"),
-    # "transcript_clicked": ProgressionDelta(passive_delta=2, times_seen_delta=1, passive_srs="correct"),
+    # --- Transcript interaction ---
+    # transcript_clicked: user left-clicked a word in the subtitle/transcript.
+    # passive_delta=1 (same weight as other passive exposure events).
+    # passive_srs="create": adds to review queue if not already there, but does NOT
+    # advance an existing scheduled card — a click is not a review answer.
+    "transcript_clicked": ProgressionDelta(passive_delta=1, times_seen_delta=1, passive_srs="create"),
+    # transcript_seen (future): fires for every word visible in the subtitle display.
+    # Deferred — too noisy without playback-timing + deduplication infrastructure.
+    # "transcript_seen": ProgressionDelta(passive_delta=1, times_seen_delta=1, passive_srs="create"),
 
-    # --- Future: free chat (once word_matches is populated) ---
-    # "free_chat_matched":        ProgressionDelta(passive_delta=1, times_seen_delta=1, passive_srs="correct"),
-    # "free_chat_used_correctly": ProgressionDelta(passive_delta=1, active_delta=1, times_used_correctly_delta=1, passive_srs="correct", active_srs="correct"),
-    # "free_chat_mixed_lang":     ProgressionDelta(passive_delta=1, times_seen_delta=1, passive_srs="correct"),
+    # --- Free chat (server-side token matching against user's learning vocab) ---
+    # matched:        word appeared in user's message, language context unknown / not yet classified
+    # used_correctly: word appeared and language_detected == 'de' (correct German production)
+    # mixed_lang:     word appeared and language_detected == 'mixed' (passive credit only)
+    "free_chat_matched":        ProgressionDelta(passive_delta=1, times_seen_delta=1, passive_srs="correct"),
+    "free_chat_used_correctly": ProgressionDelta(passive_delta=1, active_delta=1, times_used_correctly_delta=1, passive_srs="correct", active_srs="correct"),
+    "free_chat_mixed_lang":     ProgressionDelta(passive_delta=1, times_seen_delta=1, passive_srs="correct"),
 
-    # --- Future: SRS reviews ---
-    # "passive_review_correct":   ProgressionDelta(passive_srs="correct"),
-    # "passive_review_incorrect":  ProgressionDelta(passive_srs="incorrect"),
-    # "active_review_correct":    ProgressionDelta(passive_delta=1, active_delta=1, times_used_correctly_delta=1, active_srs="correct"),
-    # "active_review_incorrect":  ProgressionDelta(active_srs="incorrect"),
+    # --- SRS reviews ---
+    "passive_review_correct":  ProgressionDelta(passive_srs="correct"),
+    "passive_review_incorrect": ProgressionDelta(passive_srs="incorrect"),
+    "active_review_correct":   ProgressionDelta(passive_delta=1, active_delta=1, times_used_correctly_delta=1, active_srs="correct"),
+    "active_review_incorrect": ProgressionDelta(active_srs="incorrect"),
 }
 
 

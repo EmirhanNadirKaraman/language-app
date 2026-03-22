@@ -5,6 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from .database import create_pool, close_pool, get_pool
 from .routers.analytics import router as analytics_router
+from .routers.books import router as books_router
+from .routers.reading import router as reading_router
+from .routers.reminders import router as reminders_router
 from .routers.insights import router as insights_router
 from .routers.phrases import router as phrases_router
 from .routers.playlists import router as playlists_router
@@ -36,6 +39,16 @@ async def lifespan(app: FastAPI):
         import logging
         logging.getLogger(__name__).warning("Phrase table seed failed at startup", exc_info=True)
 
+    # Seed grammar_rule_table with the curated German rule set.
+    # ON CONFLICT (slug, language) DO NOTHING makes this idempotent.
+    try:
+        from .services import grammar_service
+        pool = get_pool()
+        await grammar_service.seed_rules(pool, language="de")
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning("Grammar rule seed failed at startup", exc_info=True)
+
     yield
     await close_pool()
 
@@ -45,7 +58,7 @@ app = FastAPI(title="YouGlish Clone", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -62,6 +75,9 @@ app.include_router(insights_router,        prefix="/api/v1")    # /api/v1/insigh
 app.include_router(playlists_router,       prefix="/api/v1")    # /api/v1/playlists/generate
 app.include_router(recommendations_router, prefix="/api/v1")    # /api/v1/recommendations/sentences, /videos, /items
 app.include_router(settings_router,        prefix="/api/v1")    # /api/v1/settings/preferences
+app.include_router(books_router,           prefix="/api/v1")    # /api/v1/books/upload, /books, /books/{id}/...
+app.include_router(reading_router,         prefix="/api/v1")    # /api/v1/books/{id}/selections, /reading/translate, /reading/explain
+app.include_router(reminders_router,       prefix="/api/v1")    # /api/v1/reminders/summary
 
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():

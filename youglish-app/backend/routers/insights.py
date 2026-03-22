@@ -5,14 +5,17 @@ from ..database import get_pool
 from ..models.schemas import (
     GenerateExamplesRequest,
     GenerateExamplesResponse,
+    GrammarRuleDetail,
+    GrammarRuleExplainResponse,
     InsightCardsResponse,
     PrepViewData,
 )
-from ..services import insights_service, llm_service
+from ..services import grammar_service, insights_service, llm_service
 
 router = APIRouter(prefix="/insights", tags=["insights"])
 
 _VALID_ITEM_TYPES = {"word", "phrase"}
+_DEFAULT_LANGUAGE = "de"
 
 
 @router.get("/cards", response_model=InsightCardsResponse)
@@ -91,3 +94,52 @@ async def generate_examples(
     return await llm_service.prep_generate_examples(
         display_text, body.item_type, body.language, pool=pool
     )
+
+
+@router.get("/grammar/{slug}", response_model=GrammarRuleDetail)
+async def get_grammar_rule(
+    slug: str,
+    language: str = Query(default=_DEFAULT_LANGUAGE),
+    pool=Depends(get_pool),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Return a grammar rule by slug, including its cached long explanation if
+    one has already been generated.  long_explanation is null when not yet
+    generated — the frontend shows a "Learn more" button in that case.
+    """
+    rule = await grammar_service.get_rule_by_slug(pool, slug, language)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Grammar rule not found")
+
+    long_explanation = await llm_service.get_grammar_explanation_if_cached(
+        slug, language, pool=pool
+    )
+    return {**rule, "long_explanation": long_explanation}
+
+
+@router.post("/grammar/{slug}/explain", response_model=GrammarRuleExplainResponse)
+async def explain_grammar_rule(
+    slug: str,
+    language: str = Query(default=_DEFAULT_LANGUAGE),
+    pool=Depends(get_pool),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Generate (or return cached) long explanation for a grammar rule.
+
+    Called when the user clicks "Learn more" in the grammar rule panel.
+    Subsequent calls return the cached explanation instantly.
+    """
+    rule = await grammar_service.get_rule_by_slug(pool, slug, language)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Grammar rule not found")
+
+    long_explanation = await llm_service.grammar_rule_explanation(
+        slug=rule["slug"],
+        title=rule["title"],
+        short_explanation=rule["short_explanation"],
+        language=language,
+        pool=pool,
+    )
+    return {"slug": slug, "long_explanation": long_explanation}

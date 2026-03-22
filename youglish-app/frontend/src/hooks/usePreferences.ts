@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import {
     getPreferences,
     updatePreferences,
+    updateChannelPreference,
+    updateGenrePreference,
     PREFERENCE_DEFAULTS,
 } from '../api/settings';
-import type { UserPreferences, UserPreferencesUpdate } from '../api/settings';
+import type { ChannelAction, GenreAction, UserPreferences, UserPreferencesUpdate } from '../api/settings';
 
 export function usePreferences(token: string | null) {
     const [prefs, setPrefs] = useState<UserPreferences>(PREFERENCE_DEFAULTS);
@@ -30,5 +32,24 @@ export function usePreferences(token: string | null) {
         setPrefs(updated);
     }, [token]);
 
-    return { prefs, savePreferences, loading };
+    const channelAction = useCallback(async (
+        channelId: string,
+        channelName: string,
+        action: ChannelAction,
+    ): Promise<void> => {
+        if (!token) return;
+        const updated = await updateChannelPreference(token, channelId, channelName, action);
+        setPrefs(updated);
+    }, [token]);
+
+    const genreAction = useCallback(async (
+        genre: string,
+        action: GenreAction,
+    ): Promise<void> => {
+        if (!token) return;
+        const updated = await updateGenrePreference(token, genre, action);
+        setPrefs(updated);
+    }, [token]);
+
+    return { prefs, savePreferences, channelAction, genreAction, loading };
 }

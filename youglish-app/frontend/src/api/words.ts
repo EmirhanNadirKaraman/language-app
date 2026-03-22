@@ -30,6 +30,17 @@ export async function setWordStatus(
     if (!res.ok) throw new Error('Failed to update status');
 }
 
+export async function recordTranscriptClick(
+    token: string,
+    wordId: number,
+): Promise<void> {
+    // fire-and-forget: errors are intentionally swallowed by the caller
+    await fetch(`/api/v1/words/word/${wordId}/transcript-click`, {
+        method: 'POST',
+        headers: authHeaders(token),
+    });
+}
+
 export async function setItemStatus(
     token: string,
     itemType: string,

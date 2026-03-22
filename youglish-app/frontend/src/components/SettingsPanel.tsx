@@ -12,10 +12,11 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
     const [likedChannels, setLikedChannels] = useState('');
     const [passiveReps, setPassiveReps]     = useState(prefs.passive_reps_for_known);
     const [activeReps, setActiveReps]       = useState(prefs.active_reps_for_known);
-    const [knownColor, setKnownColor]       = useState(prefs.known_word_color);
-    const [learningColor, setLearningColor] = useState(prefs.learning_word_color);
-    const [unknownColor, setUnknownColor]   = useState(prefs.unknown_word_color);
-    const [saving, setSaving]               = useState(false);
+    const [knownColor, setKnownColor]             = useState(prefs.known_word_color);
+    const [learningColor, setLearningColor]       = useState(prefs.learning_word_color);
+    const [unknownColor, setUnknownColor]         = useState(prefs.unknown_word_color);
+    const [remindersEnabled, setRemindersEnabled] = useState(prefs.reminders_enabled);
+    const [saving, setSaving]                     = useState(false);
     const [saved, setSaved]                 = useState(false);
 
     // Sync local state when prefs change (e.g. after initial fetch)
@@ -27,6 +28,7 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
         setKnownColor(prefs.known_word_color);
         setLearningColor(prefs.learning_word_color);
         setUnknownColor(prefs.unknown_word_color);
+        setRemindersEnabled(prefs.reminders_enabled);
     }, [prefs]);
 
     const handleSave = async () => {
@@ -44,6 +46,7 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                 known_word_color:       knownColor,
                 learning_word_color:    learningColor,
                 unknown_word_color:     unknownColor,
+                reminders_enabled:      remindersEnabled,
             });
             setSaved(true);
         } finally {
@@ -107,7 +110,7 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                     onChange={e => setLikedGenres(e.target.value)}
                     placeholder="e.g. news, comedy, sports"
                 />
-                <span style={hint}>Comma-separated. Saved but not yet used — channel/genre data not available in the current video index.</span>
+                <span style={hint}>Comma-separated. Comma-separated. Use the Follow/Like/Dislike buttons on video cards to set preferences directly.</span>
             </div>
 
             <div style={field}>
@@ -118,7 +121,7 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                     onChange={e => setLikedChannels(e.target.value)}
                     placeholder="e.g. DW Nachrichten, Galileo"
                 />
-                <span style={hint}>Comma-separated. Saved but not yet used — channel/genre data not available in the current video index.</span>
+                <span style={hint}>Comma-separated. Comma-separated. Use the Follow/Like/Dislike buttons on video cards to set preferences directly.</span>
             </div>
 
             {/* SRS */}
@@ -173,6 +176,23 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                         <span style={{ fontSize: '11px', color: value, fontWeight: 700 }}>Aa</span>
                     </div>
                 ))}
+            </div>
+
+            {/* Reminders */}
+            <p style={{ fontSize: '12px', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '16px 0 10px' }}>
+                Reminders
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                <input
+                    id="reminders-toggle"
+                    type="checkbox"
+                    checked={remindersEnabled}
+                    onChange={e => setRemindersEnabled(e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <label htmlFor="reminders-toggle" style={{ fontSize: '13px', color: '#444', cursor: 'pointer' }}>
+                    Show banner when reviews are due
+                </label>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>

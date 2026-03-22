@@ -5,6 +5,7 @@ import { formatDuration } from '../utils/recommendationUtils';
 import type { SearchResult } from '../types';
 import type { WordColorScheme } from '../config/wordColors';
 import { WORD_COLORS } from '../config/wordColors';
+import type { ChannelAction, GenreAction, UserPreferences } from '../api/settings';
 
 // ---------------------------------------------------------------------------
 // Shared: reason tag
@@ -261,11 +262,16 @@ export function ItemRecommendationCard({
 // ---------------------------------------------------------------------------
 
 interface VideoCardProps {
-    rec:     VideoRecommendation;
-    onWatch: (result: SearchResult) => void;
+    rec:             VideoRecommendation;
+    onWatch:         (result: SearchResult) => void;
+    prefs?:          UserPreferences;
+    onChannelAction?: (channelId: string, channelName: string, action: ChannelAction) => Promise<void>;
+    onGenreAction?:  (genre: string, action: GenreAction) => Promise<void>;
 }
 
-export function VideoRecommendationCard({ rec, onWatch }: VideoCardProps) {
+export function VideoRecommendationCard({ rec, onWatch, prefs, onChannelAction, onGenreAction }: VideoCardProps) {
+    const [saving, setSaving] = useState(false);
+
     const reasons: string[] = [];
     if (rec.covered_count > 0) reasons.push(`covers ${rec.covered_count} word${rec.covered_count !== 1 ? 's' : ''}`);
 
@@ -280,6 +286,46 @@ export function VideoRecommendationCard({ rec, onWatch }: VideoCardProps) {
         surface_form:   null,
         match_type:     'recommendation',
     };
+
+    // Channel preference state derived from prefs
+    const channelId   = rec.channel_id ?? null;
+    const channelName = rec.channel_name ?? '';
+    const genre       = rec.genre ?? null;
+    const isFollowed  = channelId ? (prefs?.followed_channels ?? []).includes(channelId) : false;
+    const isLikedCh   = channelId ? (prefs?.liked_channels ?? []).includes(channelId) : false;
+    const isDislikedCh = channelId ? (prefs?.disliked_channels ?? []).includes(channelId) : false;
+    const isLikedG    = genre ? (prefs?.liked_genres ?? []).includes(genre) : false;
+    const isDislikedG = genre ? (prefs?.disliked_genres ?? []).includes(genre) : false;
+
+    async function handleChannelAction(action: ChannelAction) {
+        if (!channelId || !onChannelAction || saving) return;
+        setSaving(true);
+        try {
+            // Toggle: clicking active action clears it
+            const effective = (
+                (action === 'follow' && isFollowed) ||
+                (action === 'like' && isLikedCh) ||
+                (action === 'dislike' && isDislikedCh)
+            ) ? 'clear' : action;
+            await onChannelAction(channelId, channelName, effective);
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    async function handleGenreAction(action: GenreAction) {
+        if (!genre || !onGenreAction || saving) return;
+        setSaving(true);
+        try {
+            const effective = (
+                (action === 'like' && isLikedG) ||
+                (action === 'dislike' && isDislikedG)
+            ) ? 'clear' : action;
+            await onGenreAction(genre, effective);
+        } finally {
+            setSaving(false);
+        }
+    }
 
     return (
         <div style={{
@@ -316,6 +362,11 @@ export function VideoRecommendationCard({ rec, onWatch }: VideoCardProps) {
                     {rec.title}
                 </div>
 
+                {/* Channel name */}
+                {channelName && (
+                    <div style={{ fontSize: '11px', color: '#888' }}>{channelName}</div>
+                )}
+
                 {/* Timestamp */}
                 <div style={{ fontSize: '11px', color: '#888' }}>
                     starts at {formatDuration(rec.start_time)}
@@ -330,12 +381,91 @@ export function VideoRecommendationCard({ rec, onWatch }: VideoCardProps) {
                     </div>
                 )}
 
+                {/* Channel preference buttons */}
+                {channelId && onChannelAction && (
+                    <div style={{ display: 'flex', gap: '4px', marginTop: '4px', flexWrap: 'wrap' }}>
+                        <PrefButton
+                            label="Follow"
+                            active={isFollowed}
+                            activeColor="#1a237e"
+                            onClick={() => handleChannelAction('follow')}
+                            disabled={saving}
+                        />
+                        <PrefButton
+                            label="Like"
+                            active={isLikedCh}
+                            activeColor="#2e7d32"
+                            onClick={() => handleChannelAction('like')}
+                            disabled={saving}
+                        />
+                        <PrefButton
+                            label="Dislike"
+                            active={isDislikedCh}
+                            activeColor="#c62828"
+                            onClick={() => handleChannelAction('dislike')}
+                            disabled={saving}
+                        />
+                    </div>
+                )}
+
+                {/* Genre preference buttons */}
+                {genre && onGenreAction && (
+                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <span style={{ fontSize: '10px', color: '#aaa' }}>{genre}:</span>
+                        <PrefButton
+                            label="Like"
+                            active={isLikedG}
+                            activeColor="#1565c0"
+                            onClick={() => handleGenreAction('like')}
+                            disabled={saving}
+                        />
+                        <PrefButton
+                            label="Dislike"
+                            active={isDislikedG}
+                            activeColor="#c62828"
+                            onClick={() => handleGenreAction('dislike')}
+                            disabled={saving}
+                        />
+                    </div>
+                )}
+
                 {/* Action */}
                 <div style={{ marginTop: '6px' }}>
                     <ActionButton label="Watch" onClick={() => onWatch(result)} primary />
                 </div>
             </div>
         </div>
+    );
+}
+
+function PrefButton({
+    label, active, activeColor, onClick, disabled,
+}: {
+    label: string;
+    active: boolean;
+    activeColor: string;
+    onClick: () => void;
+    disabled: boolean;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            style={{
+                padding: '2px 8px',
+                borderRadius: '10px',
+                border: `1px solid ${active ? activeColor : '#e0e0e0'}`,
+                background: active ? activeColor : '#fff',
+                color: active ? '#fff' : '#888',
+                fontSize: '10px',
+                fontWeight: 600,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                opacity: disabled ? 0.6 : 1,
+                whiteSpace: 'nowrap',
+            }}
+        >
+            {label}
+        </button>
     );
 }
 

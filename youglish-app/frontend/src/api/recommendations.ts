@@ -1,4 +1,5 @@
 import type {
+    FollowedChannelVideosResponse,
     ItemRecommendationsResponse,
     VideoRecommendationsResponse,
     SentenceRecommendationsResponse,
@@ -49,5 +50,18 @@ export async function fetchSentenceRecommendations(
         headers: authHeaders(token),
     });
     if (!res.ok) throw new Error('Failed to fetch sentence recommendations');
+    return res.json();
+}
+
+export async function fetchFollowedChannelVideos(
+    token: string,
+    language: string,
+    limit = 10,
+): Promise<FollowedChannelVideosResponse> {
+    const params = new URLSearchParams({ language, limit: String(limit) });
+    const res = await fetch(`/api/v1/recommendations/followed-channel-videos?${params}`, {
+        headers: authHeaders(token),
+    });
+    if (!res.ok) throw new Error('Failed to fetch followed channel videos');
     return res.json();
 }

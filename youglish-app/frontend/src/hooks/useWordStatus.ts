@@ -27,6 +27,11 @@ export function useWordStatus(token: string | null, language: string) {
         setState({ lookup: null, loading: true, saving: false });
         const result = await wordsApi.lookupWord(token, word, language);
         setState({ lookup: result, loading: false, saving: false });
+        // Record passive exposure for words found in the database.
+        // Fire-and-forget — a failure here must never affect the picker UI.
+        if (result?.word_id) {
+            wordsApi.recordTranscriptClick(token, result.word_id).catch(() => {});
+        }
     }, [token, language, selected]);
 
     const updateStatus = useCallback(async (wordId: number, status: string) => {

@@ -9,12 +9,14 @@ Same two-layer pattern as playlist_service:
     score_sentence(unknown_count, due_count, priority_count, target_unknown) -> float
     rank_sentences(candidates, target_unknown, priority_ids, limit) -> list[dict]
     score_video(priority_score, duration) -> float
-    rank_videos(coverage, video_meta, score_by_id, limit) -> list[dict]
+    channel_genre_multiplier(channel_id, genre, prefs) -> float
+    rank_videos(coverage, video_meta, score_by_id, limit, prefs) -> list[dict]
 
   Async DB + orchestration:
     fetch_sentence_candidates(pool, user_id, language, min_unknown, max_unknown, fetch_limit)
     recommend_sentences(pool, user_id, language, limit, target_unknown, min_unknown, max_unknown)
     recommend_videos(pool, user_id, language, limit)
+    recommend_followed_channel_videos(pool, user_id, language, prefs, limit)
 
 Target prioritization
 ---------------------
@@ -25,20 +27,11 @@ get_prioritized_items() combines four signals:
   - frequent unknowns       (weight 2, linear rank)
   - learning-status items   (weight 1)
 
-Sentences:  priority_ids = {item.item_id for item in prioritized_items}
-            rank_sentences is unchanged — better ids flow in, better results come out.
-
-Videos:     score_by_id  = {item.item_id: item.score for item in prioritized_items}
-            rank_videos scores each video by the sum of priority scores for the items
-            it covers.  A video covering two due items (~4.0 each) scores higher than
-            one covering four learning-only items (~1.0 each).
-
-Future hooks (deferred, no code change needed at call sites)
--------------------------------------------------------------
-  - sentence_views table  → exclude recently-seen sentences
-  - video_views table     → exclude recently-seen videos
-  - liked channels/genres → multiply score_video by channel-preference weight
-                            (needs video.channel_id / video.genre column first)
+Channel / genre preference scoring
+-----------------------------------
+  channel multiplier: followed×1.8, liked×1.3, disliked×0.2, else 1.0
+  genre multiplier:   liked×1.2,    disliked×0.4, else 1.0
+  final_score = base_score × channel_multiplier × genre_multiplier
 """
 from __future__ import annotations
 
@@ -46,7 +39,6 @@ import math
 
 import asyncpg
 
-from .playlist_service import _fetch_coverage
 from .prioritization_service import get_prioritized_items
 
 
@@ -113,14 +105,52 @@ def score_video(priority_score: float, duration: float) -> float:
     return priority_score - duration / 10_000
 
 
+def channel_genre_multiplier(
+    channel_id: str | None,
+    genre: str | None,
+    prefs: dict,
+) -> float:
+    """
+    Return a preference multiplier for a video based on its channel and genre.
+
+      channel: followed×1.8, liked×1.3, disliked×0.2, else 1.0
+      genre:   liked×1.2,    disliked×0.4, else 1.0
+    """
+    followed  = set(prefs.get("followed_channels") or [])
+    liked_ch  = set(prefs.get("liked_channels") or [])
+    disliked_ch = set(prefs.get("disliked_channels") or [])
+    liked_g   = set(prefs.get("liked_genres") or [])
+    disliked_g = set(prefs.get("disliked_genres") or [])
+
+    if channel_id in followed:
+        ch_mult = 1.8
+    elif channel_id in liked_ch:
+        ch_mult = 1.3
+    elif channel_id in disliked_ch:
+        ch_mult = 0.2
+    else:
+        ch_mult = 1.0
+
+    if genre in liked_g:
+        g_mult = 1.2
+    elif genre in disliked_g:
+        g_mult = 0.4
+    else:
+        g_mult = 1.0
+
+    return ch_mult * g_mult
+
+
 def rank_videos(
     coverage: dict[str, set[int]],
     video_meta: dict[str, dict],
     score_by_id: dict[int, float],
     limit: int,
+    prefs: dict | None = None,
 ) -> list[dict]:
     """
-    Score each video by the sum of priority scores for the items it covers.
+    Score each video by the sum of priority scores for the items it covers,
+    then apply channel/genre preference multipliers when prefs are provided.
 
     score_by_id — item_id → priority score from get_prioritized_items().
                   Items absent from this dict contribute 0 to the video score.
@@ -128,29 +158,36 @@ def rank_videos(
     Returns list of dicts with keys:
       video_id, title, thumbnail_url, language, duration,
       start_time, start_time_int, priority_score, covered_item_ids,
-      covered_count, score
+      covered_count, score, channel_id, channel_name, genre
     """
     target_ids = set(score_by_id)
+    _prefs = prefs or {}
     results = []
 
     for vid, word_ids in coverage.items():
-        meta      = video_meta[vid]
-        covered   = sorted(word_ids & target_ids)
-        pri_score = sum(score_by_id.get(wid, 0.0) for wid in covered)
-        s         = score_video(pri_score, meta["duration"])
+        meta       = video_meta[vid]
+        covered    = sorted(word_ids & target_ids)
+        pri_score  = sum(score_by_id.get(wid, 0.0) for wid in covered)
+        channel_id = meta.get("channel_id")
+        genre      = meta.get("genre")
+        multiplier = channel_genre_multiplier(channel_id, genre, _prefs)
+        s          = score_video(pri_score, meta["duration"]) * multiplier
 
         results.append({
-            "video_id":        vid,
-            "title":           meta["title"],
-            "thumbnail_url":   meta["thumbnail_url"],
-            "language":        meta["language"],
-            "duration":        meta["duration"],
-            "start_time":      meta["best_start_time"],
-            "start_time_int":  math.floor(meta["best_start_time"]),
-            "priority_score":  pri_score,
+            "video_id":         vid,
+            "title":            meta["title"],
+            "thumbnail_url":    meta["thumbnail_url"],
+            "language":         meta["language"],
+            "duration":         meta["duration"],
+            "start_time":       meta["best_start_time"],
+            "start_time_int":   math.floor(meta["best_start_time"]),
+            "priority_score":   pri_score,
             "covered_item_ids": covered,
-            "covered_count":   len(covered),
-            "score":           s,
+            "covered_count":    len(covered),
+            "score":            s,
+            "channel_id":       channel_id,
+            "channel_name":     meta.get("channel_name"),
+            "genre":            genre,
         })
 
     results.sort(key=lambda x: x["score"], reverse=True)
@@ -158,7 +195,78 @@ def rank_videos(
 
 
 # ---------------------------------------------------------------------------
-# DB layer
+# DB layer — coverage query (includes channel/genre columns)
+# ---------------------------------------------------------------------------
+
+async def _fetch_coverage(
+    pool: asyncpg.Pool,
+    item_ids: list[int],
+    language: str,
+) -> tuple[dict[str, set[int]], dict[str, dict]]:
+    """
+    Query videos that contain at least one target word.
+    Includes channel_id, channel_name, genre for preference scoring.
+
+    Returns:
+        coverage   — video_id → set of word_ids covered
+        video_meta — video_id → metadata dict
+    """
+    rows = await pool.fetch(
+        """
+        SELECT DISTINCT ON (v.video_id, wts.word_id)
+            v.video_id,
+            v.title,
+            v.thumbnail_url,
+            v.language,
+            v.duration,
+            v.channel_id,
+            v.channel_name,
+            v.genre,
+            wts.word_id,
+            s.sentence_id,
+            s.start_time,
+            s.content
+        FROM word_to_sentence wts
+        JOIN sentence s ON s.sentence_id = wts.sentence_id
+        JOIN video v    ON v.video_id    = s.video_id
+        WHERE wts.word_id = ANY($1)
+          AND v.language  = $2
+        ORDER BY v.video_id, wts.word_id, s.start_time
+        """,
+        item_ids,
+        language,
+    )
+
+    coverage: dict[str, set[int]] = {}
+    video_meta: dict[str, dict] = {}
+
+    for row in rows:
+        vid = row["video_id"]
+        wid = row["word_id"]
+
+        if vid not in coverage:
+            coverage[vid] = set()
+            video_meta[vid] = {
+                "title":          row["title"],
+                "thumbnail_url":  row["thumbnail_url"],
+                "language":       row["language"],
+                "duration":       float(row["duration"] or 0),
+                "channel_id":     row["channel_id"],
+                "channel_name":   row["channel_name"],
+                "genre":          row["genre"],
+                "best_start_time": float(row["start_time"]),
+            }
+        else:
+            if float(row["start_time"]) < video_meta[vid]["best_start_time"]:
+                video_meta[vid]["best_start_time"] = float(row["start_time"])
+
+        coverage[vid].add(wid)
+
+    return coverage, video_meta
+
+
+# ---------------------------------------------------------------------------
+# DB layer — sentence candidates
 # ---------------------------------------------------------------------------
 
 _SENTENCE_CANDIDATE_SQL = """
@@ -338,6 +446,7 @@ async def enrich_items(
         r["word_id"]: {
             "display_text":   r["word"],
             "secondary_text": r["lemma"] if r["lemma"] != r["word"] else None,
+            "lemma":          r["lemma"],
             "current_status": r["current_status"],
             "passive_level":  r["passive_level"] or 0,
             "active_level":   r["active_level"] or 0,
@@ -413,29 +522,96 @@ async def recommend_videos(
     Return ranked video recommendations for a user.
 
     Videos are ranked by their total priority coverage score — the sum of
-    priority scores for the target items they contain.  A video covering two
-    due items (~8 points) ranks higher than one covering four learning-only
-    items (~4 points).
+    priority scores for the target items they contain — multiplied by
+    channel/genre preference weights from the user's settings.
 
     Returns an empty list with reason='no_target_items' when the user has
     no prioritised items (e.g. a brand-new user with no SRS cards and no
     usage events).
     """
+    from .settings_service import get_preferences
+
     items = await get_prioritized_items(pool, user_id, limit=100)
 
     if not items:
         return {
-            "videos":           [],
+            "videos":            [],
             "target_item_count": 0,
-            "reason":           "no_target_items",
+            "reason":            "no_target_items",
         }
 
     score_by_id = {item.item_id: item.score for item in items}
     coverage, video_meta = await _fetch_coverage(pool, list(score_by_id), language)
-    ranked = rank_videos(coverage, video_meta, score_by_id, limit)
+    prefs  = await get_preferences(pool, user_id)
+    ranked = rank_videos(coverage, video_meta, score_by_id, limit, prefs=prefs)
 
     return {
-        "videos":           ranked,
+        "videos":            ranked,
         "target_item_count": len(items),
-        "reason":           None,
+        "reason":            None,
     }
+
+
+async def recommend_followed_channel_videos(
+    pool: asyncpg.Pool,
+    user_id: str,
+    language: str,
+    prefs: dict,
+    limit: int,
+) -> dict:
+    """
+    Return recent videos from the user's followed channels.
+
+    Unlike the ranked recommendation feed, this is not filtered by priority
+    items — it returns the most recent videos from followed channels for
+    passive immersion browsing.
+    """
+    followed = list(prefs.get("followed_channels") or [])
+    if not followed:
+        return {"videos": [], "total": 0}
+
+    rows = await pool.fetch(
+        """
+        SELECT DISTINCT ON (v.video_id)
+            v.video_id,
+            v.title,
+            v.thumbnail_url,
+            v.language,
+            v.duration,
+            v.channel_id,
+            v.channel_name,
+            v.genre,
+            s.start_time
+        FROM video v
+        JOIN sentence s ON s.video_id = v.video_id
+        WHERE v.channel_id = ANY($1)
+          AND v.language   = $2
+        ORDER BY v.video_id, s.start_time
+        LIMIT $3
+        """,
+        followed,
+        language,
+        limit,
+    )
+
+    videos = [
+        {
+            "video_id":         r["video_id"],
+            "title":            r["title"],
+            "thumbnail_url":    r["thumbnail_url"],
+            "language":         r["language"],
+            "duration":         float(r["duration"] or 0),
+            "start_time":       float(r["start_time"]),
+            "start_time_int":   math.floor(float(r["start_time"])),
+            "priority_score":   0.0,
+            "covered_item_ids": [],
+            "covered_count":    0,
+            "score":            0.0,
+            "channel_id":       r["channel_id"],
+            "channel_name":     r["channel_name"],
+            "genre":            r["genre"],
+        }
+        for r in rows
+    ]
+
+    return {"videos": videos, "total": len(videos)}

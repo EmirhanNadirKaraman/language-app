@@ -18,6 +18,11 @@ psycopg2-binary
 # llm
 anthropic
 
+# book reading mode
+PyMuPDF
+pytesseract
+Pillow
+
 # dev / test
 httpx
 pytest

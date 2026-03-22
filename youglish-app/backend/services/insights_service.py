@@ -15,6 +15,9 @@ get_prep_data() returns translation + grammar explanation (always, from LLM cach
 or generated fresh) plus examples/templates only if already cached.  Missing
 examples are signalled via has_examples=False so the frontend shows a
 "Generate examples" button that calls llm_service.prep_generate_examples().
+
+For phrase items, prep_data also includes linked_grammar_rules — a list of
+GrammarRuleRef dicts resolved from the phrase's phrase_type via grammar_service.
 """
 from __future__ import annotations
 
@@ -26,7 +29,7 @@ from .prioritization_service import get_prioritized_items
 from .usage_events_service import most_frequent_unknown_items, recently_failed_items
 from .recommendation_service import enrich_items
 from .phrase_service import enrich_phrases
-from . import llm_service
+from . import llm_service, grammar_service
 
 
 _CARD_CONFIGS: dict[str, dict] = {
@@ -43,23 +46,12 @@ _CARD_CONFIGS: dict[str, dict] = {
 
 async def _build_card(
     card_type: str,
-    raw_rows: list[dict],       # from usage_events aggregation
-    score_map: dict,            # item_id → PrioritizedItem
+    raw_rows: list[dict],
+    score_map: dict,
     pool: asyncpg.Pool,
     user_id: str,
     language: str,
 ) -> dict:
-    """
-    Build one insight card from raw signal rows and prioritized scores.
-
-    raw_rows come from most_frequent_unknown_items() or recently_failed_items().
-    Each row has: item_id, item_type, word (may be None for phrases), plus
-    card-type-specific fields (event_count / fail_count / last_failed).
-
-    Items are scored by the combined prioritization score, then the top 3 are
-    enriched with display text from the appropriate vocabulary table.
-    Items not found in the vocabulary table for the requested language are skipped.
-    """
     config = _CARD_CONFIGS[card_type]
 
     scored = []
@@ -103,7 +95,7 @@ async def _build_card(
     for c in top:
         meta = enrichment.get(c["item_id"])
         if meta is None:
-            continue  # item not in vocabulary table for this language
+            continue
 
         extra: dict = {}
         if card_type == "frequent_unknowns":
@@ -133,12 +125,7 @@ async def get_insight_cards(
     user_id: str,
     language: str,
 ) -> dict:
-    """
-    Return two insight cards for the home-screen Insights section.
-
-    All four signal queries and both prioritization calls run concurrently.
-    Returns {"cards": [...], "language": language}.
-    """
+    """Return two insight cards for the home-screen Insights section."""
     freq_rows, mistake_rows, word_priority, phrase_priority = await asyncio.gather(
         most_frequent_unknown_items(pool, user_id, limit=20),
         recently_failed_items(pool, user_id, limit=20),
@@ -146,16 +133,11 @@ async def get_insight_cards(
         get_prioritized_items(pool, user_id, item_type="phrase", limit=200),
     )
 
-    # Unified score map: item_id → PrioritizedItem (words and phrases share integer IDs
-    # but can collide in theory; in practice phrase_ids start from 1 in a separate SERIAL
-    # so collisions are possible.  We keep them separate by item_type in _build_card,
-    # so the map is only used for lookup within each card's candidate set which already
-    # has the correct item_type filtered by the analytics query.)
     score_map = {item.item_id: item for item in word_priority}
     score_map.update({item.item_id: item for item in phrase_priority})
 
     freq_card, mistake_card = await asyncio.gather(
-        _build_card("frequent_unknowns", freq_rows,   score_map, pool, user_id, language),
+        _build_card("frequent_unknowns", freq_rows,    score_map, pool, user_id, language),
         _build_card("recent_mistakes",   mistake_rows, score_map, pool, user_id, language),
     )
 
@@ -193,6 +175,9 @@ async def get_prep_data(
     Translation + grammar explanation are always included (fetched from LLM
     cache or generated fresh on first visit).  Examples/templates are returned
     only if already cached — missing examples surface as has_examples=False.
+
+    For phrase items, linked_grammar_rules contains rules matched by phrase_type.
+    For word items, linked_grammar_rules contains rules matched by lemma.
     """
     if item_type == "word":
         enrichment = await enrich_items(pool, user_id, [item_id], language)
@@ -207,24 +192,35 @@ async def get_prep_data(
 
     display_text = meta["display_text"]
 
-    # Run grammar info + examples cache check concurrently
-    item_info, cached_examples = await asyncio.gather(
-        llm_service.prep_item_info(display_text, item_type, language, pool=pool),
-        llm_service.get_examples_if_cached(display_text, item_type, language, pool=pool),
-    )
+    # For phrases: fetch linked grammar rules concurrently with item info + examples
+    if item_type == "phrase":
+        phrase_type = meta.get("secondary_text", "")  # phrase_service stores phrase_type here
+        item_info, cached_examples, linked_rules = await asyncio.gather(
+            llm_service.prep_item_info(display_text, item_type, language, pool=pool),
+            llm_service.get_examples_if_cached(display_text, item_type, language, pool=pool),
+            grammar_service.get_rules_for_phrase_type(pool, phrase_type, language),
+        )
+    else:
+        lemma = meta.get("lemma") or display_text
+        item_info, cached_examples, linked_rules = await asyncio.gather(
+            llm_service.prep_item_info(display_text, item_type, language, pool=pool),
+            llm_service.get_examples_if_cached(display_text, item_type, language, pool=pool),
+            grammar_service.get_rules_for_lemma(pool, lemma, language),
+        )
 
     has_examples = cached_examples is not None
-    example   = cached_examples["example"]         if has_examples else None
+    example   = cached_examples["example"]           if has_examples else None
     templates = cached_examples.get("templates", []) if has_examples else []
 
     return {
-        "item_id":            item_id,
-        "item_type":          item_type,
-        "display_text":       display_text,
-        "translation":        item_info["translation"],
-        "grammar_structure":  item_info.get("grammar_structure"),
-        "grammar_explanation": item_info["grammar_explanation"],
-        "example":            example,
-        "templates":          templates,
-        "has_examples":       has_examples,
+        "item_id":              item_id,
+        "item_type":            item_type,
+        "display_text":         display_text,
+        "translation":          item_info["translation"],
+        "grammar_structure":    item_info.get("grammar_structure"),
+        "grammar_explanation":  item_info["grammar_explanation"],
+        "example":              example,
+        "templates":            templates,
+        "has_examples":         has_examples,
+        "linked_grammar_rules": linked_rules,
     }

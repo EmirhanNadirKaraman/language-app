@@ -7,10 +7,15 @@ import { GuidedChatPage } from './components/GuidedChatPage';
 import { SettingsPanel } from './components/SettingsPanel';
 import { RecommendationsPanel } from './components/RecommendationsPanel';
 import { PlaylistPanel } from './components/PlaylistPanel';
+import { BookLibraryPage } from './components/BookLibraryPage';
+import { BookReaderPage } from './components/BookReaderPage';
+import { ReminderBanner } from './components/ReminderBanner';
+import { SRSReviewPage } from './components/SRSReviewPage';
 import { useSearch } from './hooks/useSearch';
+import { useReminders } from './hooks/useReminders';
 import { usePreferences } from './hooks/usePreferences';
 import { getToken } from './auth';
-import type { SearchResult } from './types';
+import type { SearchResult, BookDocument } from './types';
 
 export default function App() {
   const { terms, query, addTerm, removeTerm, results, total, loading, error, hasMore, loadMore } = useSearch();
@@ -20,13 +25,18 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showRecs, setShowRecs] = useState(false);
   const [showPlaylist, setShowPlaylist] = useState(false);
+  const [showBooks, setShowBooks]       = useState(false);
+  const [showReview, setShowReview]     = useState(false);
+  const [activeBook, setActiveBook]     = useState<BookDocument | null>(null);
   const [recLanguage, setRecLanguage] = useState<string>(
     () => localStorage.getItem('recLanguage') ?? '',
   );
   const [recResult, setRecResult] = useState<SearchResult | null>(null);
   const [guidedTarget, setGuidedTarget] = useState<{ itemId: number; itemType: string } | null>(null);
 
-  const { prefs, savePreferences } = usePreferences(token);
+  const { prefs, savePreferences, channelAction, genreAction } = usePreferences(token);
+  const { summary: reminderSummary, showBanner: showReminderBanner, dismissBanner } =
+    useReminders(token, prefs.reminders_enabled);
   const wordColors = {
     known:    { color: prefs.known_word_color },
     learning: { color: prefs.learning_word_color },
@@ -57,7 +67,7 @@ export default function App() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {token && (
             <button
-              onClick={() => { setShowRecs(s => !s); setShowSettings(false); setShowPlaylist(false); }}
+              onClick={() => { setShowRecs(s => !s); setShowSettings(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false); }}
               style={{
                 padding: '6px 14px', borderRadius: '6px',
                 border: '1px solid #c5cae9', background: showRecs ? '#e8eaf6' : '#fff',
@@ -69,7 +79,7 @@ export default function App() {
           )}
           {token && (
             <button
-              onClick={() => { setShowPlaylist(s => !s); setShowSettings(false); setShowRecs(false); }}
+              onClick={() => { setShowPlaylist(s => !s); setShowSettings(false); setShowRecs(false); setShowBooks(false); setShowReview(false); }}
               style={{
                 padding: '6px 14px', borderRadius: '6px',
                 border: '1px solid #c5cae9', background: showPlaylist ? '#e8eaf6' : '#fff',
@@ -81,7 +91,31 @@ export default function App() {
           )}
           {token && (
             <button
-              onClick={() => { setShowSettings(s => !s); setShowRecs(false); setShowPlaylist(false); }}
+              onClick={() => { setShowBooks(s => !s); setShowSettings(false); setShowRecs(false); setShowPlaylist(false); setShowReview(false); }}
+              style={{
+                padding: '6px 14px', borderRadius: '6px',
+                border: '1px solid #c5cae9', background: showBooks ? '#e8eaf6' : '#fff',
+                color: '#1a237e', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              Books
+            </button>
+          )}
+          {token && (
+            <button
+              onClick={() => { setShowReview(s => !s); setShowSettings(false); setShowRecs(false); setShowPlaylist(false); setShowBooks(false); }}
+              style={{
+                padding: '6px 14px', borderRadius: '6px',
+                border: '1px solid #c8e6c9', background: showReview ? '#e8f5e9' : '#fff',
+                color: '#2e7d32', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              Review
+            </button>
+          )}
+          {token && (
+            <button
+              onClick={() => { setShowSettings(s => !s); setShowRecs(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false); }}
               style={{
                 padding: '6px 14px', borderRadius: '6px',
                 border: '1px solid #c5cae9', background: showSettings ? '#e8eaf6' : '#fff',
@@ -93,17 +127,44 @@ export default function App() {
           )}
           <LoginForm
             token={token}
-            onLogin={newToken => { setToken(newToken); setShowSettings(false); setShowRecs(false); setShowPlaylist(false); }}
-            onLogout={() => { setToken(null); setShowSettings(false); setShowRecs(false); setShowPlaylist(false); setRecResult(null); }}
+            onLogin={newToken => { setToken(newToken); setShowSettings(false); setShowRecs(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false); }}
+            onLogout={() => { setToken(null); setShowSettings(false); setShowRecs(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false); setActiveBook(null); setRecResult(null); }}
           />
         </div>
       </div>
+
+      {token && showReminderBanner && reminderSummary && (
+        <ReminderBanner
+          summary={reminderSummary}
+          onDismiss={dismissBanner}
+          onOpenRecs={() => {
+            dismissBanner();
+            setShowRecs(true);
+            setShowSettings(false);
+            setShowPlaylist(false);
+            setShowBooks(false);
+            setShowReview(false);
+          }}
+        />
+      )}
 
       {token && showSettings && (
         <SettingsPanel
           prefs={prefs}
           onSave={savePreferences}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {token && showReview && (
+        <SRSReviewPage
+          token={token}
+          language={recLanguage}
+          onLanguageChange={(lang) => {
+            setRecLanguage(lang);
+            localStorage.setItem('recLanguage', lang);
+          }}
+          onClose={() => setShowReview(false)}
         />
       )}
 
@@ -165,8 +226,28 @@ export default function App() {
           }}
           onSearch={(term) => { addTerm(term); setShowRecs(false); }}
           onClose={() => setShowRecs(false)}
+          onOpenBooks={() => { setShowBooks(true); setShowRecs(false); setShowSettings(false); setShowPlaylist(false); setShowReview(false); }}
           wordColors={wordColors}
           passiveMax={prefs.passive_reps_for_known}
+          prefs={prefs}
+          onChannelAction={channelAction}
+          onGenreAction={genreAction}
+        />
+      )}
+
+      {token && showBooks && !activeBook && (
+        <BookLibraryPage
+          token={token}
+          onOpen={(doc) => { setActiveBook(doc); setShowBooks(false); }}
+          onClose={() => setShowBooks(false)}
+        />
+      )}
+
+      {token && activeBook && (
+        <BookReaderPage
+          token={token}
+          doc={activeBook}
+          onClose={() => setActiveBook(null)}
         />
       )}
 

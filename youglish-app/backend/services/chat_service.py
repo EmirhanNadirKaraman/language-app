@@ -1,3 +1,5 @@
+import re
+
 import asyncpg
 import json
 
@@ -77,6 +79,47 @@ async def get_messages(pool: asyncpg.Pool, session_id: str) -> list[dict]:
         session_id,
     )
     return [_message_dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Free-chat vocabulary matching
+# ---------------------------------------------------------------------------
+
+async def match_learning_words(
+    pool: asyncpg.Pool,
+    user_id: str,
+    text: str,
+    language: str,
+) -> list[dict]:
+    """
+    Find non-mastered vocabulary items the user is tracking that appear in `text`.
+
+    Tokenizes the message into lowercase alphabetic words, then queries word_table
+    joined with user_word_knowledge for any item whose surface form OR lemma matches.
+    Returns a deduplicated list of {item_id, item_type, word}.
+
+    Used by the free-chat path to identify vocabulary exposure server-side,
+    without requiring the LLM to know the user's item IDs.
+    """
+    tokens = list({w.lower() for w in re.findall(r"[^\W\d_]+", text, re.UNICODE)})
+    if not tokens:
+        return []
+
+    rows = await pool.fetch(
+        """
+        SELECT DISTINCT wt.word_id AS item_id, 'word'::text AS item_type, wt.word
+          FROM word_table wt
+          JOIN user_word_knowledge uwk
+               ON uwk.item_id   = wt.word_id
+              AND uwk.item_type = 'word'
+              AND uwk.user_id   = $1::uuid
+         WHERE (LOWER(wt.word) = ANY($2::text[]) OR LOWER(wt.lemma) = ANY($2::text[]))
+           AND wt.language    = $3
+           AND uwk.status    != 'known'
+        """,
+        user_id, tokens, language,
+    )
+    return [dict(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------
