@@ -6,6 +6,7 @@ interface Props {
   token: string;
   onOpen: (doc: BookDocument) => void;
   onClose: () => void;
+  darkMode?: boolean;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -52,7 +53,16 @@ function sortBooks(books: BookDocument[], key: SortKey): BookDocument[] {
   }
 }
 
-export function BookLibraryPage({ token, onOpen, onClose }: Props) {
+export function BookLibraryPage({ token, onOpen, onClose, darkMode }: Props) {
+  const dk = darkMode ?? false;
+  const th = {
+    bg:     dk ? '#1e1e2e' : '#fff',
+    bgSub:  dk ? '#2a2a3e' : '#fafbff',
+    text:   dk ? '#e0e0e0' : '#1a237e',
+    muted:  dk ? '#aaa'    : '#999',
+    border: dk ? '#333'    : '#eee',
+    card:   dk ? '#2a2a3e' : '#fff',
+  } as const;
   const [books, setBooks]       = useState<BookDocument[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
@@ -136,39 +146,40 @@ export function BookLibraryPage({ token, onOpen, onClose }: Props) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 1000,
     }}>
       <div style={{
-        background: '#fff', borderRadius: '12px',
+        background: th.bg, borderRadius: '12px',
         width: '680px', maxWidth: '96vw', maxHeight: '92vh',
         display: 'flex', flexDirection: 'column',
-        boxShadow: '0 12px 40px rgba(0,0,0,0.22)',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
+        color: dk ? '#e0e0e0' : undefined,
       }}>
         {/* Header */}
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '18px 22px 14px', borderBottom: '1px solid #eee',
+          padding: '18px 22px 14px', borderBottom: `1px solid ${th.border}`,
         }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: '18px', color: '#1a237e' }}>My Books</h2>
+            <h2 style={{ margin: 0, fontSize: '18px', color: th.text }}>My Books</h2>
             {books.length > 0 && (
-              <span style={{ fontSize: '12px', color: '#999' }}>
+              <span style={{ fontSize: '12px', color: th.muted }}>
                 {books.filter(b => b.status === 'ready').length} ready · {books.length} total
               </span>
             )}
           </div>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#888', lineHeight: 1 }}
+            style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: th.muted, lineHeight: 1 }}
           >
             ×
           </button>
         </div>
 
         {/* Upload form */}
-        <form onSubmit={handleUpload} style={{ padding: '14px 22px', borderBottom: '1px solid #eee', background: '#fafbff' }}>
+        <form onSubmit={handleUpload} style={{ padding: '14px 22px', borderBottom: `1px solid ${th.border}`, background: th.bgSub }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div style={{ flex: '1 1 200px' }}>
               <label style={{ fontSize: '11px', color: '#666', display: 'block', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
@@ -263,7 +274,7 @@ export function BookLibraryPage({ token, onOpen, onClose }: Props) {
         )}
 
         {/* Book list */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 22px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 22px', background: th.bg }}>
           {loading && (
             <p style={{ color: '#888', textAlign: 'center', marginTop: '32px' }}>Loading…</p>
           )}
@@ -283,7 +294,7 @@ export function BookLibraryPage({ token, onOpen, onClose }: Props) {
               key={book.doc_id}
               style={{
                 display: 'flex', alignItems: 'center', gap: '12px',
-                padding: '12px 0', borderBottom: '1px solid #f4f4f4',
+                padding: '12px 0', borderBottom: `1px solid ${th.border}`,
               }}
             >
               {/* Book icon */}
@@ -298,10 +309,10 @@ export function BookLibraryPage({ token, onOpen, onClose }: Props) {
 
               {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: '14px', color: '#1a237e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontWeight: 600, fontSize: '14px', color: th.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {book.title}
                 </div>
-                <div style={{ fontSize: '12px', color: '#888', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: '12px', color: th.muted, marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <span>{LANG_LABELS[book.language] ?? book.language.toUpperCase()}</span>
                   {book.total_pages != null && (
                     <span>{book.total_pages} pages</span>

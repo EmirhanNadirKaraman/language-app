@@ -107,6 +107,7 @@ def score_video(priority_score: float, duration: float) -> float:
 
 def channel_genre_multiplier(
     channel_id: str | None,
+    channel_name: str | None,
     genre: str | None,
     prefs: dict,
 ) -> float:
@@ -115,18 +116,24 @@ def channel_genre_multiplier(
 
       channel: followed×1.8, liked×1.3, disliked×0.2, else 1.0
       genre:   liked×1.2,    disliked×0.4, else 1.0
-    """
-    followed  = set(prefs.get("followed_channels") or [])
-    liked_ch  = set(prefs.get("liked_channels") or [])
-    disliked_ch = set(prefs.get("disliked_channels") or [])
-    liked_g   = set(prefs.get("liked_genres") or [])
-    disliked_g = set(prefs.get("disliked_genres") or [])
 
-    if channel_id in followed:
+    Matches by both channel_id (set via channel-action buttons) and channel_name
+    (typed as free text in the Settings panel preferences).
+    """
+    followed    = set(prefs.get("followed_channels") or [])
+    liked_ch    = set(prefs.get("liked_channels") or [])
+    disliked_ch = set(prefs.get("disliked_channels") or [])
+    liked_g     = set(prefs.get("liked_genres") or [])
+    disliked_g  = set(prefs.get("disliked_genres") or [])
+
+    _id   = channel_id   or ""
+    _name = channel_name or ""
+
+    if _id in followed or _name in followed:
         ch_mult = 1.8
-    elif channel_id in liked_ch:
+    elif _id in liked_ch or _name in liked_ch:
         ch_mult = 1.3
-    elif channel_id in disliked_ch:
+    elif _id in disliked_ch or _name in disliked_ch:
         ch_mult = 0.2
     else:
         ch_mult = 1.0
@@ -168,9 +175,10 @@ def rank_videos(
         meta       = video_meta[vid]
         covered    = sorted(word_ids & target_ids)
         pri_score  = sum(score_by_id.get(wid, 0.0) for wid in covered)
-        channel_id = meta.get("channel_id")
-        genre      = meta.get("genre")
-        multiplier = channel_genre_multiplier(channel_id, genre, _prefs)
+        channel_id   = meta.get("channel_id")
+        channel_name = meta.get("channel_name")
+        genre        = meta.get("genre")
+        multiplier   = channel_genre_multiplier(channel_id, channel_name, genre, _prefs)
         s          = score_video(pri_score, meta["duration"]) * multiplier
 
         results.append({

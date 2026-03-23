@@ -41,9 +41,13 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
     const { selected, state, selectWord, updateStatus, dismiss, refreshKey, toggleWordStatus } = useWordStatus(token, result.language);
     const wordStatuses = useWordColors(result.video_id, token, refreshKey);
     const [view, setView] = useState<'player' | 'transcript'>('player');
+    const [startTimeOverride, setStartTimeOverride] = useState<number | null>(null);
 
-    // Dismiss picker and reset to player view when the video changes
-    useEffect(() => { dismiss(); setView('player'); }, [result.video_id]);  // eslint-disable-line react-hooks/exhaustive-deps
+    // Dismiss picker, reset to player view, and clear start-time override when the video changes
+    useEffect(() => { dismiss(); setView('player'); setStartTimeOverride(null); }, [result.video_id]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+    function handleNextVideo() { setStartTimeOverride(0); onNext(); }
+    function handlePrevVideo()  { setStartTimeOverride(0); onPrev(); }
 
     const displayContent = current?.content ?? result.content;
 
@@ -64,18 +68,18 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
                 <YoutubeEmbed
                     ref={playerRef}
                     videoId={result.video_id}
-                    startTime={result.start_time_int}
+                    startTime={startTimeOverride ?? result.start_time_int}
                     autoplay
                 />
             </div>
 
             <div data-debug="controls-box">
                 <PlayerControls
-                    onPrevVideo={onPrev}
+                    onPrevVideo={handlePrevVideo}
                     onPrevMatch={handlePrevMatch}
                     onReplay={handleReplay}
                     onNextMatch={handleNextMatch}
-                    onNextVideo={onNext}
+                    onNextVideo={handleNextVideo}
                     disablePrevVideo={!canPrev}
                     disablePrevMatch={!hasPrevMatch && !canPrev}
                     disableNextMatch={!hasNextMatch && !canNext}

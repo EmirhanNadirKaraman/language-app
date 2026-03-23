@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  getPage, getPageImageUrl, patchBlock, repairBlock, batchRepairPage, deletePage,
+  getPage, listPages, patchBlock, repairBlock, batchRepairPage, deletePage,
 } from '../api/books';
 import { getPageWordStatuses, getPageSelections, listAllSelections, translateSentence } from '../api/reading';
 import type { BookDocument, BookPageDetail, BookBlock, ReadingSelection } from '../types';
@@ -13,6 +13,8 @@ interface Props {
   token: string;
   doc: BookDocument;
   onClose: () => void;
+  darkMode?: boolean;
+  autoMarkKnown?: boolean;
 }
 
 // ── Tokenizer ─────────────────────────────────────────────────────────────────
@@ -49,11 +51,12 @@ interface InteractiveBlockProps {
   showTranslation: boolean;
   onRequestTranslation: () => void;
   translating: boolean;
+  dk?: boolean;
 }
 
 function InteractiveBlock({
   block, selectedKeys, savedAnchorKeys, wordStatuses, onTokenClick,
-  translation, showTranslation, onRequestTranslation, translating,
+  translation, showTranslation, onRequestTranslation, translating, dk,
 }: InteractiveBlockProps) {
   const tokens = useMemo(() => tokenizeBlock(block.display_text), [block.display_text]);
 
@@ -63,7 +66,7 @@ function InteractiveBlock({
         opacity: block.is_header_footer ? 0.4 : 1,
         fontSize: block.is_header_footer ? '12px' : '16px',
         lineHeight: 1.8,
-        color: '#222',
+        color: dk ? '#ccc' : '#222',
         wordBreak: 'break-word',
       }}>
         {tokens.map(tok => {
@@ -133,9 +136,14 @@ interface SentenceCardProps {
   onSkip: (sentence: string) => void;
   onNext: () => void;
   isLast: boolean;
+  dk?: boolean;
+  autoMark?: boolean;
+  onTokenClick?: (blockId: number, tokenIndex: number, text: string) => void;
+  selectedKeys?: Set<string>;
+  savedAnchorKeys?: Set<string>;
 }
 
-function SentenceCard({ sentence, language, token, wordStatuses, onSkip, onNext, isLast }: SentenceCardProps) {
+function SentenceCard({ sentence, language, token, wordStatuses, onSkip, onNext, isLast, dk, autoMark, onTokenClick, selectedKeys, savedAnchorKeys }: SentenceCardProps) {
   const [translation, setTranslation] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
 
@@ -152,18 +160,36 @@ function SentenceCard({ sentence, language, token, wordStatuses, onSkip, onNext,
 
   return (
     <div style={{
-      background: '#fff', border: '1px solid #e8eaf6', borderRadius: '10px',
+      background: dk ? '#1e1e2e' : '#fff', border: `1px solid ${dk ? '#333' : '#e8eaf6'}`, borderRadius: '10px',
       padding: '20px 24px', maxWidth: '620px', margin: '0 auto',
     }}>
-      <div style={{ fontSize: '18px', lineHeight: 1.9, color: '#1a237e', marginBottom: '10px', wordBreak: 'break-word' }}>
+      <div style={{ fontSize: '18px', lineHeight: 1.9, color: dk ? '#c5cae9' : '#1a237e', marginBottom: '10px', wordBreak: 'break-word' }}>
         {tokens.map(tok => {
           if (!tok.isWord) return <span key={tok.index}>{tok.text}</span>;
+          const key = `${blockId}:${tok.index}`;
+          const isSelected = selectedKeys?.has(key) ?? false;
+          const isSaved = savedAnchorKeys?.has(key) ?? false;
           const status = wordStatuses[tok.text.toLowerCase()];
-          let style: React.CSSProperties = {};
-          if (status === 'known') style = WORD_COLORS.known;
-          else if (status === 'learning') style = WORD_COLORS.learning;
-          else if (status === 'unknown') style = WORD_COLORS.unknown;
-          return <span key={tok.index} style={{ ...style, borderRadius: '2px', padding: '0 1px' }}>{tok.text}</span>;
+          let style: React.CSSProperties = { borderRadius: '2px', padding: '0 1px' };
+          if (onTokenClick) style.cursor = 'pointer';
+          if (isSelected) {
+            style = { ...style, background: '#c5cae9', color: '#1a237e', outline: '1px solid #7986cb' };
+          } else if (isSaved) {
+            style = { ...style, background: '#fff8e1', color: '#e65100' };
+          } else if (status === 'known') {
+            style = { ...style, ...WORD_COLORS.known };
+          } else if (status === 'learning') {
+            style = { ...style, ...WORD_COLORS.learning };
+          } else if (status === 'unknown') {
+            style = { ...style, ...WORD_COLORS.unknown };
+          }
+          return (
+            <span key={tok.index} style={style}
+              onClick={onTokenClick ? () => onTokenClick(blockId, tok.index, tok.text) : undefined}
+            >
+              {tok.text}
+            </span>
+          );
         })}
       </div>
 
@@ -190,10 +216,10 @@ function SentenceCard({ sentence, language, token, wordStatuses, onSkip, onNext,
         </button>
         <button
           onClick={() => onSkip(sentence)}
-          style={{ padding: '7px 14px', background: '#fff', color: '#888', border: '1px solid #ddd', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' }}
-          title="Mark all words as passively learned"
+          style={{ padding: '7px 14px', background: dk ? '#2a2a3e' : '#fff', color: '#888', border: `1px solid ${dk ? '#444' : '#ddd'}`, borderRadius: '6px', fontSize: '13px', cursor: 'pointer' }}
+          title={autoMark ? 'Mark all words as passively learned' : 'Skip without marking'}
         >
-          Skip (mark seen)
+          {autoMark ? 'Skip (mark seen)' : 'Skip'}
         </button>
       </div>
     </div>
@@ -238,9 +264,10 @@ interface BlockRowProps {
   docId: string;
   onUpdated: (b: BookBlock) => void;
   onPageReload: () => void;
+  dk?: boolean;
 }
 
-function BlockRow({ block, token, docId, onUpdated, onPageReload }: BlockRowProps) {
+function BlockRow({ block, token, docId, onUpdated, onPageReload, dk }: BlockRowProps) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(block.user_text_override ?? block.clean_text ?? '');
   const [repairing, setRepairing] = useState(false);
@@ -292,8 +319,8 @@ function BlockRow({ block, token, docId, onUpdated, onPageReload }: BlockRowProp
 
   return (
     <div style={{
-      padding: '8px 10px', borderBottom: '1px solid #f0f0f0',
-      opacity: isIgnored ? 0.4 : 1, background: block.is_header_footer ? '#fafafa' : '#fff',
+      padding: '8px 10px', borderBottom: `1px solid ${dk ? '#333' : '#f0f0f0'}`,
+      opacity: isIgnored ? 0.4 : 1, background: dk ? '#1e1e2e' : (block.is_header_footer ? '#fafafa' : '#fff'),
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
         <span style={{ fontSize: '10px', color: '#aaa' }}>#{block.block_index}</span>
@@ -308,16 +335,16 @@ function BlockRow({ block, token, docId, onUpdated, onPageReload }: BlockRowProp
           <span style={{ fontSize: '10px', color: '#388e3c', background: '#e8f5e9', borderRadius: '3px', padding: '1px 5px' }}>LLM approved</span>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
-          <button onClick={toggleIgnore} style={{ fontSize: '11px', padding: '2px 7px', border: '1px solid #ddd', borderRadius: '3px', cursor: 'pointer', background: isIgnored ? '#fff3e0' : '#fff' }}>
+          <button onClick={toggleIgnore} style={{ fontSize: '11px', padding: '2px 7px', border: '1px solid #ddd', borderRadius: '3px', cursor: 'pointer', color: '#444', background: isIgnored ? '#fff3e0' : '#fff' }}>
             {isIgnored ? 'Restore' : 'Ignore'}
           </button>
           <button onClick={() => { setEditing(e => !e); setEditText(block.user_text_override ?? block.clean_text ?? ''); }}
-            style={{ fontSize: '11px', padding: '2px 7px', border: '1px solid #ddd', borderRadius: '3px', cursor: 'pointer', background: editing ? '#e8eaf6' : '#fff' }}>
+            style={{ fontSize: '11px', padding: '2px 7px', border: '1px solid #ddd', borderRadius: '3px', cursor: 'pointer', color: '#444', background: editing ? '#e8eaf6' : '#fff' }}>
             Edit
           </button>
           {isLowConf && block.correction_status === 'none' && (
             <button onClick={handleRepair} disabled={repairing}
-              style={{ fontSize: '11px', padding: '2px 7px', border: '1px solid #ffe082', borderRadius: '3px', cursor: repairing ? 'wait' : 'pointer', background: '#fffde7' }}>
+              style={{ fontSize: '11px', padding: '2px 7px', border: '1px solid #ffe082', borderRadius: '3px', cursor: repairing ? 'wait' : 'pointer', color: '#f57c00', background: '#fffde7' }}>
               {repairing ? 'Repairing…' : 'AI Fix'}
             </button>
           )}
@@ -325,7 +352,7 @@ function BlockRow({ block, token, docId, onUpdated, onPageReload }: BlockRowProp
       </div>
 
       {!editing && (
-        <div style={{ fontSize: '13px', lineHeight: 1.5, color: '#333', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+        <div style={{ fontSize: '13px', lineHeight: 1.5, color: dk ? '#ccc' : '#333', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
           {block.display_text || <em style={{ color: '#aaa' }}>(empty)</em>}
         </div>
       )}
@@ -368,7 +395,17 @@ function btnStyle(bg: string, color: string) {
 
 // ── Main reader ───────────────────────────────────────────────────────────────
 
-export function BookReaderPage({ token, doc, onClose }: Props) {
+export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }: Props) {
+  const dk = darkMode ?? false;
+  const th = {
+    bg:     dk ? '#121212' : '#fff',
+    bgBar:  dk ? '#1a1a2e' : '#f8f9ff',
+    bgSub:  dk ? '#1e1e2e' : '#fafafa',
+    text:   dk ? '#e0e0e0' : '#222',
+    accent: dk ? '#7986cb' : '#1a237e',
+    border: dk ? '#333'    : '#eee',
+    muted:  dk ? '#aaa'    : '#888',
+  } as const;
   const [pageNum, setPageNum]       = useState(1);
   const [inputPage, setInputPage]   = useState('1');
   const [pageData, setPageData]     = useState<BookPageDetail | null>(null);
@@ -395,12 +432,31 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
   const [deletePageConfirm, setDeletePageConfirm] = useState(false);
   const [deletingPage, setDeletingPage] = useState(false);
 
+  // Ordered list of surviving DB page numbers; empty until loaded
+  const [pageList, setPageList] = useState<number[]>([]);
+  // Bump to force page reload when pageNum stays same but actualPageNumber changes (e.g. after deletion)
+  const [pageLoadTrigger, setPageLoadTrigger] = useState(0);
+
+  // Auto-mark words on skip — initialized from global pref, overridable per session
+  const [autoMark, setAutoMark] = useState(autoMarkKnown ?? false);
+
+  // Page image — fetched with auth headers as a blob URL
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const imagePageRef = useRef<number | null>(null);
+
+  // Ref for keyboard navigation — always has the latest navigate logic without stale closure
+  const navigateRef = useRef<(delta: number) => void>(() => {});
+
   // Interactive reading state
   const [selectedKeys, setSelectedKeys]       = useState<Set<string>>(new Set());
   const [wordStatuses, setWordStatuses]       = useState<Record<string, string>>({});
   const [savedSelections, setSavedSelections] = useState<ReadingSelection[]>([]);
 
-  const totalPages = doc.total_pages ?? 1;
+  // Actual DB page_number for the current display position
+  const actualPageNumber = pageList.length > 0
+    ? (pageList[pageNum - 1] ?? pageList[pageList.length - 1])
+    : pageNum;
+  const totalPages = pageList.length || doc.total_pages || 1;
 
   const loadPage = useCallback(async (n: number) => {
     setLoading(true);
@@ -428,17 +484,75 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
     }
   }, [token, doc.doc_id, doc.language]);
 
+  // Load the ordered page list once on mount so we can map positions → actual page_numbers
   useEffect(() => {
-    loadPage(pageNum);
+    listPages(token, doc.doc_id)
+      .then(pages => setPageList(pages.map(p => p.page_number)))
+      .catch(() => {}); // non-fatal — falls back to sequential numbering
+  }, [token, doc.doc_id]);
+
+  useEffect(() => {
+    loadPage(actualPageNumber); // eslint-disable-line react-hooks/exhaustive-deps
     setInputPage(String(pageNum));
     setBatchMsg(null);
     setDeletePageConfirm(false);
-  }, [pageNum, loadPage]);
+    // Reset image and re-fetch if Edit or Scan mode is already active
+    setImageSrc(null);
+    imagePageRef.current = null;
+    if (showReview || showImage) loadPageImage(); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pageNum, pageLoadTrigger, loadPage]); // actualPageNumber/showReview/showImage via closure
+
+  async function loadPageImage() {
+    if (imagePageRef.current === actualPageNumber) return;
+    imagePageRef.current = actualPageNumber;
+    try {
+      const res = await fetch(`/api/v1/books/${doc.doc_id}/pages/${actualPageNumber}/image`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      setImageSrc(URL.createObjectURL(blob));
+    } catch { /* ignore */ }
+  }
 
   function navigate(delta: number) {
     const next = Math.max(1, Math.min(totalPages, pageNum + delta));
     setPageNum(next);
   }
+
+  // Keep navigateRef current so the keyboard handler never has stale closures
+  navigateRef.current = (delta: number) => {
+    if (readingMode === 'sentence') {
+      if (delta > 0) {
+        if (sentenceIdx === allSentences.length - 1) {
+          if (pageNum < totalPages) navigate(1);
+          else setSentenceIdx(0);
+        } else {
+          setSentenceIdx(i => i + 1);
+        }
+      } else {
+        if (sentenceIdx === 0) {
+          if (pageNum > 1) navigate(-1);
+        } else {
+          setSentenceIdx(i => i - 1);
+        }
+      }
+    } else {
+      navigate(delta);
+    }
+  };
+
+  // Register A/D keyboard navigation once
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as Element).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'a' || e.key === 'A') navigateRef.current(-1);
+      if (e.key === 'd' || e.key === 'D') navigateRef.current(1);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []); // empty — ref handles fresh state
 
   function handlePageInput(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
@@ -459,9 +573,9 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
     setBatchLoading(true);
     setBatchMsg(null);
     try {
-      const result = await batchRepairPage(token, doc.doc_id, pageNum);
+      const result = await batchRepairPage(token, doc.doc_id, actualPageNumber);
       setBatchMsg(`Repaired ${result.repaired} block(s) of ${result.total_candidates} candidates.`);
-      await loadPage(pageNum);
+      await loadPage(actualPageNumber);
     } catch (e) {
       setBatchMsg(`Error: ${(e as Error).message}`);
     } finally {
@@ -472,10 +586,16 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
   async function handleDeletePage() {
     setDeletingPage(true);
     try {
-      await deletePage(token, doc.doc_id, pageNum);
-      // move to next or previous page
-      const next = pageNum < totalPages ? pageNum : Math.max(1, pageNum - 1);
-      setPageNum(next);
+      await deletePage(token, doc.doc_id, actualPageNumber);
+      const newPageList = pageList.filter(n => n !== actualPageNumber);
+      setPageList(newPageList);
+      if (pageNum > newPageList.length) {
+        // Was on the last page — step back (pageNum change triggers effect)
+        setPageNum(Math.max(1, newPageList.length));
+      } else {
+        // Same display position, but actualPageNumber changed — force reload
+        setPageLoadTrigger(t => t + 1);
+      }
     } catch { /* ignore */ }
     finally {
       setDeletingPage(false);
@@ -512,21 +632,21 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
     return out;
   }, [visibleBlocks]);
 
-  // Skip sentence: mark all unknown words in it as "learning" (passive)
+  // Skip sentence: optionally mark unknown words as "learning" (passive), then advance
   async function handleSkipSentence(sentence: string) {
-    const words = sentence.match(/\p{L}[\p{L}\p{M}'-]*/gu) ?? [];
-    const unknown = words.filter(w => {
-      const s = wordStatuses[w.toLowerCase()];
-      return !s || s === 'unknown';
-    });
-    // Deduplicate
-    const uniqueUnknown = [...new Set(unknown.map(w => w.toLowerCase()))];
-    // Update optimistically in UI
-    const update: Record<string, string> = {};
-    for (const w of uniqueUnknown) update[w] = 'learning';
-    setWordStatuses(prev => ({ ...prev, ...update }));
-    // Fire API in background (word_id lookup would be ideal but we use status endpoint here — skip if word_id unknown)
-    // For now just advance the sentence
+    if (autoMark) {
+      const words = sentence.match(/\p{L}[\p{L}\p{M}'-]*/gu) ?? [];
+      const uniqueUnknown = [...new Set(
+        words
+          .filter(w => { const s = wordStatuses[w.toLowerCase()]; return !s || s === 'unknown'; })
+          .map(w => w.toLowerCase()),
+      )];
+      if (uniqueUnknown.length > 0) {
+        const update: Record<string, string> = {};
+        for (const w of uniqueUnknown) update[w] = 'learning';
+        setWordStatuses(prev => ({ ...prev, ...update }));
+      }
+    }
     setSentenceIdx(i => Math.min(i + 1, allSentences.length - 1));
   }
 
@@ -589,28 +709,28 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
 
   const hasSelection  = selectedKeys.size > 0 && selectedTokens.length > 0;
   const hasLowConf    = pageData?.blocks.some(b => b.ocr_confidence !== null && b.ocr_confidence < 0.65 && b.correction_status === 'none') ?? false;
-  const showRightPanel = hasSelection || showSaved || showReview;
+  const showRightPanel = hasSelection || showSaved; // Edit panel is now annotation split view
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#fff', zIndex: 900, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div style={{ position: 'fixed', inset: 0, background: th.bg, zIndex: 900, display: 'flex', flexDirection: 'column', overflow: 'hidden', color: th.text }}>
 
       {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', borderBottom: '1px solid #eee', background: '#f8f9ff', flexShrink: 0, flexWrap: 'wrap' }}>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer', color: '#1a237e', fontWeight: 700 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', borderBottom: `1px solid ${th.border}`, background: th.bgBar, flexShrink: 0, flexWrap: 'wrap' }}>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer', color: th.accent, fontWeight: 700 }}>
           ← Back
         </button>
-        <span style={{ fontWeight: 700, fontSize: '15px', color: '#1a237e', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ fontWeight: 700, fontSize: '15px', color: th.accent, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {doc.title}
         </span>
 
         {/* Mode toggle */}
-        <div style={{ display: 'flex', border: '1px solid #c5cae9', borderRadius: '6px', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', border: `1px solid ${dk ? '#4a4a6a' : '#c5cae9'}`, borderRadius: '6px', overflow: 'hidden' }}>
           {(['page', 'sentence'] as const).map(m => (
             <button key={m} onClick={() => { setReadingMode(m); setSentenceIdx(0); }}
               style={{
                 padding: '4px 12px', fontSize: '12px', border: 'none',
-                background: readingMode === m ? '#e8eaf6' : '#fff',
-                color: readingMode === m ? '#1a237e' : '#888',
+                background: readingMode === m ? (dk ? '#2a2a4e' : '#e8eaf6') : (dk ? '#1e1e2e' : '#fff'),
+                color: readingMode === m ? (dk ? '#9fa8da' : '#1a237e') : (dk ? '#666' : '#888'),
                 cursor: 'pointer', fontWeight: readingMode === m ? 600 : 400,
               }}>
               {m === 'page' ? 'Page' : 'Sentence'}
@@ -618,32 +738,49 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: th.muted, cursor: 'pointer', userSelect: 'none' }}>
+            <input
+              type="checkbox"
+              checked={autoMark}
+              onChange={e => setAutoMark(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            Auto-mark
+          </label>
           {pageData?.has_image && (
-            <button onClick={() => setShowImage(s => !s)} style={topBtnStyle(showImage)}>Scan</button>
+            <button onClick={() => { setShowImage(s => !s); if (!showImage) loadPageImage(); }} style={topBtnStyle(showImage, dk)}>Scan</button>
           )}
-          <button onClick={openSavedPanel} style={topBtnStyle(showSaved && !hasSelection)}>
+          <button onClick={openSavedPanel} style={topBtnStyle(showSaved && !hasSelection, dk)}>
             Saved{allDocSelections.length > 0 ? ` (${allDocSelections.length})` : ''}
           </button>
-          <button onClick={() => { setShowReview(s => !s); setShowSaved(false); if (hasSelection) clearSelection(); }}
-            style={topBtnStyle(showReview && !hasSelection && !showSaved)}>
+          <button onClick={() => { const next = !showReview; setShowReview(next); setShowSaved(false); if (hasSelection) clearSelection(); if (next) loadPageImage(); }}
+            style={topBtnStyle(showReview && !hasSelection && !showSaved, dk)}>
             Edit
           </button>
         </div>
       </div>
 
       {/* Page navigation bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderBottom: '1px solid #eee', background: '#fafafa', flexShrink: 0, flexWrap: 'wrap' }}>
-        <button onClick={() => navigate(-1)} disabled={pageNum <= 1} style={navBtnStyle(pageNum > 1)}>◀</button>
-        <span style={{ fontSize: '13px', color: '#555' }}>Page</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderBottom: `1px solid ${th.border}`, background: th.bgSub, flexShrink: 0, flexWrap: 'wrap' }}>
+        <button
+          onClick={() => navigateRef.current(-1)}
+          disabled={readingMode === 'sentence' ? (sentenceIdx === 0 && pageNum <= 1) : pageNum <= 1}
+          style={navBtnStyle(readingMode === 'sentence' ? (sentenceIdx > 0 || pageNum > 1) : pageNum > 1, dk)}
+        >◀</button>
+        <span style={{ fontSize: '13px', color: th.muted }}>Page</span>
         <input type="text" value={inputPage}
           onChange={e => setInputPage(e.target.value)}
           onKeyDown={handlePageInput}
           onBlur={() => setInputPage(String(pageNum))}
-          style={{ width: '48px', textAlign: 'center', padding: '3px 6px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '13px' }}
+          style={{ width: '48px', textAlign: 'center', padding: '3px 6px', border: `1px solid ${dk ? '#444' : '#ccc'}`, borderRadius: '4px', fontSize: '13px', background: dk ? '#1e1e2e' : '#fff', color: th.text }}
         />
-        <span style={{ fontSize: '13px', color: '#555' }}>of {totalPages}</span>
-        <button onClick={() => navigate(1)} disabled={pageNum >= totalPages} style={navBtnStyle(pageNum < totalPages)}>▶</button>
+        <span style={{ fontSize: '13px', color: th.muted }}>of {totalPages}</span>
+        <button
+          onClick={() => navigateRef.current(1)}
+          disabled={readingMode === 'sentence' ? (sentenceIdx === allSentences.length - 1 && pageNum >= totalPages) : pageNum >= totalPages}
+          style={navBtnStyle(readingMode === 'sentence' ? (sentenceIdx < allSentences.length - 1 || pageNum < totalPages) : pageNum < totalPages, dk)}
+        >▶</button>
         {pageData?.is_scanned && <span style={{ fontSize: '11px', color: '#f57c00', marginLeft: '8px' }}>OCR page</span>}
 
         {/* Page delete */}
@@ -677,23 +814,60 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
       </div>
 
       {/* Content area */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', background: th.bg }}>
 
-        {/* Reading pane */}
-        <div style={{ flex: showRightPanel ? '1 1 55%' : '1 1 100%', overflowY: 'auto', padding: showImage ? '0' : '24px', transition: 'flex 0.2s' }}>
-          {loading && <p style={{ color: '#888', textAlign: 'center', marginTop: '48px' }}>Loading page…</p>}
+        {/* ── Annotation split view (Edit mode) ─────────────────────────────── */}
+        {showReview && !hasSelection && !showSaved && pageData && (
+          <>
+            {/* Left: block annotation list */}
+            <div style={{ flex: '1 1 50%', overflowY: 'auto', borderRight: `1px solid ${th.border}`, background: th.bgSub }}>
+              <div style={{ padding: '10px 14px', borderBottom: `1px solid ${th.border}`, background: dk ? '#2a2a3e' : '#f0f0ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: 600, fontSize: '13px', color: th.accent }}>Annotation — Page {pageNum}</span>
+                <span style={{ fontSize: '12px', color: th.muted }}>{pageData.blocks.length} blocks</span>
+              </div>
+              {pageData.blocks.map(block => (
+                <BlockRow
+                  key={block.block_id}
+                  block={block}
+                  token={token}
+                  docId={doc.doc_id}
+                  onUpdated={updateBlock}
+                  onPageReload={() => loadPage(actualPageNumber)}
+                  dk={dk}
+                />
+              ))}
+            </div>
+            {/* Right: scanned page image */}
+            <div style={{ flex: '0 0 50%', overflowY: 'auto', background: dk ? '#1a1a1a' : '#f5f5f5', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              {imageSrc ? (
+                <img src={imageSrc} alt={`Page ${pageNum} scan`} style={{ width: '100%', display: 'block' }} />
+              ) : pageData.has_image ? (
+                <p style={{ color: th.muted, marginTop: '48px', fontSize: '14px' }}>Loading scan…</p>
+              ) : (
+                <p style={{ color: th.muted, marginTop: '48px', fontSize: '14px' }}>No scan available for this page.</p>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ── Normal reading pane (non-edit) ────────────────────────────────── */}
+        {!(showReview && !hasSelection && !showSaved) && (<>
+        <div style={{ flex: (hasSelection || showSaved) ? '1 1 55%' : '1 1 100%', overflowY: 'auto', padding: showImage ? '0' : '24px', transition: 'flex 0.2s' }}>
+          {loading && <p style={{ color: th.muted, textAlign: 'center', marginTop: '48px' }}>Loading page…</p>}
           {error   && <p style={{ color: '#d32f2f', textAlign: 'center', marginTop: '48px' }}>{error}</p>}
 
           {!loading && !error && pageData && (
             <>
               {showImage && pageData.has_image && (
-                <img src={`${getPageImageUrl(doc.doc_id, pageNum)}?t=${Date.now()}`} alt={`Page ${pageNum}`} style={{ width: '100%', display: 'block' }} />
+                imageSrc
+                  ? <img src={imageSrc} alt={`Page ${pageNum}`} style={{ width: '100%', display: 'block' }} />
+                  : <p style={{ textAlign: 'center', color: th.muted, padding: '24px' }}>Loading scan…</p>
               )}
 
               {!showImage && readingMode === 'page' && (
                 <div style={{ maxWidth: '680px', margin: '0 auto' }}>
                   {visibleBlocks.length === 0 && (
-                    <p style={{ color: '#888', textAlign: 'center', marginTop: '48px' }}>No text content on this page.</p>
+                    <p style={{ color: th.muted, textAlign: 'center', marginTop: '48px' }}>No text content on this page.</p>
                   )}
                   {visibleBlocks.map(block => (
                     <InteractiveBlock
@@ -707,6 +881,7 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
                       showTranslation={shownTranslations.has(block.block_id)}
                       onRequestTranslation={() => requestTranslation(block.block_id, block.display_text)}
                       translating={translating[block.block_id] ?? false}
+                      dk={dk}
                     />
                   ))}
                 </div>
@@ -715,21 +890,10 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
               {!showImage && readingMode === 'sentence' && (
                 <div style={{ padding: '32px 16px' }}>
                   {allSentences.length === 0 ? (
-                    <p style={{ color: '#888', textAlign: 'center' }}>No sentences on this page.</p>
-                  ) : sentenceIdx >= allSentences.length ? (
-                    <div style={{ textAlign: 'center', maxWidth: '500px', margin: '0 auto' }}>
-                      <div style={{ fontSize: '24px', marginBottom: '12px' }}>✓</div>
-                      <p style={{ color: '#388e3c', fontWeight: 600 }}>Page complete!</p>
-                      {pageNum < totalPages && (
-                        <button onClick={() => navigate(1)}
-                          style={{ padding: '8px 24px', background: '#1a237e', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '14px', cursor: 'pointer', marginTop: '8px' }}>
-                          Next page →
-                        </button>
-                      )}
-                    </div>
-                  ) : (
+                    <p style={{ color: th.muted, textAlign: 'center' }}>No sentences on this page.</p>
+                  ) : sentenceIdx < allSentences.length ? (
                     <>
-                      <div style={{ textAlign: 'center', marginBottom: '16px', fontSize: '12px', color: '#aaa' }}>
+                      <div style={{ textAlign: 'center', marginBottom: '16px', fontSize: '12px', color: th.muted }}>
                         {sentenceIdx + 1} / {allSentences.length}
                       </div>
                       <SentenceCard
@@ -739,19 +903,32 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
                         token={token}
                         wordStatuses={wordStatuses}
                         onSkip={handleSkipSentence}
-                        onNext={() => setSentenceIdx(i => i + 1)}
+                        onNext={() => {
+                          if (sentenceIdx === allSentences.length - 1) {
+                            // Last sentence done — auto-navigate to next page
+                            if (pageNum < totalPages) navigate(1);
+                            else setSentenceIdx(0); // last page: restart from top
+                          } else {
+                            setSentenceIdx(i => i + 1);
+                          }
+                        }}
                         isLast={sentenceIdx === allSentences.length - 1}
+                        dk={dk}
+                        autoMark={autoMark}
+                        onTokenClick={handleTokenClick}
+                        selectedKeys={selectedKeys}
+                        savedAnchorKeys={savedAnchorKeys}
                       />
                     </>
-                  )}
+                  ) : null}
                 </div>
               )}
             </>
           )}
         </div>
 
-        {/* Right panel */}
-        {showRightPanel && pageData && (
+        {/* Right panel — selections and saved (only in non-edit mode) */}
+        {(hasSelection || showSaved) && pageData && (
           hasSelection ? (
             <SelectionPanel
               token={token}
@@ -775,7 +952,7 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
               }}
               onClear={clearSelection}
             />
-          ) : showSaved ? (
+          ) : (
             <SelectionReviewPanel
               token={token}
               selections={allDocSelections}
@@ -789,41 +966,26 @@ export function BookReaderPage({ token, doc, onClose }: Props) {
               }}
               onClose={() => setShowSaved(false)}
             />
-          ) : (
-            <div style={{ flex: '0 0 340px', borderLeft: '1px solid #eee', overflowY: 'auto', background: '#fafafa' }}>
-              <div style={{ padding: '10px 14px', borderBottom: '1px solid #eee', background: '#f0f0ff' }}>
-                <span style={{ fontWeight: 600, fontSize: '13px', color: '#1a237e' }}>Edit — Page {pageNum}</span>
-                <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>{pageData.blocks.length} blocks</span>
-              </div>
-              {pageData.blocks.map(block => (
-                <BlockRow
-                  key={block.block_id}
-                  block={block}
-                  token={token}
-                  docId={doc.doc_id}
-                  onUpdated={updateBlock}
-                  onPageReload={() => loadPage(pageNum)}
-                />
-              ))}
-            </div>
           )
         )}
+        </>)} {/* end normal reading pane conditional */}
       </div>
     </div>
   );
 }
 
-function navBtnStyle(enabled: boolean) {
+function navBtnStyle(enabled: boolean, dk = false) {
   return {
-    padding: '4px 10px', border: '1px solid #ddd', borderRadius: '4px',
-    cursor: enabled ? 'pointer' : 'not-allowed', background: '#fff',
-    color: enabled ? '#1a237e' : '#ccc', fontSize: '14px',
+    padding: '4px 10px', border: `1px solid ${dk ? '#444' : '#ddd'}`, borderRadius: '4px',
+    cursor: enabled ? 'pointer' : 'not-allowed', background: dk ? '#1e1e2e' : '#fff',
+    color: enabled ? (dk ? '#9fa8da' : '#1a237e') : (dk ? '#555' : '#ccc'), fontSize: '14px',
   } as const;
 }
 
-function topBtnStyle(active: boolean) {
+function topBtnStyle(active: boolean, dk = false) {
   return {
-    padding: '5px 12px', border: '1px solid #c5cae9', borderRadius: '5px',
-    background: active ? '#e8eaf6' : '#fff', color: '#1a237e', fontSize: '12px', cursor: 'pointer',
+    padding: '5px 12px', border: `1px solid ${dk ? '#4a4a6a' : '#c5cae9'}`, borderRadius: '5px',
+    background: active ? (dk ? '#2a2a4e' : '#e8eaf6') : (dk ? '#1e1e2e' : '#fff'),
+    color: dk ? '#9fa8da' : '#1a237e', fontSize: '12px', cursor: 'pointer',
   } as const;
 }

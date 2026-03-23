@@ -19,6 +19,8 @@ DEFAULTS: dict = {
     "learning_word_color":    "#f57c00",
     "unknown_word_color":     "#d32f2f",
     "reminders_enabled":      True,
+    "dark_mode":              False,
+    "auto_mark_known":        False,
 }
 
 

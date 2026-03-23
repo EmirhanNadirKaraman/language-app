@@ -183,6 +183,22 @@ export function ItemRecommendationCard({
         }
     }
 
+    async function handleDismiss() {
+        setSaving(true);
+        setSaveError(false);
+        const prev = status;
+        setStatus('known');
+        try {
+            await setItemStatus(token, rec.item_type, rec.item_id, 'known');
+            onStatusChange();
+        } catch {
+            setStatus(prev);
+            setSaveError(true);
+        } finally {
+            setSaving(false);
+        }
+    }
+
     return (
         <div style={{
             border: '1px solid #e8eaf6',
@@ -252,6 +268,9 @@ export function ItemRecommendationCard({
                 )}
                 <ActionButton label="Search" onClick={() => onSearch(rec.display_text)} />
                 <ActionButton label="Practice" onClick={() => onPractice(language)} />
+                {status !== 'known' && (
+                    <ActionButton label="Dismiss" onClick={handleDismiss} disabled={saving} />
+                )}
             </div>
         </div>
     );

@@ -681,6 +681,11 @@ async def delete_page(pool: asyncpg.Pool, doc_id: str, page_number: int, user_id
     if not row:
         return False
     await pool.execute("DELETE FROM book_pages WHERE page_id = $1", row["page_id"])
+    # Keep total_pages in sync so frontend pagination stays accurate
+    await pool.execute(
+        "UPDATE book_documents SET total_pages = GREATEST(COALESCE(total_pages, 1) - 1, 0) WHERE doc_id = $1",
+        doc_id,
+    )
     return True
 
 

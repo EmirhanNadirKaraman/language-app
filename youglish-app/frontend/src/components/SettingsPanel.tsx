@@ -178,6 +178,8 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
     const [learningColor, setLearningColor]       = useState(prefs.learning_word_color);
     const [unknownColor, setUnknownColor]         = useState(prefs.unknown_word_color);
     const [remindersEnabled, setRemindersEnabled] = useState(prefs.reminders_enabled);
+    const [darkMode, setDarkMode]                 = useState(prefs.dark_mode);
+    const [autoMarkKnown, setAutoMarkKnown]       = useState(prefs.auto_mark_known);
     const [saving, setSaving]                     = useState(false);
     const [saved, setSaved]                       = useState(false);
 
@@ -190,6 +192,8 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
         setLearningColor(prefs.learning_word_color);
         setUnknownColor(prefs.unknown_word_color);
         setRemindersEnabled(prefs.reminders_enabled);
+        setDarkMode(prefs.dark_mode);
+        setAutoMarkKnown(prefs.auto_mark_known);
     }, [prefs]);
 
     const handleSave = async () => {
@@ -205,6 +209,8 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                 learning_word_color:    learningColor,
                 unknown_word_color:     unknownColor,
                 reminders_enabled:      remindersEnabled,
+                dark_mode:              darkMode,
+                auto_mark_known:        autoMarkKnown,
             });
             setSaved(true);
         } finally {
@@ -303,12 +309,38 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
             <p style={{ fontSize: '12px', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '18px 0 10px' }}>
                 Reminders
             </p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
                 <input id="reminders-toggle" type="checkbox" checked={remindersEnabled}
                     onChange={e => setRemindersEnabled(e.target.checked)}
                     style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
                 <label htmlFor="reminders-toggle" style={{ fontSize: '13px', color: '#444', cursor: 'pointer' }}>
                     Show banner when reviews are due
+                </label>
+            </div>
+
+            {/* Reading */}
+            <p style={{ fontSize: '12px', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '18px 0 10px' }}>
+                Reading
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                <input id="auto-mark-toggle" type="checkbox" checked={autoMarkKnown}
+                    onChange={e => setAutoMarkKnown(e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                <label htmlFor="auto-mark-toggle" style={{ fontSize: '13px', color: '#444', cursor: 'pointer' }}>
+                    Auto-mark words as known when finishing a page
+                </label>
+            </div>
+
+            {/* Appearance */}
+            <p style={{ fontSize: '12px', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '18px 0 10px' }}>
+                Appearance
+            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+                <input id="dark-mode-toggle" type="checkbox" checked={darkMode}
+                    onChange={e => setDarkMode(e.target.checked)}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
+                <label htmlFor="dark-mode-toggle" style={{ fontSize: '13px', color: '#444', cursor: 'pointer' }}>
+                    Dark mode
                 </label>
             </div>
 

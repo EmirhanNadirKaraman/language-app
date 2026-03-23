@@ -63,8 +63,11 @@ export default function App() {
     setShowBooks(false); setShowReview(false);
   }
 
+  const darkMode = prefs.dark_mode;
+  const autoMarkKnown = prefs.auto_mark_known;
+
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px 16px', fontFamily: 'sans-serif' }}>
+    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px 16px', fontFamily: 'sans-serif', background: darkMode ? '#121212' : undefined, minHeight: '100vh', color: darkMode ? '#e0e0e0' : undefined }}>
 
       {/* Header row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
@@ -204,6 +207,7 @@ export default function App() {
           token={token}
           onOpen={(doc) => { setActiveBook(doc); setShowBooks(false); }}
           onClose={() => setShowBooks(false)}
+          darkMode={darkMode}
         />
       )}
 
@@ -212,6 +216,8 @@ export default function App() {
           token={token}
           doc={activeBook}
           onClose={() => setActiveBook(null)}
+          darkMode={darkMode}
+          autoMarkKnown={autoMarkKnown}
         />
       )}
 

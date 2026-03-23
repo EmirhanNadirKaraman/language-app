@@ -27,6 +27,7 @@ interface Props {
   onSaved: (sel: ReadingSelection) => void;
   onDeleted: (selectionId: string) => void;
   onClear: () => void;
+  dk?: boolean;
 }
 
 // ── Surface text construction ─────────────────────────────────────────────────
@@ -51,6 +52,7 @@ export function SelectionPanel({
   onSaved,
   onDeleted,
   onClear,
+  dk = false,
 }: Props) {
   const [translation, setTranslation] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<string | null>(null);
@@ -150,9 +152,9 @@ export function SelectionPanel({
   return (
     <div style={{
       flex: '0 0 340px',
-      borderLeft: '1px solid #e8eaf6',
+      borderLeft: `1px solid ${dk ? '#333' : '#e8eaf6'}`,
       overflowY: 'auto',
-      background: '#f8f9ff',
+      background: dk ? '#1a1a2e' : '#f8f9ff',
       display: 'flex',
       flexDirection: 'column',
     }}>
@@ -161,11 +163,11 @@ export function SelectionPanel({
         display: 'flex',
         alignItems: 'center',
         padding: '10px 14px',
-        borderBottom: '1px solid #e8eaf6',
-        background: '#e8eaf6',
+        borderBottom: `1px solid ${dk ? '#333' : '#e8eaf6'}`,
+        background: dk ? '#2a2a4e' : '#e8eaf6',
         flexShrink: 0,
       }}>
-        <span style={{ fontWeight: 700, fontSize: '13px', color: '#1a237e', flex: 1 }}>
+        <span style={{ fontWeight: 700, fontSize: '13px', color: dk ? '#9fa8da' : '#1a237e', flex: 1 }}>
           Selection
         </span>
         <span style={{ fontSize: '11px', color: '#7986cb', marginRight: '10px' }}>
@@ -191,7 +193,7 @@ export function SelectionPanel({
           <div style={{
             fontSize: '22px',
             fontWeight: 700,
-            color: '#1a237e',
+            color: dk ? '#9fa8da' : '#1a237e',
             lineHeight: 1.3,
             wordBreak: 'break-word',
           }}>
@@ -216,11 +218,11 @@ export function SelectionPanel({
         {sentenceText && (
           <div style={{
             fontSize: '12px',
-            color: '#666',
+            color: dk ? '#aaa' : '#666',
             fontStyle: 'italic',
             lineHeight: 1.6,
-            background: '#fff',
-            border: '1px solid #e8eaf6',
+            background: dk ? '#1e1e2e' : '#fff',
+            border: `1px solid ${dk ? '#333' : '#e8eaf6'}`,
             borderRadius: '5px',
             padding: '8px 10px',
           }}>
@@ -270,7 +272,7 @@ export function SelectionPanel({
 
         {/* Note */}
         <div>
-          <label style={{ fontSize: '11px', color: '#888', display: 'block', marginBottom: '4px' }}>
+          <label style={{ fontSize: '11px', color: dk ? '#aaa' : '#888', display: 'block', marginBottom: '4px' }}>
             Note (optional)
           </label>
           <textarea
@@ -282,11 +284,13 @@ export function SelectionPanel({
               width: '100%',
               fontSize: '13px',
               padding: '6px 8px',
-              border: '1px solid #c5cae9',
+              border: `1px solid ${dk ? '#444' : '#c5cae9'}`,
               borderRadius: '4px',
               resize: 'vertical',
               boxSizing: 'border-box',
               fontFamily: 'inherit',
+              background: dk ? '#1e1e2e' : '#fff',
+              color: dk ? '#e0e0e0' : undefined,
             }}
           />
         </div>
@@ -321,9 +325,9 @@ export function SelectionPanel({
               style={{
                 padding: '8px 14px',
                 borderRadius: '5px',
-                border: '1px solid #c5cae9',
-                background: '#fff',
-                color: '#555',
+                border: `1px solid ${dk ? '#444' : '#c5cae9'}`,
+                background: dk ? '#1e1e2e' : '#fff',
+                color: dk ? '#aaa' : '#555',
                 fontSize: '13px',
                 cursor: 'pointer',
               }}
@@ -353,9 +357,9 @@ export function SelectionPanel({
                 flex: 1,
                 padding: '8px',
                 borderRadius: '5px',
-                border: '1px solid #c5cae9',
-                background: '#fff',
-                color: '#555',
+                border: `1px solid ${dk ? '#444' : '#c5cae9'}`,
+                background: dk ? '#1e1e2e' : '#fff',
+                color: dk ? '#aaa' : '#555',
                 fontSize: '13px',
                 cursor: 'pointer',
               }}
@@ -367,8 +371,8 @@ export function SelectionPanel({
 
         {/* Saved selections on this page — mini review */}
         {savedSelections.length > 0 && (
-          <div style={{ marginTop: '8px', borderTop: '1px solid #e8eaf6', paddingTop: '10px' }}>
-            <div style={{ fontSize: '11px', color: '#888', marginBottom: '8px' }}>
+          <div style={{ marginTop: '8px', borderTop: `1px solid ${dk ? '#333' : '#e8eaf6'}`, paddingTop: '10px' }}>
+            <div style={{ fontSize: '11px', color: dk ? '#aaa' : '#888', marginBottom: '8px' }}>
               Saved on this page ({savedSelections.length})
             </div>
             {savedSelections.map(sel => (
@@ -376,6 +380,7 @@ export function SelectionPanel({
                 key={sel.selection_id}
                 selection={sel}
                 onDelete={() => handleDelete(sel.selection_id)}
+                dk={dk}
               />
             ))}
           </div>

@@ -11,6 +11,8 @@ export interface UserPreferences {
     learning_word_color: string;
     unknown_word_color: string;
     reminders_enabled: boolean;
+    dark_mode: boolean;
+    auto_mark_known: boolean;
 }
 
 export type UserPreferencesUpdate = Partial<UserPreferences>;
@@ -31,6 +33,8 @@ export const PREFERENCE_DEFAULTS: UserPreferences = {
     learning_word_color: '#f57c00',
     unknown_word_color: '#d32f2f',
     reminders_enabled: true,
+    dark_mode: false,
+    auto_mark_known: false,
 };
 
 function authHeaders(token: string): HeadersInit {

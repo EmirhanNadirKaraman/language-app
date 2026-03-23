@@ -30,12 +30,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from phrase_finder import extract_german_logic
 os.chdir(_cwd)
 
-VIDEOS_PER_CHANNEL = 2
-MAX_CHANNELS = 2
+# VIDEOS_PER_CHANNEL = 5
+# MAX_CHANNELS = 5
 
 LANG_MODEL_MAP = {
     "en": "en_core_web_sm",
-    "de": "de_core_news_sm",
+    "de": "de_core_news_md",
     "fr": "fr_core_news_sm",
     "es": "es_core_news_sm",
     "it": "it_core_news_sm",
@@ -275,8 +275,6 @@ def main():
     cursor = connection.cursor()
 
     channels = load_channels()
-    if MAX_CHANNELS is not None:
-        channels = channels[:MAX_CHANNELS]
     print(f"Loaded {len(channels)} channels total")
 
     cursor.execute("SELECT video_id FROM video")
@@ -285,40 +283,47 @@ def main():
     cursor.execute("SELECT video_id FROM video_blacklist")
     blacklist = {row[0] for row in cursor.fetchall()}
 
-    cursor.execute("SELECT channel_id FROM processed_channel")
-    processed_channels = {row[0] for row in cursor.fetchall()}
-
     cursor.execute("SELECT language || '_' || rule, rule_id FROM grammar_rule")
     sentence_types = {row[0]: row[1] for row in cursor.fetchall()}
 
+    cursor.execute("SELECT word, pos, lemma FROM word_table")
+    db_words = {(r[0], r[1], r[2]) for r in cursor.fetchall()}
+
     nlp_cache = {}
 
-    for channel in channels:
-        channel_id = channel["id"]
-        channel_name = channel["name"] or channel_id
-        language = channel["language"]
+    # Build one lazy iterator per channel
+    channel_iters = [
+        (ch, iter(scrapetube.get_channel(ch["id"])))
+        for ch in channels
+    ]
+    print(f"Active channels: {len(channel_iters)}")
 
-        if channel_id in processed_channels:
-            continue
+    total = 0
+    while channel_iters:
+        next_round = []
+        for channel, vid_iter in channel_iters:
+            channel_id = channel["id"]
+            channel_name = channel["name"] or channel_id
+            language = channel["language"]
 
-        print(f"\nChannel: {channel_name} ({channel_id}), language: {language or 'auto-detect'}")
-        videos = scrapetube.get_channel(channel_id)
-
-        cursor.execute("SELECT word, pos, lemma FROM word_table")
-        db_words = {(r[0], r[1], r[2]) for r in cursor.fetchall()}
-
-        count = 0
-        for video in videos:
-            if count >= VIDEOS_PER_CHANNEL:
+            # Advance to next unprocessed, non-blacklisted video for this channel
+            video = None
+            while True:
+                try:
+                    candidate = next(vid_iter)
+                except StopIteration:
+                    print(f"\nChannel exhausted this run: {channel_name}")
+                    break
+                vid_id = candidate["videoId"]
+                if vid_id in blacklist or vid_id in processed_videos:
+                    continue
+                video = candidate
                 break
 
+            if video is None:
+                continue  # channel exhausted — not added to next_round
+
             video_id = video["videoId"]
-
-            if video_id in blacklist:
-                continue
-            if video_id in processed_videos:
-                continue
-
             transcript_obj, detected_lang = get_transcript(video_id, language)
 
             if transcript_obj is None:
@@ -328,6 +333,7 @@ def main():
                     (video_id,),
                 )
                 connection.commit()
+                next_round.append((channel, vid_iter))
                 continue
 
             if detected_lang not in nlp_cache:
@@ -338,6 +344,7 @@ def main():
                     )
                 except Exception:
                     print(f"  No spacy model for '{detected_lang}', skipping video")
+                    next_round.append((channel, vid_iter))
                     continue
 
             title = video["title"]["runs"][0]["text"]
@@ -354,6 +361,7 @@ def main():
 
             if fetched is None:
                 print(f"  Skipping {video_id} after 3 failed attempts (not blacklisted)")
+                next_round.append((channel, vid_iter))
                 continue
 
             populate(
@@ -371,14 +379,11 @@ def main():
             )
 
             processed_videos.add(video_id)
-            count += 1
-            print(f"  [{count}/{VIDEOS_PER_CHANNEL}] {title} ({detected_lang})")
+            total += 1
+            print(f"  [{total}] {channel_name}: {title} ({detected_lang})")
+            next_round.append((channel, vid_iter))
 
-        cursor.execute(
-            "INSERT INTO processed_channel (channel_id, channel_name) VALUES (%s, %s) ON CONFLICT DO NOTHING",
-            (channel_id, channel_name),
-        )
-        connection.commit()
+        channel_iters = next_round
 
     print("\nDone.")
 
