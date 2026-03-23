@@ -219,6 +219,12 @@ textarea {
     box-sizing: border-box;
 }
 
+input,
+textarea,
+select {
+    color-scheme: light;
+}
+
 html,
 body {
     width: 100%;

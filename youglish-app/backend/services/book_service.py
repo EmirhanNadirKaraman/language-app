@@ -48,6 +48,13 @@ _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="book_proc")
 # A page with fewer embedded characters than this is treated as scanned.
 _MIN_TEXT_CHARS = 80
 
+# ── Tesseract language codes (ISO 639-1 → ISO 639-2/T) ───────────────────────
+_TESSERACT_LANG: dict[str, str] = {
+    "de": "deu", "en": "eng", "fr": "fra", "es": "spa", "it": "ita",
+    "pt": "por", "ja": "jpn", "ru": "rus", "ko": "kor", "tr": "tur",
+    "pl": "pol", "sv": "swe",
+}
+
 # ── Deterministic cleanup ─────────────────────────────────────────────────────
 _LIGATURES = {
     "\ufb00": "ff",
@@ -148,7 +155,7 @@ def _render_page_to_png(page, dpi: int = 200) -> bytes:
     return pix.tobytes("png")
 
 
-def _ocr_page_png(png_bytes: bytes, dpi: int, page_w_pt: float, page_h_pt: float) -> list[dict]:
+def _ocr_page_png(png_bytes: bytes, dpi: int, page_w_pt: float, page_h_pt: float, lang: str = "eng") -> list[dict]:
     """
     Run pytesseract on a rendered page image.
     Returns block dicts grouped by Tesseract's block_num.
@@ -166,7 +173,7 @@ def _ocr_page_png(png_bytes: bytes, dpi: int, page_w_pt: float, page_h_pt: float
     scale = 72.0 / dpi  # pixel → pt
 
     try:
-        data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
+        data = pytesseract.image_to_data(img, lang=lang, output_type=pytesseract.Output.DICT)
     except Exception as exc:
         logger.error("pytesseract failed: %s", exc)
         return []
@@ -248,7 +255,8 @@ def _process_pdf_sync(doc_id: str, pdf_path: Path, language: str) -> dict:
         if is_scanned:
             scan_count += 1
             png_bytes = _render_page_to_png(page, dpi=200)
-            blocks    = _ocr_page_png(png_bytes, dpi=200, page_w_pt=w_pt, page_h_pt=h_pt)
+            tess_lang = _TESSERACT_LANG.get(language, "eng")
+            blocks    = _ocr_page_png(png_bytes, dpi=200, page_w_pt=w_pt, page_h_pt=h_pt, lang=tess_lang)
         else:
             png_bytes = None
             blocks    = _extract_native_blocks(page)
