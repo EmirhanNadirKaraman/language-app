@@ -123,6 +123,22 @@ export async function repairBlock(
   return res.json() as Promise<LLMRepairResponse>;
 }
 
+export async function deleteBook(token: string, docId: string): Promise<void> {
+  const res = await fetch(`/api/v1/books/${docId}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  await assertOk(res);
+}
+
+export async function deletePage(token: string, docId: string, pageNumber: number): Promise<void> {
+  const res = await fetch(`/api/v1/books/${docId}/pages/${pageNumber}`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  await assertOk(res);
+}
+
 export async function batchRepairPage(
   token: string,
   docId: string,

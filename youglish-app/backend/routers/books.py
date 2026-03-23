@@ -270,6 +270,35 @@ async def llm_repair_block(
     )
 
 
+@router.delete("/books/{doc_id}", status_code=204)
+async def delete_book(
+    doc_id: str,
+    user=Depends(get_current_user),
+    pool=Depends(get_pool),
+):
+    """Delete a book. Owner or admin only."""
+    deleted = await book_service.delete_document(
+        pool, doc_id, str(user["user_id"]), is_admin=user.get("is_admin", False)
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Book not found or not authorized")
+
+
+@router.delete("/books/{doc_id}/pages/{page_number}", status_code=204)
+async def delete_page(
+    doc_id: str,
+    page_number: int,
+    user=Depends(get_current_user),
+    pool=Depends(get_pool),
+):
+    """Delete a single page (and its blocks). Owner or admin only."""
+    deleted = await book_service.delete_page(
+        pool, doc_id, page_number, str(user["user_id"]), is_admin=user.get("is_admin", False)
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Page not found or not authorized")
+
+
 @router.post("/books/{doc_id}/pages/{page_number}/batch-llm-repair")
 async def batch_llm_repair(
     doc_id: str,

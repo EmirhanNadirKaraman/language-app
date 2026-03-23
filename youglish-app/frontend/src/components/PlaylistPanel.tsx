@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
-import type { PlaylistResult, PlaylistVideo, SearchResult } from '../types';
+import { useRef, useState, useEffect } from 'react';
+import type { PlaylistResult, PlaylistVideo, SearchResult, Suggestion } from '../types';
 import { fetchItemRecommendations } from '../api/recommendations';
 import { lookupWord } from '../api/words';
+import { fetchSuggestions } from '../api/suggest';
 import { generatePlaylist } from '../api/playlists';
 import { formatDuration } from '../utils/recommendationUtils';
 
@@ -217,6 +218,65 @@ function BuildView({
         background: '#fff',
     };
 
+    // Autocomplete suggestions for word input
+    const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+    const [showDropdown, setShowDropdown] = useState(false);
+    const [activeIdx, setActiveIdx] = useState(-1);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const abortRef = useRef<AbortController | null>(null);
+
+    useEffect(() => {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (!addInput.trim() || !language) {
+            setSuggestions([]);
+            setShowDropdown(false);
+            return;
+        }
+        setSuggestions([{ word: addInput.trim(), score: 1, type: 'word' }]);
+        setShowDropdown(true);
+        debounceRef.current = setTimeout(async () => {
+            abortRef.current?.abort();
+            const ctrl = new AbortController();
+            abortRef.current = ctrl;
+            try {
+                const data = await fetchSuggestions(addInput.trim(), language, ctrl.signal);
+                const base: Suggestion = { word: addInput.trim(), score: 1, type: 'word' };
+                setSuggestions([base, ...data.filter(s => s.word !== addInput.trim())]);
+                setShowDropdown(true);
+                setActiveIdx(-1);
+            } catch { /* abort or network */ }
+        }, 200);
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    }, [addInput, language]);
+
+    function selectSuggestion(word: string) {
+        onAddInputChange(word);
+        setSuggestions([]);
+        setShowDropdown(false);
+        setActiveIdx(-1);
+        inputRef.current?.focus();
+    }
+
+    function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            setActiveIdx(i => Math.min(i + 1, suggestions.length - 1));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            setActiveIdx(i => Math.max(i - 1, -1));
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (activeIdx >= 0 && suggestions[activeIdx]) {
+                selectSuggestion(suggestions[activeIdx].word);
+            } else {
+                onAddWord();
+                setShowDropdown(false);
+            }
+        } else if (e.key === 'Escape') {
+            setShowDropdown(false);
+        }
+    }
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Language */}
@@ -251,20 +311,22 @@ function BuildView({
                 </button>
             </div>
 
-            {/* Manual add */}
-            <div>
+            {/* Word search with autocomplete */}
+            <div style={{ position: 'relative' }}>
                 <div style={{ display: 'flex', gap: '6px' }}>
                     <input
                         ref={inputRef}
                         style={{ ...inputStyle, flex: 1, minWidth: 0 }}
-                        placeholder="Type a word to add…"
+                        placeholder="Search words to add…"
                         value={addInput}
-                        onChange={e => onAddInputChange(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') onAddWord(); }}
+                        onChange={e => { onAddInputChange(e.target.value); }}
+                        onKeyDown={handleKeyDown}
+                        onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+                        onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
                         disabled={!language || addLoading}
                     />
                     <button
-                        onClick={onAddWord}
+                        onClick={() => { onAddWord(); setShowDropdown(false); }}
                         disabled={!addInput.trim() || !language || addLoading}
                         style={{
                             padding: '6px 14px',
@@ -284,6 +346,36 @@ function BuildView({
                 </div>
                 {addError && (
                     <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#c62828' }}>{addError}</p>
+                )}
+
+                {showDropdown && suggestions.length > 0 && (
+                    <ul style={{
+                        position: 'absolute', top: '100%', left: 0, right: '62px',
+                        background: '#fff', border: '1px solid #ccc', borderTop: 'none',
+                        borderRadius: '0 0 5px 5px', margin: 0, padding: 0, listStyle: 'none',
+                        zIndex: 200, maxHeight: '180px', overflowY: 'auto',
+                        boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+                    }}>
+                        {suggestions.map((s, i) => (
+                            <li key={s.word}
+                                onMouseDown={() => selectSuggestion(s.word)}
+                                onMouseEnter={() => setActiveIdx(i)}
+                                style={{
+                                    padding: '9px 12px', cursor: 'pointer', fontSize: '14px',
+                                    background: i === activeIdx ? '#e8eaf6' : '#fff',
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                }}
+                            >
+                                <span>{s.word}</span>
+                                <span style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                    {s.type === 'phrase' && (
+                                        <span style={{ fontSize: '10px', background: '#fff3e0', color: '#e65100', borderRadius: '3px', padding: '1px 4px' }}>phrase</span>
+                                    )}
+                                    <span style={{ fontSize: '11px', color: '#bbb' }}>{Math.round(s.score * 100)}%</span>
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
                 )}
             </div>
 

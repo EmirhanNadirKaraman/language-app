@@ -43,36 +43,37 @@ export default function App() {
     unknown:  { color: prefs.unknown_word_color },
   };
 
-  // Reset to first result on new search; close chat when result changes
   useEffect(() => { setResultIdx(0); setShowChat(null); setRecResult(null); setGuidedTarget(null); }, [query]);
   useEffect(() => { setShowChat(null); }, [resultIdx]);
 
   const currentResult = results[resultIdx] ?? null;
-  // Recommended result takes priority over search result for the player
   const activeResult = recResult ?? currentResult;
 
   const handleNext = () => {
     if (resultIdx === results.length - 1 && hasMore) loadMore();
     setResultIdx(i => Math.min(i + 1, total - 1));
   };
-
   const handlePrev = () => setResultIdx(i => Math.max(0, i - 1));
+
+  // A "panel" is open when any secondary view is showing (hides the search bar)
+  const anyPanelOpen = showSettings || showRecs || showPlaylist || showReview || !!activeBook;
+
+  function closeAll() {
+    setShowSettings(false); setShowRecs(false); setShowPlaylist(false);
+    setShowBooks(false); setShowReview(false);
+  }
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px 16px', fontFamily: 'sans-serif' }}>
 
       {/* Header row */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
         <h1 style={{ fontSize: '24px', margin: 0 }}>YouGlish Clone</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           {token && (
             <button
               onClick={() => { setShowRecs(s => !s); setShowSettings(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false); }}
-              style={{
-                padding: '6px 14px', borderRadius: '6px',
-                border: '1px solid #c5cae9', background: showRecs ? '#e8eaf6' : '#fff',
-                color: '#1a237e', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-              }}
+              style={navBtnStyle(showRecs)}
             >
               For You
             </button>
@@ -80,11 +81,7 @@ export default function App() {
           {token && (
             <button
               onClick={() => { setShowPlaylist(s => !s); setShowSettings(false); setShowRecs(false); setShowBooks(false); setShowReview(false); }}
-              style={{
-                padding: '6px 14px', borderRadius: '6px',
-                border: '1px solid #c5cae9', background: showPlaylist ? '#e8eaf6' : '#fff',
-                color: '#1a237e', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-              }}
+              style={navBtnStyle(showPlaylist)}
             >
               Playlist
             </button>
@@ -92,11 +89,7 @@ export default function App() {
           {token && (
             <button
               onClick={() => { setShowBooks(s => !s); setShowSettings(false); setShowRecs(false); setShowPlaylist(false); setShowReview(false); }}
-              style={{
-                padding: '6px 14px', borderRadius: '6px',
-                border: '1px solid #c5cae9', background: showBooks ? '#e8eaf6' : '#fff',
-                color: '#1a237e', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-              }}
+              style={navBtnStyle(showBooks)}
             >
               Books
             </button>
@@ -104,11 +97,7 @@ export default function App() {
           {token && (
             <button
               onClick={() => { setShowReview(s => !s); setShowSettings(false); setShowRecs(false); setShowPlaylist(false); setShowBooks(false); }}
-              style={{
-                padding: '6px 14px', borderRadius: '6px',
-                border: '1px solid #c8e6c9', background: showReview ? '#e8f5e9' : '#fff',
-                color: '#2e7d32', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-              }}
+              style={{ ...navBtnStyle(showReview), border: '1px solid #c8e6c9', color: '#2e7d32', background: showReview ? '#e8f5e9' : '#fff' }}
             >
               Review
             </button>
@@ -116,19 +105,15 @@ export default function App() {
           {token && (
             <button
               onClick={() => { setShowSettings(s => !s); setShowRecs(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false); }}
-              style={{
-                padding: '6px 14px', borderRadius: '6px',
-                border: '1px solid #c5cae9', background: showSettings ? '#e8eaf6' : '#fff',
-                color: '#1a237e', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-              }}
+              style={navBtnStyle(showSettings)}
             >
               Settings
             </button>
           )}
           <LoginForm
             token={token}
-            onLogin={newToken => { setToken(newToken); setShowSettings(false); setShowRecs(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false); }}
-            onLogout={() => { setToken(null); setShowSettings(false); setShowRecs(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false); setActiveBook(null); setRecResult(null); }}
+            onLogin={newToken => { setToken(newToken); closeAll(); }}
+            onLogout={() => { setToken(null); closeAll(); setActiveBook(null); setRecResult(null); }}
           />
         </div>
       </div>
@@ -140,14 +125,25 @@ export default function App() {
           onOpenRecs={() => {
             dismissBanner();
             setShowRecs(true);
-            setShowSettings(false);
-            setShowPlaylist(false);
-            setShowBooks(false);
-            setShowReview(false);
+            setShowSettings(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false);
           }}
         />
       )}
 
+      {/* Search bar — hidden when a full panel is open */}
+      {!anyPanelOpen && (
+        <>
+          <SearchBar
+            terms={terms}
+            onAddTerm={addTerm}
+            onRemoveTerm={removeTerm}
+            loading={loading}
+          />
+          {error && <p style={{ color: 'red', marginTop: '12px' }}>{error}</p>}
+        </>
+      )}
+
+      {/* Panels */}
       {token && showSettings && (
         <SettingsPanel
           prefs={prefs}
@@ -160,10 +156,7 @@ export default function App() {
         <SRSReviewPage
           token={token}
           language={recLanguage}
-          onLanguageChange={(lang) => {
-            setRecLanguage(lang);
-            localStorage.setItem('recLanguage', lang);
-          }}
+          onLanguageChange={(lang) => { setRecLanguage(lang); localStorage.setItem('recLanguage', lang); }}
           onClose={() => setShowReview(false)}
         />
       )}
@@ -172,15 +165,8 @@ export default function App() {
         <PlaylistPanel
           token={token}
           language={recLanguage}
-          onLanguageChange={(lang) => {
-            setRecLanguage(lang);
-            localStorage.setItem('recLanguage', lang);
-          }}
-          onWatch={(result) => {
-            setRecResult(result);
-            setShowPlaylist(false);
-            setShowChat(null);
-          }}
+          onLanguageChange={(lang) => { setRecLanguage(lang); localStorage.setItem('recLanguage', lang); }}
+          onWatch={(result) => { setRecResult(result); setShowPlaylist(false); setShowChat(null); }}
           onClose={() => setShowPlaylist(false)}
         />
       )}
@@ -189,41 +175,19 @@ export default function App() {
         <RecommendationsPanel
           token={token}
           language={recLanguage}
-          onLanguageChange={(lang) => {
-            setRecLanguage(lang);
-            localStorage.setItem('recLanguage', lang);
-          }}
-          onWatch={(result) => {
-            setRecResult(result);
-            setShowRecs(false);
-            setShowChat(null);
-          }}
+          onLanguageChange={(lang) => { setRecLanguage(lang); localStorage.setItem('recLanguage', lang); }}
+          onWatch={(result) => { setRecResult(result); setShowRecs(false); setShowChat(null); }}
           onPractice={(lang) => {
             setGuidedTarget(null);
-            setRecResult({
-              video_id: '', title: '', thumbnail_url: '',
-              language: lang, start_time: 0, start_time_int: 0,
-              content: '', surface_form: null, match_type: 'recommendation',
-            });
-            setShowRecs(false);
-            setShowChat('guided');
+            setRecResult({ video_id: '', title: '', thumbnail_url: '', language: lang, start_time: 0, start_time_int: 0, content: '', surface_form: null, match_type: 'recommendation' });
+            setShowRecs(false); setShowChat('guided');
           }}
           onPracticeItem={(itemId, itemType, lang) => {
             setGuidedTarget({ itemId, itemType });
-            setRecResult({
-              video_id: '', title: '', thumbnail_url: '',
-              language: lang, start_time: 0, start_time_int: 0,
-              content: '', surface_form: null, match_type: 'recommendation',
-            });
-            setShowRecs(false);
-            setShowChat('guided');
+            setRecResult({ video_id: '', title: '', thumbnail_url: '', language: lang, start_time: 0, start_time_int: 0, content: '', surface_form: null, match_type: 'recommendation' });
+            setShowRecs(false); setShowChat('guided');
           }}
-          onPracticeSentence={(result) => {
-            setGuidedTarget(null);
-            setRecResult(result);
-            setShowRecs(false);
-            setShowChat('guided');
-          }}
+          onPracticeSentence={(result) => { setGuidedTarget(null); setRecResult(result); setShowRecs(false); setShowChat('guided'); }}
           onSearch={(term) => { addTerm(term); setShowRecs(false); }}
           onClose={() => setShowRecs(false)}
           onOpenBooks={() => { setShowBooks(true); setShowRecs(false); setShowSettings(false); setShowPlaylist(false); setShowReview(false); }}
@@ -251,16 +215,8 @@ export default function App() {
         />
       )}
 
-      <SearchBar
-        terms={terms}
-        onAddTerm={addTerm}
-        onRemoveTerm={removeTerm}
-        loading={loading}
-      />
-
-      {error && <p style={{ color: 'red', marginTop: '12px' }}>{error}</p>}
-
-      {activeResult && (
+      {/* Player content — only when no panel is open */}
+      {!anyPanelOpen && activeResult && (
         <>
           {query && currentResult && !recResult && (
             <p style={{ margin: '20px 0 14px', fontSize: '22px', lineHeight: 1.4, color: '#1a237e' }}>
@@ -286,35 +242,17 @@ export default function App() {
 
           {token && !showChat && (
             <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-              <button
-                onClick={() => setShowChat('free')}
-                style={{
-                  padding: '8px 20px', borderRadius: '6px',
-                  border: '1px solid #c5cae9', background: '#fff',
-                  color: '#1a237e', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                }}
-              >
+              <button onClick={() => setShowChat('free')} style={{ padding: '8px 20px', borderRadius: '6px', border: '1px solid #c5cae9', background: '#fff', color: '#1a237e', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
                 Free Chat
               </button>
-              <button
-                onClick={() => setShowChat('guided')}
-                style={{
-                  padding: '8px 20px', borderRadius: '6px',
-                  border: '1px solid #ffe082', background: '#fff',
-                  color: '#e65100', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
-                }}
-              >
+              <button onClick={() => setShowChat('guided')} style={{ padding: '8px 20px', borderRadius: '6px', border: '1px solid #ffe082', background: '#fff', color: '#e65100', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
                 Guided Practice
               </button>
             </div>
           )}
 
           {token && showChat === 'free' && (
-            <FreeChatPage
-              result={activeResult}
-              token={token}
-              onClose={() => setShowChat(null)}
-            />
+            <FreeChatPage result={activeResult} token={token} onClose={() => setShowChat(null)} />
           )}
 
           {token && showChat === 'guided' && (
@@ -324,23 +262,27 @@ export default function App() {
               targetItemId={guidedTarget?.itemId}
               targetItemType={guidedTarget?.itemType}
               onClose={() => { setShowChat(null); setGuidedTarget(null); }}
-              onSessionComplete={() => {
-                setShowChat(null);
-                setGuidedTarget(null);
-                setShowRecs(true);
-              }}
+              onSessionComplete={() => { setShowChat(null); setGuidedTarget(null); setShowRecs(true); }}
             />
           )}
         </>
       )}
 
-      {loading && !currentResult && (
+      {!anyPanelOpen && loading && !currentResult && (
         <p style={{ color: '#888', marginTop: '24px', textAlign: 'center' }}>Searching…</p>
       )}
 
-      {!loading && query && results.length === 0 && (
+      {!anyPanelOpen && !loading && query && results.length === 0 && (
         <p style={{ color: '#888', marginTop: '24px', textAlign: 'center' }}>No results found.</p>
       )}
     </div>
   );
+}
+
+function navBtnStyle(active: boolean) {
+  return {
+    padding: '6px 14px', borderRadius: '6px',
+    border: '1px solid #c5cae9', background: active ? '#e8eaf6' : '#fff',
+    color: '#1a237e', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+  } as const;
 }

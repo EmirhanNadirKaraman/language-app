@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { listBooks, uploadBook, getBook } from '../api/books';
+import { listBooks, uploadBook, getBook, deleteBook } from '../api/books';
 import type { BookDocument } from '../types';
 
 interface Props {
@@ -22,6 +22,36 @@ const STATUS_COLORS: Record<string, string> = {
   error:      '#d32f2f',
 };
 
+const LANG_LABELS: Record<string, string> = {
+  de: 'German', en: 'English', fr: 'French', es: 'Spanish',
+  it: 'Italian', pt: 'Portuguese', ja: 'Japanese', ru: 'Russian',
+  ko: 'Korean', tr: 'Turkish', pl: 'Polish', sv: 'Swedish',
+};
+
+type SortKey = 'newest' | 'oldest' | 'az' | 'za' | 'language' | 'status';
+
+function sortBooks(books: BookDocument[], key: SortKey): BookDocument[] {
+  const sorted = [...books];
+  switch (key) {
+    case 'newest':
+      return sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    case 'oldest':
+      return sorted.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    case 'az':
+      return sorted.sort((a, b) => a.title.localeCompare(b.title));
+    case 'za':
+      return sorted.sort((a, b) => b.title.localeCompare(a.title));
+    case 'language':
+      return sorted.sort((a, b) => a.language.localeCompare(b.language) || a.title.localeCompare(b.title));
+    case 'status': {
+      const order: Record<string, number> = { ready: 0, processing: 1, pending: 2, error: 3 };
+      return sorted.sort((a, b) => (order[a.status] ?? 4) - (order[b.status] ?? 4));
+    }
+    default:
+      return sorted;
+  }
+}
+
 export function BookLibraryPage({ token, onOpen, onClose }: Props) {
   const [books, setBooks]       = useState<BookDocument[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -31,43 +61,36 @@ export function BookLibraryPage({ token, onOpen, onClose }: Props) {
   const [title, setTitle]       = useState('');
   const [language, setLanguage] = useState('de');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [sortKey, setSortKey]   = useState<SortKey>('newest');
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null); // doc_id pending delete
+  const [deleting, setDeleting] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // Poll for processing books
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
-
     async function refresh() {
       try {
         const data = await listBooks(token);
         setBooks(data);
         setLoading(false);
-
         const processing = data.filter(b => b.status === 'pending' || b.status === 'processing');
-        if (processing.length > 0) {
-          timer = setTimeout(refresh, 3000);
-        }
+        if (processing.length > 0) timer = setTimeout(refresh, 3000);
       } catch (e) {
         setError((e as Error).message);
         setLoading(false);
       }
     }
-
     refresh();
     return () => clearTimeout(timer);
   }, [token]);
 
-  // Re-poll a single book when its status changes to processing
   async function pollSingle(docId: string) {
     let attempts = 0;
-    const max = 120; // ~6 min at 3s interval
     async function tick() {
-      if (attempts++ >= max) return;
+      if (attempts++ >= 120) return;
       const doc = await getBook(token, docId);
       setBooks(prev => prev.map(b => b.doc_id === docId ? doc : b));
-      if (doc.status === 'pending' || doc.status === 'processing') {
-        setTimeout(tick, 3000);
-      }
+      if (doc.status === 'pending' || doc.status === 'processing') setTimeout(tick, 3000);
     }
     setTimeout(tick, 3000);
   }
@@ -96,38 +119,60 @@ export function BookLibraryPage({ token, onOpen, onClose }: Props) {
     }
   }
 
+  async function handleDelete(docId: string) {
+    setDeleting(docId);
+    try {
+      await deleteBook(token, docId);
+      setBooks(prev => prev.filter(b => b.doc_id !== docId));
+    } catch {
+      // silently ignore — book may already be gone
+    } finally {
+      setDeleting(null);
+      setDeleteConfirm(null);
+    }
+  }
+
+  const sortedBooks = sortBooks(books, sortKey);
+
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 1000,
     }}>
       <div style={{
-        background: '#fff', borderRadius: '10px',
-        width: '640px', maxWidth: '95vw', maxHeight: '90vh',
+        background: '#fff', borderRadius: '12px',
+        width: '680px', maxWidth: '96vw', maxHeight: '92vh',
         display: 'flex', flexDirection: 'column',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
+        boxShadow: '0 12px 40px rgba(0,0,0,0.22)',
       }}>
         {/* Header */}
         <div style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '16px 20px', borderBottom: '1px solid #eee',
+          padding: '18px 22px 14px', borderBottom: '1px solid #eee',
         }}>
-          <h2 style={{ margin: 0, fontSize: '18px', color: '#1a237e' }}>My Books</h2>
+          <div>
+            <h2 style={{ margin: 0, fontSize: '18px', color: '#1a237e' }}>My Books</h2>
+            {books.length > 0 && (
+              <span style={{ fontSize: '12px', color: '#999' }}>
+                {books.filter(b => b.status === 'ready').length} ready · {books.length} total
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#666' }}
+            style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#888', lineHeight: 1 }}
           >
-            ✕
+            ×
           </button>
         </div>
 
         {/* Upload form */}
-        <form onSubmit={handleUpload} style={{ padding: '16px 20px', borderBottom: '1px solid #eee' }}>
+        <form onSubmit={handleUpload} style={{ padding: '14px 22px', borderBottom: '1px solid #eee', background: '#fafbff' }}>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div style={{ flex: '1 1 220px' }}>
-              <label style={{ fontSize: '12px', color: '#555', display: 'block', marginBottom: '4px' }}>
-                PDF file
+            <div style={{ flex: '1 1 200px' }}>
+              <label style={{ fontSize: '11px', color: '#666', display: 'block', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                PDF File
               </label>
               <input
                 ref={fileRef}
@@ -138,11 +183,11 @@ export function BookLibraryPage({ token, onOpen, onClose }: Props) {
                   setSelectedFile(f);
                   if (f && !title) setTitle(f.name.replace(/\.pdf$/i, ''));
                 }}
-                style={{ fontSize: '13px', width: '100%' }}
+                style={{ fontSize: '12px', width: '100%' }}
               />
             </div>
-            <div style={{ flex: '1 1 160px' }}>
-              <label style={{ fontSize: '12px', color: '#555', display: 'block', marginBottom: '4px' }}>
+            <div style={{ flex: '1 1 150px' }}>
+              <label style={{ fontSize: '11px', color: '#666', display: 'block', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Title
               </label>
               <input
@@ -150,40 +195,32 @@ export function BookLibraryPage({ token, onOpen, onClose }: Props) {
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Book title"
-                style={{
-                  width: '100%', padding: '6px 8px', border: '1px solid #ccc',
-                  borderRadius: '5px', fontSize: '13px', boxSizing: 'border-box',
-                }}
+                style={{ width: '100%', padding: '6px 8px', border: '1px solid #ccc', borderRadius: '6px', fontSize: '13px', boxSizing: 'border-box' }}
               />
             </div>
-            <div style={{ flex: '0 0 80px' }}>
-              <label style={{ fontSize: '12px', color: '#555', display: 'block', marginBottom: '4px' }}>
+            <div style={{ flex: '0 0 90px' }}>
+              <label style={{ fontSize: '11px', color: '#666', display: 'block', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Language
               </label>
               <select
                 value={language}
                 onChange={e => setLanguage(e.target.value)}
-                style={{
-                  width: '100%', padding: '6px 8px', border: '1px solid #ccc',
-                  borderRadius: '5px', fontSize: '13px',
-                }}
+                style={{ width: '100%', padding: '6px 8px', border: '1px solid #ccc', borderRadius: '6px', fontSize: '13px' }}
               >
-                <option value="de">DE</option>
-                <option value="en">EN</option>
-                <option value="fr">FR</option>
-                <option value="es">ES</option>
-                <option value="it">IT</option>
+                {Object.entries(LANG_LABELS).map(([code, label]) => (
+                  <option key={code} value={code}>{label}</option>
+                ))}
               </select>
             </div>
             <button
               type="submit"
               disabled={!selectedFile || uploading}
               style={{
-                padding: '6px 16px', background: '#1a237e', color: '#fff',
-                border: 'none', borderRadius: '5px', fontSize: '13px',
+                padding: '7px 18px', background: '#1a237e', color: '#fff',
+                border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600,
                 cursor: selectedFile && !uploading ? 'pointer' : 'not-allowed',
                 opacity: selectedFile && !uploading ? 1 : 0.5,
-                whiteSpace: 'nowrap',
+                whiteSpace: 'nowrap', flexShrink: 0,
               }}
             >
               {uploading ? 'Uploading…' : 'Upload'}
@@ -194,37 +231,81 @@ export function BookLibraryPage({ token, onOpen, onClose }: Props) {
           )}
         </form>
 
+        {/* Sort bar */}
+        {books.length > 1 && (
+          <div style={{ padding: '8px 22px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', gap: '8px', background: '#fff' }}>
+            <span style={{ fontSize: '11px', color: '#999', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+              Sort
+            </span>
+            {([
+              ['newest', 'Newest'],
+              ['oldest', 'Oldest'],
+              ['az', 'A → Z'],
+              ['za', 'Z → A'],
+              ['language', 'Language'],
+              ['status', 'Status'],
+            ] as [SortKey, string][]).map(([key, label]) => (
+              <button
+                key={key}
+                onClick={() => setSortKey(key)}
+                style={{
+                  padding: '3px 10px', fontSize: '12px', borderRadius: '12px',
+                  border: '1px solid ' + (sortKey === key ? '#1a237e' : '#ddd'),
+                  background: sortKey === key ? '#e8eaf6' : '#fff',
+                  color: sortKey === key ? '#1a237e' : '#555',
+                  cursor: 'pointer', fontWeight: sortKey === key ? 600 : 400,
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Book list */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 22px' }}>
           {loading && (
-            <p style={{ color: '#888', textAlign: 'center', marginTop: '24px' }}>Loading…</p>
+            <p style={{ color: '#888', textAlign: 'center', marginTop: '32px' }}>Loading…</p>
           )}
           {error && (
-            <p style={{ color: '#d32f2f', textAlign: 'center', marginTop: '24px' }}>{error}</p>
+            <p style={{ color: '#d32f2f', textAlign: 'center', marginTop: '32px' }}>{error}</p>
           )}
           {!loading && !error && books.length === 0 && (
-            <p style={{ color: '#888', textAlign: 'center', marginTop: '24px' }}>
-              No books yet. Upload a PDF to get started.
-            </p>
+            <div style={{ textAlign: 'center', marginTop: '40px', color: '#aaa' }}>
+              <div style={{ fontSize: '32px', marginBottom: '10px' }}>📚</div>
+              <p style={{ margin: 0, fontSize: '14px' }}>No books yet.</p>
+              <p style={{ margin: '4px 0 0', fontSize: '13px' }}>Upload a PDF to get started.</p>
+            </div>
           )}
-          {books.map(book => (
+
+          {sortedBooks.map(book => (
             <div
               key={book.doc_id}
               style={{
                 display: 'flex', alignItems: 'center', gap: '12px',
-                padding: '10px 0', borderBottom: '1px solid #f0f0f0',
+                padding: '12px 0', borderBottom: '1px solid #f4f4f4',
               }}
             >
+              {/* Book icon */}
+              <div style={{
+                flexShrink: 0, width: '36px', height: '48px',
+                background: '#e8eaf6', borderRadius: '4px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '18px', color: '#5c6bc0',
+              }}>
+                📖
+              </div>
+
+              {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: '14px', color: '#222', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontWeight: 600, fontSize: '14px', color: '#1a237e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {book.title}
                 </div>
-                <div style={{ fontSize: '12px', color: '#888', marginTop: '2px' }}>
-                  {book.filename}
-                  {book.total_pages != null && ` · ${book.total_pages} pages`}
-                  {' · '}
-                  {book.language.toUpperCase()}
-                  {' · '}
+                <div style={{ fontSize: '12px', color: '#888', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <span>{LANG_LABELS[book.language] ?? book.language.toUpperCase()}</span>
+                  {book.total_pages != null && (
+                    <span>{book.total_pages} pages</span>
+                  )}
                   <span style={{ color: STATUS_COLORS[book.status] ?? '#888', fontWeight: 500 }}>
                     {STATUS_LABELS[book.status] ?? book.status}
                   </span>
@@ -235,22 +316,49 @@ export function BookLibraryPage({ token, onOpen, onClose }: Props) {
                   </div>
                 )}
               </div>
-              {book.status === 'ready' && (
-                <button
-                  onClick={() => onOpen(book)}
-                  style={{
-                    padding: '5px 14px', background: '#e8eaf6', color: '#1a237e',
-                    border: '1px solid #c5cae9', borderRadius: '5px',
-                    fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  Read
-                </button>
-              )}
-              {(book.status === 'pending' || book.status === 'processing') && (
-                <span style={{ fontSize: '12px', color: '#f57c00' }}>⏳</span>
-              )}
+
+              {/* Actions */}
+              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                {book.status === 'ready' && (
+                  <button
+                    onClick={() => onOpen(book)}
+                    style={{
+                      padding: '5px 14px', background: '#1a237e', color: '#fff',
+                      border: 'none', borderRadius: '6px',
+                      fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    Read
+                  </button>
+                )}
+                {(book.status === 'pending' || book.status === 'processing') && (
+                  <span style={{ fontSize: '13px', color: '#f57c00' }}>⏳</span>
+                )}
+                {deleteConfirm === book.doc_id ? (
+                  <>
+                    <button
+                      onClick={() => handleDelete(book.doc_id)}
+                      disabled={deleting === book.doc_id}
+                      style={{ padding: '4px 10px', background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '5px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      {deleting === book.doc_id ? '…' : 'Confirm'}
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(null)}
+                      style={{ padding: '4px 10px', background: '#eee', color: '#444', border: '1px solid #ddd', borderRadius: '5px', fontSize: '11px', cursor: 'pointer' }}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setDeleteConfirm(book.doc_id)}
+                    style={{ padding: '5px 10px', background: '#fff', color: '#d32f2f', border: '1px solid #ffcdd2', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

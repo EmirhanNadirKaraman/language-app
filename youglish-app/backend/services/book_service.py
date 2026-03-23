@@ -646,6 +646,44 @@ async def save_llm_correction(
     return dict(row) if row else None
 
 
+async def delete_document(pool: asyncpg.Pool, doc_id: str, user_id: str, is_admin: bool = False) -> bool:
+    """
+    Delete a book document and all its pages/blocks (cascading FK).
+    Returns True if deleted, False if not found or not authorised.
+    """
+    if is_admin:
+        result = await pool.execute(
+            "DELETE FROM book_documents WHERE doc_id = $1",
+            doc_id,
+        )
+    else:
+        result = await pool.execute(
+            "DELETE FROM book_documents WHERE doc_id = $1 AND user_id = $2::uuid",
+            doc_id, user_id,
+        )
+    # asyncpg returns "DELETE N" string
+    return result.split()[-1] != "0"
+
+
+async def delete_page(pool: asyncpg.Pool, doc_id: str, page_number: int, user_id: str, is_admin: bool = False) -> bool:
+    """
+    Delete a single page (and its blocks) from a document.
+    Returns True if deleted.
+    """
+    if not is_admin:
+        doc = await get_document(pool, doc_id, user_id)
+        if not doc:
+            return False
+    row = await pool.fetchrow(
+        "SELECT page_id FROM book_pages WHERE doc_id = $1 AND page_number = $2",
+        doc_id, page_number,
+    )
+    if not row:
+        return False
+    await pool.execute("DELETE FROM book_pages WHERE page_id = $1", row["page_id"])
+    return True
+
+
 async def list_low_confidence_blocks(
     pool: asyncpg.Pool,
     doc_id: str,
