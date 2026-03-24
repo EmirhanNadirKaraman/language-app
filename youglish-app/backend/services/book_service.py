@@ -474,6 +474,7 @@ async def list_pages(pool: asyncpg.Pool, doc_id: str) -> list[dict]:
     rows = await pool.fetch(
         """
         SELECT p.page_id, p.page_number, p.is_scanned, p.image_path,
+               p.sentence_count,
                COUNT(b.block_id) AS block_count
           FROM book_pages p
           LEFT JOIN book_blocks b ON b.page_id = p.page_id
@@ -488,11 +489,21 @@ async def list_pages(pool: asyncpg.Pool, doc_id: str) -> list[dict]:
             "page_id":     r["page_id"],
             "page_number": r["page_number"],
             "is_scanned":  r["is_scanned"],
-            "has_image":   r["image_path"] is not None,
-            "block_count": r["block_count"],
+            "has_image":      r["image_path"] is not None,
+            "block_count":    r["block_count"],
+            "sentence_count": r["sentence_count"],
         }
         for r in rows
     ]
+
+
+async def update_sentence_count(
+    pool: asyncpg.Pool, doc_id: str, page_number: int, count: int
+) -> None:
+    await pool.execute(
+        "UPDATE book_pages SET sentence_count = $1 WHERE doc_id = $2 AND page_number = $3",
+        count, doc_id, page_number,
+    )
 
 
 async def get_page_detail(pool: asyncpg.Pool, doc_id: str, page_number: int) -> dict | None:

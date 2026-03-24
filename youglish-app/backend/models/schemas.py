@@ -614,6 +614,11 @@ class BookPageSummary(BaseModel):
     is_scanned: bool
     has_image: bool
     block_count: int
+    sentence_count: int | None = None
+
+
+class SentenceCountUpdate(BaseModel):
+    sentence_count: int
 
 
 class BookBlockRead(BaseModel):

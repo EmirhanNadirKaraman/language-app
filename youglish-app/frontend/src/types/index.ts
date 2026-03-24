@@ -314,6 +314,7 @@ export interface BookPageSummary {
   page_id: number;
   page_number: number;
   is_scanned: boolean;
+  sentence_count?: number;
   has_image: boolean;
   block_count: number;
 }

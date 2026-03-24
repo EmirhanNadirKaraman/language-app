@@ -236,12 +236,12 @@ export function SelectionPanel({
             <button
               onClick={handleTranslate}
               disabled={translating || !sentenceText}
-              style={llmBtnStyle('#1565c0', translating)}
+              style={llmBtnStyle('#1565c0', translating, dk)}
             >
               {translating ? 'Translating…' : 'Translate sentence'}
             </button>
           ) : (
-            <div style={llmResultStyle('#e3f2fd', '#0d47a1')}>
+            <div style={llmResultStyle(dk ? '#0d253f' : '#e3f2fd', dk ? '#90caf9' : '#0d47a1')}>
               <div style={{ fontSize: '10px', color: '#42a5f5', marginBottom: '4px', fontStyle: 'normal', fontWeight: 600 }}>
                 Translation
               </div>
@@ -256,12 +256,12 @@ export function SelectionPanel({
             <button
               onClick={handleExplain}
               disabled={explaining || !sentenceText}
-              style={llmBtnStyle('#2e7d32', explaining)}
+              style={llmBtnStyle('#2e7d32', explaining, dk)}
             >
               {explaining ? 'Explaining…' : 'Explain in context'}
             </button>
           ) : (
-            <div style={llmResultStyle('#e8f5e9', '#1b5e20')}>
+            <div style={llmResultStyle(dk ? '#0d2a12' : '#e8f5e9', dk ? '#a5d6a7' : '#1b5e20')}>
               <div style={{ fontSize: '10px', color: '#66bb6a', marginBottom: '4px', fontStyle: 'normal', fontWeight: 600 }}>
                 Explanation
               </div>
@@ -395,16 +395,18 @@ export function SelectionPanel({
 function SavedSelectionRow({
   selection,
   onDelete,
+  dk = false,
 }: {
   selection: ReadingSelection;
   onDelete: () => void;
+  dk?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
     <div style={{
-      background: '#fff',
-      border: '1px solid #e8eaf6',
+      background: dk ? '#1e1e2e' : '#fff',
+      border: `1px solid ${dk ? '#333' : '#e8eaf6'}`,
       borderRadius: '5px',
       marginBottom: '6px',
       overflow: 'hidden',
@@ -419,7 +421,7 @@ function SavedSelectionRow({
         }}
         onClick={() => setExpanded(e => !e)}
       >
-        <span style={{ fontSize: '13px', fontWeight: 600, color: '#1a237e', flex: 1 }}>
+        <span style={{ fontSize: '13px', fontWeight: 600, color: dk ? '#9fa8da' : '#1a237e', flex: 1 }}>
           {selection.surface_text}
         </span>
         <button
@@ -435,9 +437,9 @@ function SavedSelectionRow({
         <span style={{ fontSize: '11px', color: '#aaa' }}>{expanded ? '▲' : '▼'}</span>
       </div>
       {expanded && (
-        <div style={{ padding: '6px 10px 10px', borderTop: '1px solid #f0f0f0', fontSize: '12px', color: '#555' }}>
+        <div style={{ padding: '6px 10px 10px', borderTop: `1px solid ${dk ? '#333' : '#f0f0f0'}`, fontSize: '12px', color: dk ? '#aaa' : '#555' }}>
           {selection.note && (
-            <div style={{ marginBottom: '6px', color: '#333' }}>
+            <div style={{ marginBottom: '6px', color: dk ? '#ccc' : '#333' }}>
               <em>{selection.note}</em>
             </div>
           )}
@@ -454,13 +456,13 @@ function SavedSelectionRow({
 
 // ── Style helpers ─────────────────────────────────────────────────────────────
 
-function llmBtnStyle(color: string, disabled: boolean): React.CSSProperties {
+function llmBtnStyle(color: string, disabled: boolean, dk = false): React.CSSProperties {
   return {
     width: '100%',
     padding: '7px 12px',
     borderRadius: '5px',
     border: `1px solid ${color}40`,
-    background: disabled ? '#f5f5f5' : `${color}10`,
+    background: disabled ? (dk ? '#2a2a2a' : '#f5f5f5') : `${color}10`,
     color: disabled ? '#aaa' : color,
     fontSize: '13px',
     fontWeight: 600,

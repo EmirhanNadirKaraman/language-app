@@ -139,6 +139,20 @@ export async function deletePage(token: string, docId: string, pageNumber: numbe
   await assertOk(res);
 }
 
+export async function patchPageSentenceCount(
+  token: string,
+  docId: string,
+  pageNumber: number,
+  sentenceCount: number,
+): Promise<void> {
+  const res = await fetch(`/api/v1/books/${docId}/pages/${pageNumber}/sentence-count`, {
+    method: 'PATCH',
+    headers: jsonHeaders(token),
+    body: JSON.stringify({ sentence_count: sentenceCount }),
+  });
+  await assertOk(res);
+}
+
 export async function batchRepairPage(
   token: string,
   docId: string,

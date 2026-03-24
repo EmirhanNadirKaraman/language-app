@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
-  getPage, listPages, patchBlock, repairBlock, batchRepairPage, deletePage,
+  getPage, listPages, patchBlock, repairBlock, batchRepairPage, deletePage, patchPageSentenceCount,
 } from '../api/books';
 import { getPageWordStatuses, getPageSelections, listAllSelections, translateSentence } from '../api/reading';
 import type { BookDocument, BookPageDetail, BookBlock, ReadingSelection } from '../types';
@@ -8,6 +8,8 @@ import { SelectionPanel } from './SelectionPanel';
 import type { SelectedToken } from './SelectionPanel';
 import { SelectionReviewPanel } from './SelectionReviewPanel';
 import { WORD_COLORS } from '../config/wordColors';
+import { useWordStatus } from '../hooks/useWordStatus';
+import { WordStatusPicker } from './WordStatusPicker';
 
 interface Props {
   token: string;
@@ -47,6 +49,7 @@ interface InteractiveBlockProps {
   savedAnchorKeys: Set<string>;
   wordStatuses: Record<string, string>;
   onTokenClick: (blockId: number, tokenIndex: number, text: string) => void;
+  onWordRightClick?: (word: string) => void;
   translation?: string | null;
   showTranslation: boolean;
   onRequestTranslation: () => void;
@@ -55,7 +58,7 @@ interface InteractiveBlockProps {
 }
 
 function InteractiveBlock({
-  block, selectedKeys, savedAnchorKeys, wordStatuses, onTokenClick,
+  block, selectedKeys, savedAnchorKeys, wordStatuses, onTokenClick, onWordRightClick,
   translation, showTranslation, onRequestTranslation, translating, dk,
 }: InteractiveBlockProps) {
   const tokens = useMemo(() => tokenizeBlock(block.display_text), [block.display_text]);
@@ -92,6 +95,7 @@ function InteractiveBlock({
           return (
             <span key={tok.index} style={tokenStyle}
               onClick={() => onTokenClick(block.block_id, tok.index, tok.text)}
+              onContextMenu={onWordRightClick ? (e => { e.preventDefault(); onWordRightClick(tok.text); }) : undefined}
               title={isSaved ? 'Saved' : undefined}
             >
               {tok.text}
@@ -139,11 +143,12 @@ interface SentenceCardProps {
   dk?: boolean;
   autoMark?: boolean;
   onTokenClick?: (blockId: number, tokenIndex: number, text: string) => void;
+  onWordRightClick?: (word: string) => void;
   selectedKeys?: Set<string>;
   savedAnchorKeys?: Set<string>;
 }
 
-function SentenceCard({ sentence, language, token, wordStatuses, onSkip, onNext, isLast, dk, autoMark, onTokenClick, selectedKeys, savedAnchorKeys }: SentenceCardProps) {
+function SentenceCard({ sentence, blockId, language, token, wordStatuses, onSkip, onNext, isLast, dk, autoMark, onTokenClick, onWordRightClick, selectedKeys, savedAnchorKeys }: SentenceCardProps) {
   const [translation, setTranslation] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
 
@@ -186,6 +191,7 @@ function SentenceCard({ sentence, language, token, wordStatuses, onSkip, onNext,
           return (
             <span key={tok.index} style={style}
               onClick={onTokenClick ? () => onTokenClick(blockId, tok.index, tok.text) : undefined}
+              onContextMenu={onWordRightClick ? (e => { e.preventDefault(); onWordRightClick(tok.text); }) : undefined}
             >
               {tok.text}
             </span>
@@ -396,7 +402,7 @@ function btnStyle(bg: string, color: string) {
 // ── Main reader ───────────────────────────────────────────────────────────────
 
 export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }: Props) {
-  const dk = darkMode ?? false;
+  const [dk, setDk] = useState(darkMode ?? false);
   const th = {
     bg:     dk ? '#121212' : '#fff',
     bgBar:  dk ? '#1a1a2e' : '#f8f9ff',
@@ -409,7 +415,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   const [pageNum, setPageNum]       = useState(1);
   const [inputPage, setInputPage]   = useState('1');
   const [pageData, setPageData]     = useState<BookPageDetail | null>(null);
-  const [loading, setLoading]       = useState(false);
+  const [loading, setLoading]       = useState(true);
   const [error, setError]           = useState<string | null>(null);
   const [showImage, setShowImage]         = useState(false);
   const [showReview, setShowReview]       = useState(false);
@@ -436,6 +442,10 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   const [pageList, setPageList] = useState<number[]>([]);
   // Bump to force page reload when pageNum stays same but actualPageNumber changes (e.g. after deletion)
   const [pageLoadTrigger, setPageLoadTrigger] = useState(0);
+  // Gate: don't call loadPage until we know the real page numbers
+  const [pageListLoaded, setPageListLoaded] = useState(false);
+  // Sentence count per actual page number — populated from DB, then filled by background preloader
+  const [sentenceCountMap, setSentenceCountMap] = useState<Record<number, number>>({});
 
   // Auto-mark words on skip — initialized from global pref, overridable per session
   const [autoMark, setAutoMark] = useState(autoMarkKnown ?? false);
@@ -446,6 +456,9 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
 
   // Ref for keyboard navigation — always has the latest navigate logic without stale closure
   const navigateRef = useRef<(delta: number) => void>(() => {});
+
+  // Word status picker (right-click)
+  const { selected: wsSelected, state: wsState, selectWord, updateStatus, dismiss: wsDismiss } = useWordStatus(token, doc.language);
 
   // Interactive reading state
   const [selectedKeys, setSelectedKeys]       = useState<Set<string>>(new Set());
@@ -484,14 +497,48 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
     }
   }, [token, doc.doc_id, doc.language]);
 
-  // Load the ordered page list once on mount so we can map positions → actual page_numbers
+  // Load the ordered page list once on mount; loadPage is gated on this
   useEffect(() => {
     listPages(token, doc.doc_id)
-      .then(pages => setPageList(pages.map(p => p.page_number)))
-      .catch(() => {}); // non-fatal — falls back to sequential numbering
+      .then(pages => {
+        setPageList(pages.map(p => p.page_number));
+        // Seed sentence counts already saved in DB
+        const known: Record<number, number> = {};
+        for (const p of pages) {
+          if (p.sentence_count != null) known[p.page_number] = p.sentence_count;
+        }
+        if (Object.keys(known).length > 0) setSentenceCountMap(known);
+      })
+      .catch(() => {})
+      .finally(() => setPageListLoaded(true));
   }, [token, doc.doc_id]);
 
+  // Background preloader: compute and persist sentence counts for pages not yet cached
   useEffect(() => {
+    if (!pageListLoaded || pageList.length === 0) return;
+    const abort = { cancelled: false };
+    (async () => {
+      for (const pNum of pageList) {
+        if (abort.cancelled) break;
+        // Skip if already cached from DB
+        if (sentenceCountMap[pNum] !== undefined) continue; // eslint-disable-line react-hooks/exhaustive-deps
+        try {
+          const data = await getPage(token, doc.doc_id, pNum);
+          if (abort.cancelled) break;
+          const count = data.blocks
+            .filter(b => !b.is_header_footer && b.display_text && b.block_type !== 'ignored')
+            .flatMap(b => splitSentences(b.display_text))
+            .length;
+          setSentenceCountMap(prev => ({ ...prev, [pNum]: count }));
+          patchPageSentenceCount(token, doc.doc_id, pNum, count).catch(() => {});
+        } catch { /* skip */ }
+      }
+    })();
+    return () => { abort.cancelled = true; };
+  }, [pageListLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!pageListLoaded) return; // wait for real page numbers before fetching
     loadPage(actualPageNumber); // eslint-disable-line react-hooks/exhaustive-deps
     setInputPage(String(pageNum));
     setBatchMsg(null);
@@ -500,7 +547,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
     setImageSrc(null);
     imagePageRef.current = null;
     if (showReview || showImage) loadPageImage(); // eslint-disable-line react-hooks/exhaustive-deps
-  }, [pageNum, pageLoadTrigger, loadPage]); // actualPageNumber/showReview/showImage via closure
+  }, [pageNum, pageLoadTrigger, loadPage, pageListLoaded]); // actualPageNumber/showReview/showImage via closure
 
   async function loadPageImage() {
     if (imagePageRef.current === actualPageNumber) return;
@@ -518,6 +565,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   function navigate(delta: number) {
     const next = Math.max(1, Math.min(totalPages, pageNum + delta));
     setPageNum(next);
+    setSentenceIdx(0);
   }
 
   // Keep navigateRef current so the keyboard handler never has stale closures
@@ -547,8 +595,8 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as Element).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (e.key === 'a' || e.key === 'A') navigateRef.current(-1);
-      if (e.key === 'd' || e.key === 'D') navigateRef.current(1);
+      if (e.key === 'a' || e.key === 'A' || e.key === 'ArrowLeft')  navigateRef.current(-1);
+      if (e.key === 'd' || e.key === 'D' || e.key === 'ArrowRight') navigateRef.current(1);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -557,7 +605,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   function handlePageInput(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Enter') {
       const n = parseInt(inputPage, 10);
-      if (!isNaN(n) && n >= 1 && n <= totalPages) setPageNum(n);
+      if (!isNaN(n) && n >= 1 && n <= totalPages) { setPageNum(n); setSentenceIdx(0); }
       else setInputPage(String(pageNum));
     }
   }
@@ -587,13 +635,19 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
     setDeletingPage(true);
     try {
       await deletePage(token, doc.doc_id, actualPageNumber);
-      const newPageList = pageList.filter(n => n !== actualPageNumber);
+      // Re-fetch authoritative page list; fall back to local filter if request fails
+      const freshPages = await listPages(token, doc.doc_id).catch(() => null);
+      const newPageList = freshPages
+        ? freshPages.map(p => p.page_number)
+        : pageList.filter(n => n !== actualPageNumber);
       setPageList(newPageList);
-      if (pageNum > newPageList.length) {
-        // Was on the last page — step back (pageNum change triggers effect)
-        setPageNum(Math.max(1, newPageList.length));
+      if (newPageList.length === 0) {
+        // Book is empty — nothing to show
+        setPageData(null);
+        setError('No pages remaining.');
+      } else if (pageNum > newPageList.length) {
+        setPageNum(newPageList.length);
       } else {
-        // Same display position, but actualPageNumber changed — force reload
         setPageLoadTrigger(t => t + 1);
       }
     } catch { /* ignore */ }
@@ -711,6 +765,12 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   const hasLowConf    = pageData?.blocks.some(b => b.ocr_confidence !== null && b.ocr_confidence < 0.65 && b.correction_status === 'none') ?? false;
   const showRightPanel = hasSelection || showSaved; // Edit panel is now annotation split view
 
+  // Global sentence counter
+  const sentencesBefore = pageList.slice(0, pageNum - 1).reduce((acc, pNum) => acc + (sentenceCountMap[pNum] ?? 0), 0);
+  const globalSentenceIdx = sentencesBefore + sentenceIdx + 1;
+  const allPagesCounted = pageList.length > 0 && pageList.every(pNum => sentenceCountMap[pNum] !== undefined);
+  const totalSentences = allPagesCounted ? pageList.reduce((acc, pNum) => acc + (sentenceCountMap[pNum] ?? 0), 0) : null;
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: th.bg, zIndex: 900, display: 'flex', flexDirection: 'column', overflow: 'hidden', color: th.text }}>
 
@@ -748,6 +808,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
             />
             Auto-mark
           </label>
+          <button onClick={() => setDk(d => !d)} style={topBtnStyle(dk, dk)}>{dk ? 'Light' : 'Dark'}</button>
           {pageData?.has_image && (
             <button onClick={() => { setShowImage(s => !s); if (!showImage) loadPageImage(); }} style={topBtnStyle(showImage, dk)}>Scan</button>
           )}
@@ -852,19 +913,13 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
 
         {/* ── Normal reading pane (non-edit) ────────────────────────────────── */}
         {!(showReview && !hasSelection && !showSaved) && (<>
-        <div style={{ flex: (hasSelection || showSaved) ? '1 1 55%' : '1 1 100%', overflowY: 'auto', padding: showImage ? '0' : '24px', transition: 'flex 0.2s' }}>
+        <div style={{ flex: (hasSelection || showSaved) ? '1 1 55%' : showImage ? '1 1 55%' : '1 1 100%', overflowY: 'auto', padding: '24px', transition: 'flex 0.2s' }}>
           {loading && <p style={{ color: th.muted, textAlign: 'center', marginTop: '48px' }}>Loading page…</p>}
           {error   && <p style={{ color: '#d32f2f', textAlign: 'center', marginTop: '48px' }}>{error}</p>}
 
           {!loading && !error && pageData && (
             <>
-              {showImage && pageData.has_image && (
-                imageSrc
-                  ? <img src={imageSrc} alt={`Page ${pageNum}`} style={{ width: '100%', display: 'block' }} />
-                  : <p style={{ textAlign: 'center', color: th.muted, padding: '24px' }}>Loading scan…</p>
-              )}
-
-              {!showImage && readingMode === 'page' && (
+              {readingMode === 'page' && (
                 <div style={{ maxWidth: '680px', margin: '0 auto' }}>
                   {visibleBlocks.length === 0 && (
                     <p style={{ color: th.muted, textAlign: 'center', marginTop: '48px' }}>No text content on this page.</p>
@@ -877,6 +932,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                       savedAnchorKeys={savedAnchorKeys}
                       wordStatuses={wordStatuses}
                       onTokenClick={handleTokenClick}
+                      onWordRightClick={selectWord}
                       translation={translations[block.block_id] ?? null}
                       showTranslation={shownTranslations.has(block.block_id)}
                       onRequestTranslation={() => requestTranslation(block.block_id, block.display_text)}
@@ -887,14 +943,16 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                 </div>
               )}
 
-              {!showImage && readingMode === 'sentence' && (
+              {readingMode === 'sentence' && (
                 <div style={{ padding: '32px 16px' }}>
                   {allSentences.length === 0 ? (
                     <p style={{ color: th.muted, textAlign: 'center' }}>No sentences on this page.</p>
                   ) : sentenceIdx < allSentences.length ? (
                     <>
                       <div style={{ textAlign: 'center', marginBottom: '16px', fontSize: '12px', color: th.muted }}>
-                        {sentenceIdx + 1} / {allSentences.length}
+                        {totalSentences !== null
+                          ? `${globalSentenceIdx} / ${totalSentences}`
+                          : `${globalSentenceIdx} / …`}
                       </div>
                       <SentenceCard
                         sentence={allSentences[sentenceIdx].sentence}
@@ -916,6 +974,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                         dk={dk}
                         autoMark={autoMark}
                         onTokenClick={handleTokenClick}
+                        onWordRightClick={selectWord}
                         selectedKeys={selectedKeys}
                         savedAnchorKeys={savedAnchorKeys}
                       />
@@ -926,6 +985,16 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
             </>
           )}
         </div>
+
+        {/* Scan image panel — side by side with text */}
+        {showImage && (imageSrc || pageData?.has_image) && (
+          <div style={{ flex: '0 0 42%', overflowY: 'auto', borderLeft: `1px solid ${th.border}`, background: dk ? '#1a1a1a' : '#f0f0f0', display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
+            {imageSrc
+              ? <img src={imageSrc} alt={`Page ${pageNum} scan`} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
+              : <p style={{ color: th.muted, padding: '24px', textAlign: 'center' }}>Loading scan…</p>
+            }
+          </div>
+        )}
 
         {/* Right panel — selections and saved (only in non-edit mode) */}
         {(hasSelection || showSaved) && pageData && (
@@ -951,6 +1020,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                 setAllDocSelections(prev => prev.filter(s => s.selection_id !== id));
               }}
               onClear={clearSelection}
+              dk={dk}
             />
           ) : (
             <SelectionReviewPanel
@@ -965,11 +1035,27 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                 setSavedSelections(prev => prev.filter(s => s.selection_id !== id));
               }}
               onClose={() => setShowSaved(false)}
+              dk={dk}
             />
           )
         )}
         </>)} {/* end normal reading pane conditional */}
       </div>
+
+      {/* Word status picker — shown at bottom when a word is right-clicked */}
+      {wsSelected && (
+        <WordStatusPicker
+          word={wsSelected}
+          lookup={wsState.lookup}
+          loading={wsState.loading}
+          saving={wsState.saving}
+          onSelect={async (wordId, status) => {
+            await updateStatus(wordId, status);
+            setWordStatuses(prev => ({ ...prev, [wsSelected.toLowerCase()]: status }));
+          }}
+          onDismiss={wsDismiss}
+        />
+      )}
     </div>
   );
 }

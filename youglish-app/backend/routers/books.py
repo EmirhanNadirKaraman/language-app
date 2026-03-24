@@ -32,6 +32,7 @@ from ..models.schemas import (
     BookPageDetail,
     BookPageSummary,
     LLMRepairResponse,
+    SentenceCountUpdate,
 )
 from ..services import book_service, book_llm_service
 
@@ -191,6 +192,20 @@ async def get_page(
         height_pt=page.get("height_pt"),
         blocks=[_row_to_block(b) for b in page["blocks"]],
     )
+
+
+@router.patch("/books/{doc_id}/pages/{page_number}/sentence-count", status_code=204)
+async def update_sentence_count(
+    doc_id: str,
+    page_number: int,
+    body: SentenceCountUpdate,
+    user=Depends(get_current_user),
+    pool=Depends(get_pool),
+):
+    doc = await book_service.get_document(pool, doc_id, str(user["user_id"]))
+    if not doc:
+        raise HTTPException(status_code=404, detail="Book not found")
+    await book_service.update_sentence_count(pool, doc_id, page_number, body.sentence_count)
 
 
 @router.get("/books/{doc_id}/pages/{page_number}/image")
