@@ -25,14 +25,12 @@ Integration tests (real DB):
   - item appearing in multiple signals gets a single entry with combined score
   - item_type='phrase' returns empty list (no data)
 """
-import math
 import uuid
 
 import pytest
 
 from backend.services.prioritization_service import (
     DEFAULT_WEIGHTS,
-    PrioritizedItem,
     ScoringWeights,
     compute_item_score,
     explain_signals,

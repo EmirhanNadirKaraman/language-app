@@ -41,8 +41,8 @@ No changes required in any downstream service.
 
 Future integration points (deferred)
 -------------------------------------
-- liked_channels / liked_genres: add weight to score_video in
-  recommendation_service once `video.channel_id` and `video.genre` exist.
+- liked_channels / liked_categories: channel and category preference multipliers
+  are now live in recommendation_service via channel_category_multiplier().
 - item_type='phrase' / 'grammar_rule': queries are already parameterised;
   add events and SRS cards for those types when ready.
 - User-configurable weights: expose ScoringWeights fields in settings_service.

@@ -25,12 +25,9 @@ export function usePlayerSentences({ result, query, onPrev, onNext }: Args) {
 
     // For word searches, expand terms to all conjugated/inflected forms
     useEffect(() => {
-        if (result.surface_form) {
-            setHighlightTerms([result.surface_form]);
-            return;
-        }
-        if (!query) return;
-        fetchWordForms(query)
+        const term = result.surface_form || query;
+        if (!term) return;
+        fetchWordForms(term)
             .then(forms => setHighlightTerms(forms.length > 0 ? forms : baseTerms))
             .catch(() => setHighlightTerms(baseTerms));
     }, [query, result.surface_form]); // eslint-disable-line react-hooks/exhaustive-deps

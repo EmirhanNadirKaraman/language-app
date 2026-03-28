@@ -31,7 +31,6 @@ import unicodedata
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Optional
 
 import asyncpg
 

@@ -11,11 +11,8 @@ Integration tests (real DB via db_pool fixture):
   - ON CONFLICT DO NOTHING: second set_cached for the same key is silently ignored
   - expired entries are treated as misses
 """
-import asyncio
 import uuid
-from datetime import datetime, timezone
 
-import pytest
 
 from backend.services.llm_cache_service import get_cached, make_cache_key, set_cached
 

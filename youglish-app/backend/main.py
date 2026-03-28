@@ -20,6 +20,8 @@ from .routers.search import router as search_router
 from .routers.srs import router as srs_router
 from .routers.videos import router as videos_router
 from .routers.words import router as words_router
+from .routers.content_requests import router as content_requests_router
+from .routers.notifications import router as notifications_router
 
 
 @asynccontextmanager
@@ -78,6 +80,8 @@ app.include_router(settings_router,        prefix="/api/v1")    # /api/v1/settin
 app.include_router(books_router,           prefix="/api/v1")    # /api/v1/books/upload, /books, /books/{id}/...
 app.include_router(reading_router,         prefix="/api/v1")    # /api/v1/books/{id}/selections, /reading/translate, /reading/explain
 app.include_router(reminders_router,       prefix="/api/v1")    # /api/v1/reminders/summary
+app.include_router(content_requests_router, prefix="/api/v1")  # /api/v1/content-requests
+app.include_router(notifications_router,    prefix="/api/v1")  # /api/v1/notifications/stream
 
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():

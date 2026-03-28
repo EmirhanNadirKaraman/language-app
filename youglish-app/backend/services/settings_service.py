@@ -7,9 +7,7 @@ import asyncpg
 
 
 DEFAULTS: dict = {
-    "liked_genres":           [],
     "liked_channels":         [],
-    "disliked_genres":        [],
     "followed_channels":      [],
     "disliked_channels":      [],
     "channel_names":          {},   # channel_id -> display name
@@ -58,13 +56,25 @@ def _coerce_settings(value) -> dict:
 
 
 async def get_preferences(pool: asyncpg.Pool, user_id: str) -> dict:
-    """Return the user's current preferences, with defaults applied."""
+    """Return the user's current preferences, with defaults applied.
+
+    Category preferences (liked/disliked) are read from user_video_category
+    and merged into the result alongside the JSON-stored settings.
+    """
     row = await pool.fetchrow(
         "SELECT settings FROM users WHERE user_id = $1::uuid",
         user_id,
     )
     raw = _coerce_settings(row["settings"]) if row else {}
-    return apply_defaults(raw)
+    prefs = apply_defaults(raw)
+
+    cat_rows = await pool.fetch(
+        "SELECT video_category, preference FROM user_video_category WHERE uid = $1",
+        user_id,
+    )
+    prefs["liked_categories"]    = [r["video_category"] for r in cat_rows if r["preference"] == "liked"]
+    prefs["disliked_categories"] = [r["video_category"] for r in cat_rows if r["preference"] == "disliked"]
+    return prefs
 
 
 async def update_preferences(
@@ -136,28 +146,7 @@ def apply_channel_action(
     }
 
 
-GenreAction = Literal["like", "dislike", "clear"]
-
-
-def apply_genre_action(prefs: dict, genre: str, action: GenreAction) -> dict:
-    liked = set(prefs.get("liked_genres") or [])
-    disliked = set(prefs.get("disliked_genres") or [])
-
-    if action == "like":
-        liked.add(genre)
-        disliked.discard(genre)
-    elif action == "dislike":
-        disliked.add(genre)
-        liked.discard(genre)
-    else:
-        liked.discard(genre)
-        disliked.discard(genre)
-
-    return {
-        **prefs,
-        "liked_genres": sorted(liked),
-        "disliked_genres": sorted(disliked),
-    }
+CategoryAction = Literal["like", "dislike", "clear"]
 
 
 async def channel_preference_action(
@@ -184,24 +173,29 @@ async def channel_preference_action(
     return apply_defaults(to_save)
 
 
-async def genre_preference_action(
+async def category_preference_action(
     pool: asyncpg.Pool,
     user_id: str,
-    genre: str,
-    action: GenreAction,
+    category: str,
+    action: CategoryAction,
 ) -> dict:
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            row = await conn.fetchrow(
-                "SELECT settings FROM users WHERE user_id = $1::uuid FOR UPDATE",
-                user_id,
-            )
-            current = apply_defaults(_coerce_settings(row["settings"]) if row else {})
-            updated = apply_genre_action(current, genre, action)
-            to_save = {k: v for k, v in updated.items() if k in DEFAULTS}
-            await conn.execute(
-                "UPDATE users SET settings = $1::jsonb WHERE user_id = $2::uuid",
-                json.dumps(to_save),
-                user_id,
-            )
-    return apply_defaults(to_save)
+    """Like, dislike, or clear a video category preference.
+
+    Writes to user_video_category (not the settings JSON blob).
+    Returns the full preferences dict so the caller gets a consistent response.
+    """
+    if action == "clear":
+        await pool.execute(
+            "DELETE FROM user_video_category WHERE uid = $1 AND video_category = $2",
+            user_id, category,
+        )
+    else:
+        await pool.execute(
+            """
+            INSERT INTO user_video_category (uid, video_category, preference)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (uid, video_category) DO UPDATE SET preference = EXCLUDED.preference
+            """,
+            user_id, category, action,
+        )
+    return await get_preferences(pool, user_id)

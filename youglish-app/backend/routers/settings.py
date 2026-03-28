@@ -3,8 +3,8 @@ from fastapi import APIRouter, Depends
 from ..core.deps import get_current_user
 from ..database import get_pool
 from ..models.schemas import (
+    CategoryPreferenceRequest,
     ChannelPreferenceRequest,
-    GenrePreferenceRequest,
     UserPreferences,
     UserPreferencesUpdate,
 )
@@ -46,15 +46,15 @@ async def set_channel_preference(
     )
 
 
-@router.put("/genre-preference", response_model=UserPreferences)
-async def set_genre_preference(
-    body: GenrePreferenceRequest,
+@router.put("/category-preference", response_model=UserPreferences)
+async def set_category_preference(
+    body: CategoryPreferenceRequest,
     pool=Depends(get_pool),
     current_user: dict = Depends(get_current_user),
 ):
-    return await settings_service.genre_preference_action(
+    return await settings_service.category_preference_action(
         pool,
         str(current_user["user_id"]),
-        body.genre,
+        body.category,
         body.action,
     )

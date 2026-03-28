@@ -29,7 +29,6 @@ HTTP tests (FastAPI client):
 """
 import uuid
 
-import pytest
 
 from backend.services.settings_service import DEFAULTS, apply_defaults, get_preferences, update_preferences
 
@@ -60,22 +59,15 @@ class TestApplyDefaults:
         result = apply_defaults({"passive_reps_for_known": 7})
         assert result["passive_reps_for_known"] == 7
         assert result["active_reps_for_known"] == DEFAULTS["active_reps_for_known"]
-        assert result["liked_genres"] == DEFAULTS["liked_genres"]
 
     def test_defaults_dict_not_mutated(self):
         original_defaults = dict(DEFAULTS)
-        apply_defaults({"liked_genres": ["news"]})
+        apply_defaults({"liked_channels": ["ch1"]})
         assert DEFAULTS == original_defaults
-
-    def test_empty_list_override(self):
-        result = apply_defaults({"liked_genres": ["comedy", "news"]})
-        assert result["liked_genres"] == ["comedy", "news"]
 
     def test_all_keys_overridden(self):
         overrides = {
-            "liked_genres":           ["sports"],
             "liked_channels":         ["channel1"],
-            "disliked_genres":        ["drama"],
             "followed_channels":      ["channel2"],
             "disliked_channels":      ["channel3"],
             "channel_names":          {"channel1": "Sports Channel"},
@@ -124,10 +116,10 @@ async def test_update_preferences_single_field(db_pool):
 async def test_update_preferences_multiple_fields(db_pool):
     user_id = await _create_user(db_pool)
     result = await update_preferences(db_pool, user_id, {
-        "liked_genres": ["news", "comedy"],
+        "liked_channels": ["channel1"],
         "passive_reps_for_known": 7,
     })
-    assert result["liked_genres"] == ["news", "comedy"]
+    assert result["liked_channels"] == ["channel1"]
     assert result["passive_reps_for_known"] == 7
     assert result["active_reps_for_known"] == DEFAULTS["active_reps_for_known"]
 
@@ -174,8 +166,8 @@ async def _auth_token(client) -> str:
 
 
 ALL_PREFERENCE_KEYS = {
-    "liked_genres", "liked_channels", "disliked_genres",
-    "followed_channels", "disliked_channels", "channel_names",
+    "liked_categories", "disliked_categories",
+    "liked_channels", "followed_channels", "disliked_channels", "channel_names",
     "passive_reps_for_known", "active_reps_for_known",
     "known_word_color", "learning_word_color", "unknown_word_color",
     "reminders_enabled",

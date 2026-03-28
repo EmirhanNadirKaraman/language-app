@@ -18,6 +18,9 @@ psycopg2-binary
 # llm
 anthropic
 
+# youtube metadata
+yt-dlp
+
 # book reading mode
 PyMuPDF
 pytesseract

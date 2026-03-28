@@ -5,7 +5,6 @@ Happy paths and the two main failure modes: duplicate email and wrong password.
 """
 import uuid
 
-import pytest
 from httpx import AsyncClient
 
 

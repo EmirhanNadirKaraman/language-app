@@ -9,7 +9,7 @@ Same two-layer pattern as playlist_service:
     score_sentence(unknown_count, due_count, priority_count, target_unknown) -> float
     rank_sentences(candidates, target_unknown, priority_ids, limit) -> list[dict]
     score_video(priority_score, duration) -> float
-    channel_genre_multiplier(channel_id, genre, prefs) -> float
+    channel_category_multiplier(channel_id, category, prefs) -> float
     rank_videos(coverage, video_meta, score_by_id, limit, prefs) -> list[dict]
 
   Async DB + orchestration:
@@ -27,11 +27,11 @@ get_prioritized_items() combines four signals:
   - frequent unknowns       (weight 2, linear rank)
   - learning-status items   (weight 1)
 
-Channel / genre preference scoring
------------------------------------
-  channel multiplier: followed×1.8, liked×1.3, disliked×0.2, else 1.0
-  genre multiplier:   liked×1.2,    disliked×0.4, else 1.0
-  final_score = base_score × channel_multiplier × genre_multiplier
+Channel / category preference scoring
+--------------------------------------
+  channel multiplier:   followed×1.8, liked×1.3, disliked×0.2, else 1.0
+  category multiplier:  liked×1.2,    disliked×0.4, else 1.0
+  final_score = base_score × channel_multiplier × category_multiplier
 """
 from __future__ import annotations
 
@@ -105,17 +105,17 @@ def score_video(priority_score: float, duration: float) -> float:
     return priority_score - duration / 10_000
 
 
-def channel_genre_multiplier(
+def channel_category_multiplier(
     channel_id: str | None,
     channel_name: str | None,
-    genre: str | None,
+    category: str | None,
     prefs: dict,
 ) -> float:
     """
-    Return a preference multiplier for a video based on its channel and genre.
+    Return a preference multiplier for a video based on its channel and category.
 
-      channel: followed×1.8, liked×1.3, disliked×0.2, else 1.0
-      genre:   liked×1.2,    disliked×0.4, else 1.0
+      channel:  followed×1.8, liked×1.3, disliked×0.2, else 1.0
+      category: liked×1.2,    disliked×0.4, else 1.0
 
     Matches by both channel_id (set via channel-action buttons) and channel_name
     (typed as free text in the Settings panel preferences).
@@ -123,8 +123,8 @@ def channel_genre_multiplier(
     followed    = set(prefs.get("followed_channels") or [])
     liked_ch    = set(prefs.get("liked_channels") or [])
     disliked_ch = set(prefs.get("disliked_channels") or [])
-    liked_g     = set(prefs.get("liked_genres") or [])
-    disliked_g  = set(prefs.get("disliked_genres") or [])
+    liked_c     = set(prefs.get("liked_categories") or [])
+    disliked_c  = set(prefs.get("disliked_categories") or [])
 
     _id   = channel_id   or ""
     _name = channel_name or ""
@@ -138,14 +138,14 @@ def channel_genre_multiplier(
     else:
         ch_mult = 1.0
 
-    if genre in liked_g:
-        g_mult = 1.2
-    elif genre in disliked_g:
-        g_mult = 0.4
+    if category in liked_c:
+        cat_mult = 1.2
+    elif category in disliked_c:
+        cat_mult = 0.4
     else:
-        g_mult = 1.0
+        cat_mult = 1.0
 
-    return ch_mult * g_mult
+    return ch_mult * cat_mult
 
 
 def rank_videos(
@@ -165,7 +165,7 @@ def rank_videos(
     Returns list of dicts with keys:
       video_id, title, thumbnail_url, language, duration,
       start_time, start_time_int, priority_score, covered_item_ids,
-      covered_count, score, channel_id, channel_name, genre
+      covered_count, score, channel_id, channel_name, category
     """
     target_ids = set(score_by_id)
     _prefs = prefs or {}
@@ -177,8 +177,8 @@ def rank_videos(
         pri_score  = sum(score_by_id.get(wid, 0.0) for wid in covered)
         channel_id   = meta.get("channel_id")
         channel_name = meta.get("channel_name")
-        genre        = meta.get("genre")
-        multiplier   = channel_genre_multiplier(channel_id, channel_name, genre, _prefs)
+        category     = meta.get("category")
+        multiplier   = channel_category_multiplier(channel_id, channel_name, category, _prefs)
         s          = score_video(pri_score, meta["duration"]) * multiplier
 
         results.append({
@@ -195,7 +195,7 @@ def rank_videos(
             "score":            s,
             "channel_id":       channel_id,
             "channel_name":     meta.get("channel_name"),
-            "genre":            genre,
+            "category":         category,
         })
 
     results.sort(key=lambda x: x["score"], reverse=True)
@@ -213,7 +213,7 @@ async def _fetch_coverage(
 ) -> tuple[dict[str, set[int]], dict[str, dict]]:
     """
     Query videos that contain at least one target word.
-    Includes channel_id, channel_name, genre for preference scoring.
+    Includes channel_id, channel_name, category for preference scoring.
 
     Returns:
         coverage   — video_id → set of word_ids covered
@@ -227,16 +227,17 @@ async def _fetch_coverage(
             v.thumbnail_url,
             v.language,
             v.duration,
-            v.channel_id,
-            v.channel_name,
-            v.genre,
+            ch.youtube_channel_id AS channel_id,
+            ch.channel_name,
+            v.category,
             wts.word_id,
             s.sentence_id,
             s.start_time,
             s.content
         FROM word_to_sentence wts
-        JOIN sentence s ON s.sentence_id = wts.sentence_id
-        JOIN video v    ON v.video_id    = s.video_id
+        JOIN sentence s  ON s.sentence_id = wts.sentence_id
+        JOIN video v     ON v.video_id    = s.video_id
+        LEFT JOIN channel ch ON ch.id = v.channel_id
         WHERE wts.word_id = ANY($1)
           AND v.language  = $2
         ORDER BY v.video_id, wts.word_id, s.start_time
@@ -261,7 +262,7 @@ async def _fetch_coverage(
                 "duration":       float(row["duration"] or 0),
                 "channel_id":     row["channel_id"],
                 "channel_name":   row["channel_name"],
-                "genre":          row["genre"],
+                "category":       row["category"],
                 "best_start_time": float(row["start_time"]),
             }
         else:
@@ -531,7 +532,7 @@ async def recommend_videos(
 
     Videos are ranked by their total priority coverage score — the sum of
     priority scores for the target items they contain — multiplied by
-    channel/genre preference weights from the user's settings.
+    channel/category preference weights from the user's settings.
 
     Returns an empty list with reason='no_target_items' when the user has
     no prioritised items (e.g. a brand-new user with no SRS cards and no
@@ -586,14 +587,15 @@ async def recommend_followed_channel_videos(
             v.thumbnail_url,
             v.language,
             v.duration,
-            v.channel_id,
-            v.channel_name,
-            v.genre,
+            ch.youtube_channel_id AS channel_id,
+            ch.channel_name,
+            v.category,
             s.start_time
         FROM video v
         JOIN sentence s ON s.video_id = v.video_id
-        WHERE v.channel_id = ANY($1)
-          AND v.language   = $2
+        JOIN channel ch ON ch.id = v.channel_id
+        WHERE ch.youtube_channel_id = ANY($1)
+          AND v.language = $2
         ORDER BY v.video_id, s.start_time
         LIMIT $3
         """,
@@ -617,7 +619,7 @@ async def recommend_followed_channel_videos(
             "score":            0.0,
             "channel_id":       r["channel_id"],
             "channel_name":     r["channel_name"],
-            "genre":            r["genre"],
+            "category":         r["category"],
         }
         for r in rows
     ]

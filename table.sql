@@ -77,20 +77,55 @@ INSERT INTO language_table (language, iso_code, regex, is_learnable, is_interfac
 
 CREATE TABLE IF NOT EXISTS video_category (
     category TEXT NOT NULL,
-    language TEXT NOT NULL,
-    PRIMARY KEY (category),
-    CONSTRAINT fk_category_language FOREIGN KEY (language) REFERENCES language_table (language) ON DELETE CASCADE
+    PRIMARY KEY (category)
 );
 
-CREATE TABLE IF NOT EXISTS video (
-    video_id      TEXT   DEFAULT nextval('video_id_seq') PRIMARY KEY,
-    title         TEXT   NOT NULL,
-    thumbnail_url TEXT   NOT NULL,
-    duration      FLOAT8 NOT NULL,
-    language      TEXT   NOT NULL,
-    dialect       TEXT   NOT NULL,
-    category      TEXT   NOT NULL DEFAULT 'other'
+INSERT INTO video_category (category) VALUES
+    ('other'),
+    ('Film & Animation'),
+    ('Autos & Vehicles'),
+    ('Music'),
+    ('Pets & Animals'),
+    ('Sports'),
+    ('Short Movies'),
+    ('Travel & Events'),
+    ('Gaming'),
+    ('Videoblogging'),
+    ('People & Blogs'),
+    ('Comedy'),
+    ('Entertainment'),
+    ('News & Politics'),
+    ('Howto & Style'),
+    ('Education'),
+    ('Science & Technology'),
+    ('Nonprofits & Activism')
+ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS channel (
+    id                 SERIAL PRIMARY KEY,
+    youtube_channel_id TEXT   NOT NULL UNIQUE,
+    channel_name       TEXT   NOT NULL DEFAULT '',
+    language           TEXT   REFERENCES language_table(language),
+    active             BOOLEAN NOT NULL DEFAULT TRUE
 );
+
+CREATE INDEX IF NOT EXISTS idx_channel_language ON channel (language);
+CREATE INDEX IF NOT EXISTS idx_channel_active   ON channel (active);
+
+CREATE TABLE IF NOT EXISTS video (
+    video_id      TEXT    DEFAULT nextval('video_id_seq') PRIMARY KEY,
+    title         TEXT    NOT NULL,
+    thumbnail_url TEXT    NOT NULL,
+    duration      FLOAT8  NOT NULL,
+    language      TEXT    NOT NULL,
+    dialect       TEXT    NOT NULL,
+    category      TEXT    NOT NULL DEFAULT 'other',
+    channel_id    INTEGER,
+    CONSTRAINT fk_video_category FOREIGN KEY (category)   REFERENCES video_category (category),
+    CONSTRAINT fk_video_channel  FOREIGN KEY (channel_id) REFERENCES channel        (id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_video_channel_id ON video (channel_id);
 
 CREATE TABLE IF NOT EXISTS video_blacklist (
     video_id TEXT PRIMARY KEY
@@ -138,11 +173,6 @@ CREATE TABLE IF NOT EXISTS sentence_to_grammar_rule (
     PRIMARY KEY (sentence_id, rule_id),
     CONSTRAINT fk_stgr_sentence FOREIGN KEY (sentence_id) REFERENCES sentence (sentence_id) ON DELETE CASCADE,
     CONSTRAINT fk_stgr_rule     FOREIGN KEY (rule_id)     REFERENCES grammar_rule (rule_id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS processed_channel (
-    channel_id   TEXT PRIMARY KEY,
-    channel_name TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS most_frequent_words (
@@ -236,7 +266,8 @@ CREATE TABLE IF NOT EXISTS user_video_category (
     uid            TEXT NOT NULL,
     video_category TEXT NOT NULL,
     PRIMARY KEY (uid, video_category),
-    CONSTRAINT fk_uvc_user FOREIGN KEY (uid) REFERENCES user_table (uid) ON DELETE CASCADE
+    CONSTRAINT fk_uvc_user     FOREIGN KEY (uid)           REFERENCES user_table     (uid)      ON DELETE CASCADE,
+    CONSTRAINT fk_uvc_category FOREIGN KEY (video_category) REFERENCES video_category (category)
 );
 
 -- ============================================================

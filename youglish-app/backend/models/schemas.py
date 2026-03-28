@@ -392,7 +392,7 @@ class VideoRecommendation(BaseModel):
     score: float
     channel_id:   str | None = None
     channel_name: str | None = None
-    genre:        str | None = None
+    category:     str | None = None
 
 
 class VideoRecommendationsResponse(BaseModel):
@@ -535,9 +535,9 @@ class ReminderSummary(BaseModel):
 
 
 class UserPreferences(BaseModel):
-    liked_genres:           list[str]        = []
+    liked_categories:       list[str]        = []
+    disliked_categories:    list[str]        = []
     liked_channels:         list[str]        = []
-    disliked_genres:        list[str]        = []
     followed_channels:      list[str]        = []
     disliked_channels:      list[str]        = []
     channel_names:          dict[str, str]   = {}
@@ -554,9 +554,7 @@ class UserPreferencesUpdate(BaseModel):
     All fields are optional — absent fields keep their current stored value.
     This gives PATCH-style merge semantics while using a PUT endpoint.
     """
-    liked_genres:           list[str] | None = None
     liked_channels:         list[str] | None = None
-    disliked_genres:        list[str] | None = None
     followed_channels:      list[str] | None = None
     disliked_channels:      list[str] | None = None
     channel_names:          dict[str, str] | None = None
@@ -579,9 +577,9 @@ class ChannelPreferenceRequest(BaseModel):
     action:       Literal["follow", "like", "dislike", "clear"]
 
 
-class GenrePreferenceRequest(BaseModel):
-    genre:  str
-    action: Literal["like", "dislike", "clear"]
+class CategoryPreferenceRequest(BaseModel):
+    category: str
+    action:   Literal["like", "dislike", "clear"]
 
 
 class FollowedChannelVideosResponse(BaseModel):

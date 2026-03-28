@@ -1,5 +1,3 @@
-import uuid as _uuid
-from typing import Literal
 
 import asyncpg
 

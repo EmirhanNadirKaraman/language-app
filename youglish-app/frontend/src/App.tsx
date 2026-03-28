@@ -11,6 +11,9 @@ import { BookLibraryPage } from './components/BookLibraryPage';
 import { BookReaderPage } from './components/BookReaderPage';
 import { ReminderBanner } from './components/ReminderBanner';
 import { SRSReviewPage } from './components/SRSReviewPage';
+import { ContentRequestPage } from './components/ContentRequestPage';
+import { NotificationContainer } from './components/NotificationToast';
+import { useNotifications } from './hooks/useNotifications';
 import { useSearch } from './hooks/useSearch';
 import { useReminders } from './hooks/useReminders';
 import { usePreferences } from './hooks/usePreferences';
@@ -27,6 +30,7 @@ export default function App() {
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [showBooks, setShowBooks]       = useState(false);
   const [showReview, setShowReview]     = useState(false);
+  const [showRequests, setShowRequests] = useState(false);
   const [activeBook, setActiveBook]     = useState<BookDocument | null>(null);
   const [recLanguage, setRecLanguage] = useState<string>(
     () => localStorage.getItem('recLanguage') ?? '',
@@ -35,6 +39,7 @@ export default function App() {
   const [guidedTarget, setGuidedTarget] = useState<{ itemId: number; itemType: string } | null>(null);
 
   const { prefs, savePreferences, channelAction, genreAction } = usePreferences(token);
+  const { notifications, dismiss: dismissNotification } = useNotifications(token);
   const { summary: reminderSummary, showBanner: showReminderBanner, dismissBanner } =
     useReminders(token, prefs.reminders_enabled);
   const wordColors = {
@@ -56,17 +61,19 @@ export default function App() {
   const handlePrev = () => setResultIdx(i => Math.max(0, i - 1));
 
   // A "panel" is open when any secondary view is showing (hides the search bar)
-  const anyPanelOpen = showSettings || showRecs || showPlaylist || showReview || !!activeBook;
+  const anyPanelOpen = showSettings || showRecs || showPlaylist || showReview || showRequests || !!activeBook;
 
   function closeAll() {
     setShowSettings(false); setShowRecs(false); setShowPlaylist(false);
-    setShowBooks(false); setShowReview(false);
+    setShowBooks(false); setShowReview(false); setShowRequests(false);
   }
 
   const darkMode = prefs.dark_mode;
   const autoMarkKnown = prefs.auto_mark_known;
 
   return (
+    <>
+    <NotificationContainer notifications={notifications} onDismiss={dismissNotification} darkMode={darkMode} />
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px 16px', fontFamily: 'sans-serif', background: darkMode ? '#121212' : undefined, minHeight: '100vh', color: darkMode ? '#e0e0e0' : undefined }}>
 
       {/* Header row */}
@@ -107,7 +114,15 @@ export default function App() {
           )}
           {token && (
             <button
-              onClick={() => { setShowSettings(s => !s); setShowRecs(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false); }}
+              onClick={() => { setShowRequests(s => !s); setShowSettings(false); setShowRecs(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false); }}
+              style={navBtnStyle(showRequests)}
+            >
+              + Add Content
+            </button>
+          )}
+          {token && (
+            <button
+              onClick={() => { setShowSettings(s => !s); setShowRecs(false); setShowPlaylist(false); setShowBooks(false); setShowReview(false); setShowRequests(false); }}
               style={navBtnStyle(showSettings)}
             >
               Settings
@@ -147,6 +162,14 @@ export default function App() {
       )}
 
       {/* Panels */}
+      {token && showRequests && (
+        <ContentRequestPage
+          token={token}
+          onClose={() => setShowRequests(false)}
+          darkMode={darkMode}
+        />
+      )}
+
       {token && showSettings && (
         <SettingsPanel
           prefs={prefs}
@@ -282,6 +305,7 @@ export default function App() {
         <p style={{ color: '#888', marginTop: '24px', textAlign: 'center' }}>No results found.</p>
       )}
     </div>
+    </>
   );
 }
 

@@ -12,6 +12,7 @@ import sys
 import time
 
 import psycopg2
+import yt_dlp
 from scrapetube import scrapetube
 from youtube_transcript_api import YouTubeTranscriptApi, NoTranscriptFound, TranscriptsDisabled
 
@@ -71,9 +72,35 @@ def connect():
     )
 
 
-def load_channels():
-    with open("merged_channels.json") as f:
-        return json.load(f)
+def load_channels(cursor) -> list[dict]:
+    """Load active channels from the database."""
+    cursor.execute(
+        "SELECT youtube_channel_id, channel_name, language FROM channel WHERE active = TRUE"
+    )
+    return [
+        {"id": row[0], "name": row[1] or row[0], "language": row[2]}
+        for row in cursor.fetchall()
+    ]
+
+
+def upsert_channel(cursor, channel_id: str, channel_name: str, language: str | None) -> int:
+    """Insert or update a channel row, keeping existing name if already set.
+    Returns the internal channel.id (integer PK)."""
+    cursor.execute(
+        """
+        INSERT INTO channel (youtube_channel_id, channel_name, language)
+        VALUES (%s, %s, %s)
+        ON CONFLICT (youtube_channel_id) DO UPDATE
+            SET channel_name = CASE
+                    WHEN channel.channel_name = '' THEN EXCLUDED.channel_name
+                    ELSE channel.channel_name
+                END,
+                language = COALESCE(channel.language, EXCLUDED.language)
+        RETURNING id
+        """,
+        (channel_id, channel_name, language),
+    )
+    return cursor.fetchone()[0]
 
 
 def get_transcript(video_id, language=None):
@@ -110,6 +137,60 @@ def get_transcript(video_id, language=None):
         print(f"  Error fetching transcript for {video_id}: {e}")
 
     return None, None
+
+
+def fetch_video_metadata(video_id: str) -> dict | None:
+    """
+    Fetch channel_id, channel_name, title, thumbnail_url, and category
+    for a video in a single yt-dlp call.
+    Returns None on failure.
+    """
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    opts = {"skip_download": True, "quiet": True, "no_warnings": True}
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            categories = info.get("categories") or []
+            category = categories[0] if categories else (info.get("genre") or "other").strip() or "other"
+            return {
+                "channel_id":   (info.get("channel_id") or "").strip(),
+                "channel_name": (info.get("channel") or info.get("uploader") or "").strip(),
+                "title":        info.get("title", ""),
+                "thumbnail_url": info.get("thumbnail", ""),
+                "category":     category,
+            }
+    except Exception as e:
+        print(f"  [yt-dlp] Could not fetch metadata for {video_id}: {e}")
+    return None
+
+
+def fetch_channel_name(channel_id: str) -> str:
+    """Fetch a channel's display name from its channel page via yt-dlp."""
+    url = f"https://www.youtube.com/channel/{channel_id}"
+    opts = {
+        "skip_download": True,
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": True,
+        "playlist_items": "1",
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return (info.get("channel") or info.get("uploader") or info.get("title") or "").strip()
+    except Exception as e:
+        print(f"  [yt-dlp] Could not fetch channel name for {channel_id}: {e}")
+    return ""
+
+
+def fetch_category(video_id: str) -> str:
+    """
+    Use yt-dlp to extract the category of a YouTube video.
+    Returns the first entry in `categories`, falling back to `genre`,
+    then to 'other' if nothing is found or an error occurs.
+    """
+    meta = fetch_video_metadata(video_id)
+    return meta["category"] if meta else "other"
 
 
 def insert_phrases(cursor, sentence_ids, texts):
@@ -157,7 +238,8 @@ def clean_sentence(text):
 
 
 def populate(cursor, connection, db_words, video_id, title, thumbnail_url,
-             transcript, language, dialect, nlp, sentence_types):
+             transcript, language, dialect, nlp, sentence_types,
+             category="other", channel_id: int | None = None):
     # Skip if video already exists
     cursor.execute("SELECT 1 FROM video WHERE video_id = %s", (video_id,))
     if cursor.fetchone():
@@ -166,9 +248,9 @@ def populate(cursor, connection, db_words, video_id, title, thumbnail_url,
     last = transcript[-1]
     duration = last.start + last.duration
     cursor.execute(
-        "INSERT INTO video (video_id, title, thumbnail_url, duration, language, dialect) "
-        "VALUES (%s, %s, %s, %s, %s, %s)",
-        (video_id, title, thumbnail_url, duration, language, dialect),
+        "INSERT INTO video (video_id, title, thumbnail_url, duration, language, dialect, category, channel_id) "
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
+        (video_id, title, thumbnail_url, duration, language, dialect, category, channel_id),
     )
 
     # Process sentences via nlp.pipe for efficiency
@@ -176,7 +258,8 @@ def populate(cursor, connection, db_words, video_id, title, thumbnail_url,
     sentence_rows = []
     all_tokens = []
 
-    for index, doc in enumerate(nlp.pipe(texts)):
+    docs = list(nlp.pipe(texts))
+    for index, doc in enumerate(docs):
         tokens = [
             (t.text, t.pos_, t.lemma_, t.tag_)
             for t in doc
@@ -202,7 +285,7 @@ def populate(cursor, connection, db_words, video_id, title, thumbnail_url,
     # Grammar rules (morphological analysis)
     if language not in NO_MORPH_LANGS:
         types = []
-        for idx, doc in enumerate(nlp.pipe(texts)):
+        for idx, doc in enumerate(docs):
             sid = sentence_ids[idx]
             for token in doc:
                 if token.pos_ in POS_LIST:
@@ -243,18 +326,25 @@ def populate(cursor, connection, db_words, video_id, title, thumbnail_url,
 
     connection.commit()
 
-    # word_to_sentence links
-    w2s = []
-    for idx, tokens in enumerate(all_tokens):
-        sid = sentence_ids[idx]
-        for token in tokens:
-            cursor.execute(
-                "SELECT word_id FROM word_table WHERE word=%s AND language=%s AND pos=%s",
-                (token[0], language, token[1]),
-            )
-            row = cursor.fetchone()
-            if row:
-                w2s.append((row[0], sid))
+    # word_to_sentence links — single batch lookup instead of one query per token
+    unique_word_keys = list({(t[0], t[1]) for tokens in all_tokens for t in tokens})
+    if unique_word_keys:
+        placeholders = ",".join(["(%s,%s)"] * len(unique_word_keys))
+        flat_keys = [val for k in unique_word_keys for val in k]
+        cursor.execute(
+            f"SELECT word_id, word, pos FROM word_table WHERE language = %s AND (word, pos) IN ({placeholders})",
+            [language] + flat_keys,
+        )
+        word_id_map = {(r[1], r[2]): r[0] for r in cursor.fetchall()}
+    else:
+        word_id_map = {}
+
+    w2s = [
+        (word_id_map[(t[0], t[1])], sentence_ids[idx])
+        for idx, tokens in enumerate(all_tokens)
+        for t in tokens
+        if (t[0], t[1]) in word_id_map
+    ]
 
     if w2s:
         w2s_str = b",".join(cursor.mogrify("(%s,%s)", x) for x in w2s)
@@ -270,11 +360,295 @@ def populate(cursor, connection, db_words, video_id, title, thumbnail_url,
     connection.commit()
 
 
+def _notify_user(cursor, connection, request_id: int, notif_type: str, payload: dict) -> None:
+    """Insert a notification row for the user who submitted this request."""
+    cursor.execute(
+        """
+        INSERT INTO notification (user_id, type, payload)
+        SELECT user_id, %s, %s
+        FROM   content_request
+        WHERE  request_id = %s AND user_id IS NOT NULL
+        """,
+        (notif_type, json.dumps(payload), request_id),
+    )
+    connection.commit()
+
+
+def _mark_request(cursor, connection, request_id: int, status: str, error: str | None = None) -> None:
+    cursor.execute(
+        "UPDATE content_request SET status = %s, error = %s, updated_at = NOW() WHERE request_id = %s",
+        (status, error, request_id),
+    )
+    connection.commit()
+
+
+def _scan_channel_videos(  # noqa: PLR0913
+    cursor, connection,
+    youtube_channel_id: str, internal_channel_id: int, language: str | None,
+    nlp_cache: dict, sentence_types: dict, db_words: set,
+    processed_videos: set, blacklist: set,
+    skip_video_id: str | None = None,
+) -> int:
+    """Iterate a channel's videos and process any that haven't been seen yet.
+
+    skip_video_id: video already processed by the caller — skip without counting.
+    Returns the number of newly added videos.
+    """
+    added = 0
+    for candidate in scrapetube.get_channel(youtube_channel_id):
+        vid_id = candidate["videoId"]
+        if vid_id == skip_video_id:
+            continue
+        if vid_id in processed_videos or vid_id in blacklist:
+            continue
+
+        title     = candidate["title"]["runs"][0]["text"]
+        thumbnail = candidate["thumbnail"]["thumbnails"][-1]["url"]
+
+        transcript_obj, detected_lang = get_transcript(vid_id, language)
+        if transcript_obj is None:
+            blacklist.add(vid_id)
+            cursor.execute(
+                "INSERT INTO video_blacklist (video_id) VALUES (%s) ON CONFLICT DO NOTHING",
+                (vid_id,),
+            )
+            connection.commit()
+            continue
+
+        if detected_lang not in nlp_cache:
+            if detected_lang not in LANG_MODEL_MAP:
+                continue
+            try:
+                nlp_cache[detected_lang] = spacy.load(LANG_MODEL_MAP[detected_lang])
+                nlp_cache[detected_lang].select_pipes(
+                    enable=["tok2vec", "tagger", "attribute_ruler", "lemmatizer"]
+                )
+            except Exception:
+                continue
+
+        fetched = None
+        for attempt in range(3):
+            try:
+                fetched = transcript_obj.fetch()
+                break
+            except Exception as e:
+                print(f"    fetch attempt {attempt + 1}/3 failed for {vid_id}: {e}")
+                time.sleep(2 ** attempt)
+        if fetched is None:
+            continue
+
+        populate(
+            cursor=cursor,
+            connection=connection,
+            db_words=db_words,
+            video_id=vid_id,
+            title=title,
+            thumbnail_url=thumbnail,
+            transcript=fetched,
+            language=detected_lang,
+            dialect=transcript_obj.language_code,
+            nlp=nlp_cache[detected_lang],
+            sentence_types=sentence_types,
+            category=fetch_category(vid_id),
+            channel_id=internal_channel_id,
+        )
+        processed_videos.add(vid_id)
+        added += 1
+        print(f"    [{added}] {title} ({detected_lang})")
+
+    return added
+
+
+def _process_channel_request(  # noqa: PLR0913
+    cursor, connection, youtube_channel_id: str, request_id: int,
+    nlp_cache: dict, sentence_types: dict, db_words: set,
+    processed_videos: set, blacklist: set,
+) -> None:
+    """Ensure the channel is in the DB, then scan and process any new videos."""
+    cursor.execute(
+        "SELECT id, channel_name, language FROM channel WHERE youtube_channel_id = %s",
+        (youtube_channel_id,),
+    )
+    row = cursor.fetchone()
+    if row:
+        internal_channel_id, channel_name, language = row
+        channel_name = channel_name or youtube_channel_id
+        print(f"  [request] channel already known: {channel_name}")
+    else:
+        channel_name = fetch_channel_name(youtube_channel_id)
+        cursor.execute(
+            """
+            INSERT INTO channel (youtube_channel_id, channel_name)
+            VALUES (%s, %s)
+            ON CONFLICT (youtube_channel_id) DO UPDATE
+                SET channel_name = CASE
+                        WHEN channel.channel_name = '' THEN EXCLUDED.channel_name
+                        ELSE channel.channel_name
+                    END
+            RETURNING id
+            """,
+            (youtube_channel_id, channel_name),
+        )
+        internal_channel_id = cursor.fetchone()[0]
+        connection.commit()
+        language = None
+        print(f"  [request] added new channel: {channel_name or youtube_channel_id}")
+
+    print(f"  [request] scanning {channel_name or youtube_channel_id} for new videos…")
+    added = _scan_channel_videos(
+        cursor, connection,
+        youtube_channel_id, internal_channel_id, language,
+        nlp_cache, sentence_types, db_words, processed_videos, blacklist,
+    )
+    print(f"  [request] done — {added} new video(s) added")
+    _mark_request(cursor, connection, request_id, "done")
+    _notify_user(cursor, connection, request_id, "channel_done", {
+        "youtube_channel_id": youtube_channel_id,
+        "channel_name":       channel_name or youtube_channel_id,
+        "videos_added":       added,
+    })
+
+
+def _process_video_request(  # noqa: PLR0913
+    cursor, connection, video_id: str, request_id: int,
+    nlp_cache: dict, sentence_types: dict, db_words: set,
+    processed_videos: set, blacklist: set,
+) -> None:
+    """Process a requested video, then scan the rest of its channel for new content."""
+    if video_id in blacklist:
+        _mark_request(cursor, connection, request_id, "failed", "video is blacklisted")
+        print(f"  [request] video {video_id} is blacklisted")
+        return
+
+    # --- Resolve channel, processing the video itself if it's new ---
+    video_title: str | None = None
+
+    if video_id in processed_videos:
+        # Video already in DB — look up its channel and title directly
+        cursor.execute(
+            "SELECT c.youtube_channel_id, c.id, c.language, v.title FROM video v "
+            "JOIN channel c ON c.id = v.channel_id WHERE v.video_id = %s",
+            (video_id,),
+        )
+        ch = cursor.fetchone()
+        if ch is None:
+            _mark_request(cursor, connection, request_id, "done")
+            print(f"  [request] video {video_id} already in DB (no channel info)")
+            return
+        youtube_channel_id, internal_channel_id, language, video_title = ch
+        print(f"  [request] video {video_id} already in DB — scanning channel for new videos…")
+    else:
+        # New video — fetch metadata, process it, then continue to channel scan
+        meta = fetch_video_metadata(video_id)
+        if not meta or not meta["channel_id"]:
+            _mark_request(cursor, connection, request_id, "failed", "could not fetch video metadata")
+            print(f"  [request] could not fetch metadata for {video_id}")
+            return
+
+        youtube_channel_id = meta["channel_id"]
+        internal_channel_id = upsert_channel(cursor, youtube_channel_id, meta["channel_name"], None)
+
+        transcript_obj, detected_lang = get_transcript(video_id)
+        if transcript_obj is None:
+            blacklist.add(video_id)
+            cursor.execute(
+                "INSERT INTO video_blacklist (video_id) VALUES (%s) ON CONFLICT DO NOTHING",
+                (video_id,),
+            )
+            _mark_request(cursor, connection, request_id, "failed", "no transcript available")
+            connection.commit()
+            print(f"  [request] no transcript for {video_id}")
+            return
+
+        if detected_lang not in nlp_cache:
+            if detected_lang not in LANG_MODEL_MAP:
+                _mark_request(cursor, connection, request_id, "failed", f"unsupported language: {detected_lang}")
+                return
+            try:
+                nlp_cache[detected_lang] = spacy.load(LANG_MODEL_MAP[detected_lang])
+                nlp_cache[detected_lang].select_pipes(
+                    enable=["tok2vec", "tagger", "attribute_ruler", "lemmatizer"]
+                )
+            except Exception as e:
+                _mark_request(cursor, connection, request_id, "failed", f"spacy load error: {e}")
+                return
+
+        fetched = None
+        for attempt in range(3):
+            try:
+                fetched = transcript_obj.fetch()
+                break
+            except Exception as e:
+                print(f"  [request] fetch attempt {attempt + 1}/3 failed for {video_id}: {e}")
+                time.sleep(2 ** attempt)
+        if fetched is None:
+            _mark_request(cursor, connection, request_id, "failed", "transcript fetch failed after 3 attempts")
+            return
+
+        populate(
+            cursor=cursor, connection=connection, db_words=db_words,
+            video_id=video_id, title=meta["title"], thumbnail_url=meta["thumbnail_url"],
+            transcript=fetched, language=detected_lang, dialect=transcript_obj.language_code,
+            nlp=nlp_cache[detected_lang], sentence_types=sentence_types,
+            category=meta["category"], channel_id=internal_channel_id,
+        )
+        processed_videos.add(video_id)
+        language = detected_lang
+        video_title = meta["title"]
+        print(f"  [request] processed video: {meta['title']} ({detected_lang})")
+        print(f"  [request] scanning channel for remaining new videos…")
+
+    # --- Scan the rest of the channel, skipping the video we just handled ---
+    added = _scan_channel_videos(
+        cursor, connection,
+        youtube_channel_id, internal_channel_id, language,
+        nlp_cache, sentence_types, db_words, processed_videos, blacklist,
+        skip_video_id=video_id,
+    )
+    print(f"  [request] channel scan done — {added} additional video(s) added")
+    _mark_request(cursor, connection, request_id, "done")
+    _notify_user(cursor, connection, request_id, "video_done", {
+        "video_id":    video_id,
+        "title":       video_title or video_id,
+        "videos_added": added,
+    })
+
+
+def process_pending_requests(
+    cursor, connection,
+    nlp_cache: dict, sentence_types: dict, db_words: set,
+    processed_videos: set, blacklist: set,
+) -> None:
+    cursor.execute(
+        "SELECT request_id, request_type, content_id FROM content_request WHERE status = 'pending'"
+    )
+    pending = cursor.fetchall()
+    if not pending:
+        return
+
+    print(f"\nProcessing {len(pending)} pending content request(s)...")
+    for request_id, request_type, content_id in pending:
+        try:
+            if request_type == "channel":
+                _process_channel_request(
+                    cursor, connection, content_id, request_id,
+                    nlp_cache, sentence_types, db_words, processed_videos, blacklist,
+                )
+            else:
+                _process_video_request(
+                    cursor, connection, content_id, request_id,
+                    nlp_cache, sentence_types, db_words, processed_videos, blacklist,
+                )
+        except Exception as e:
+            _mark_request(cursor, connection, request_id, "failed", str(e))
+            print(f"  [request] error processing {request_type} {content_id}: {e}")
+
+
 def main():
     connection = connect()
     cursor = connection.cursor()
 
-    channels = load_channels()
+    channels = load_channels(cursor)
     print(f"Loaded {len(channels)} channels total")
 
     cursor.execute("SELECT video_id FROM video")
@@ -291,6 +665,13 @@ def main():
 
     nlp_cache = {}
 
+    process_pending_requests(
+        cursor, connection, nlp_cache, sentence_types, db_words, processed_videos, blacklist
+    )
+
+    # Reload channels in case a channel request just added new ones
+    channels = load_channels(cursor)
+
     # Build one lazy iterator per channel
     channel_iters = [
         (ch, iter(scrapetube.get_channel(ch["id"])))
@@ -302,9 +683,10 @@ def main():
     while channel_iters:
         next_round = []
         for channel, vid_iter in channel_iters:
-            channel_id = channel["id"]
+            channel_id   = channel["id"]
             channel_name = channel["name"] or channel_id
-            language = channel["language"]
+            language     = channel["language"]
+            internal_channel_id = upsert_channel(cursor, channel_id, channel_name, language)
 
             # Advance to next unprocessed, non-blacklisted video for this channel
             video = None
@@ -364,6 +746,8 @@ def main():
                 next_round.append((channel, vid_iter))
                 continue
 
+            category = fetch_category(video_id)
+
             populate(
                 cursor=cursor,
                 connection=connection,
@@ -376,6 +760,8 @@ def main():
                 dialect=transcript_obj.language_code,
                 nlp=nlp_cache[detected_lang],
                 sentence_types=sentence_types,
+                category=category,
+                channel_id=internal_channel_id,
             )
 
             processed_videos.add(video_id)

@@ -10,7 +10,6 @@ no API key is required and tests stay fast and free.
 import uuid
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from httpx import AsyncClient
 
 REGISTER = "/api/v1/auth/register"
