@@ -74,6 +74,9 @@ async def get_preferences(pool: asyncpg.Pool, user_id: str) -> dict:
     )
     prefs["liked_categories"]    = [r["video_category"] for r in cat_rows if r["preference"] == "liked"]
     prefs["disliked_categories"] = [r["video_category"] for r in cat_rows if r["preference"] == "disliked"]
+    # Map to frontend field names for compatibility
+    prefs["liked_genres"]    = prefs["liked_categories"]
+    prefs["disliked_genres"] = prefs["disliked_categories"]
     return prefs
 
 
@@ -95,7 +98,46 @@ async def update_preferences(
                 json.dumps(merged),
                 user_id,
             )
-    return apply_defaults(merged)
+
+            # Handle category preferences separately (stored in user_video_category table)
+            if "liked_categories" in updates or "disliked_categories" in updates:
+                # Delete all existing preferences for this user
+                await conn.execute(
+                    "DELETE FROM user_video_category WHERE uid = $1",
+                    user_id,
+                )
+                # Re-insert the new preferences
+                liked = updates.get("liked_categories") or []
+                disliked = updates.get("disliked_categories") or []
+                for category in liked:
+                    await conn.execute(
+                        """
+                        INSERT INTO user_video_category (uid, video_category, preference)
+                        VALUES ($1, $2, 'liked')
+                        """,
+                        user_id, category,
+                    )
+                for category in disliked:
+                    await conn.execute(
+                        """
+                        INSERT INTO user_video_category (uid, video_category, preference)
+                        VALUES ($1, $2, 'disliked')
+                        """,
+                        user_id, category,
+                    )
+
+    # Apply defaults and then fetch category preferences from DB (same as get_preferences)
+    prefs = apply_defaults(merged)
+    cat_rows = await pool.fetch(
+        "SELECT video_category, preference FROM user_video_category WHERE uid = $1",
+        user_id,
+    )
+    prefs["liked_categories"]    = [r["video_category"] for r in cat_rows if r["preference"] == "liked"]
+    prefs["disliked_categories"] = [r["video_category"] for r in cat_rows if r["preference"] == "disliked"]
+    # Map to frontend field names for compatibility
+    prefs["liked_genres"]    = prefs["liked_categories"]
+    prefs["disliked_genres"] = prefs["disliked_categories"]
+    return prefs
 
 
 ChannelAction = Literal["follow", "like", "dislike", "clear"]

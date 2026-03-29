@@ -24,6 +24,7 @@ Cleanup steps (no LLM):
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -33,8 +34,13 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import asyncpg
+import regex as _regex_lib
 
 logger = logging.getLogger(__name__)
+
+# ── Token regex patterns ───────────────────────────────────────────────────────
+_TOKEN_SPLIT_RE = _regex_lib.compile(r'(\p{L}[\p{L}\p{M}\'-]*)')
+_TOKEN_WORD_RE  = _regex_lib.compile(r'^\p{L}')
 
 # ── Storage paths ─────────────────────────────────────────────────────────────
 _UPLOAD_ROOT = Path(os.getenv("UPLOAD_ROOT", "uploads"))
@@ -297,6 +303,72 @@ def _save_page_image(doc_id: str, page_number: int, png_bytes: bytes) -> str:
     return str(img_path)
 
 
+# ── Tokenization with stable UUIDs ────────────────────────────────────────────
+
+def tokenize_block(text: str) -> list[dict]:
+    """
+    Tokenize block text, producing [{token_id: UUID, text: str, is_word: bool}].
+    Mirrors the JavaScript tokenizeBlock() function exactly.
+    Each token gets a fresh UUID.
+    """
+    if not text:
+        return []
+    return [
+        {
+            "token_id": str(uuid.uuid4()),
+            "text": p,
+            "is_word": bool(_TOKEN_WORD_RE.match(p)),
+        }
+        for p in _TOKEN_SPLIT_RE.split(text)
+        if p
+    ]
+
+
+def retokenize_with_preservation(old_tokens: list[dict], new_text: str) -> list[dict]:
+    """
+    Re-tokenize new_text but preserve token_ids for tokens whose text is unchanged.
+    Uses LCS (Longest Common Subsequence) on the text field to match old and new tokens.
+    Returns new token list with stable UUIDs where possible, fresh UUIDs for changes.
+    """
+    new_tokens = tokenize_block(new_text)
+    if not old_tokens:
+        return new_tokens
+
+    # Build LCS table over token text values
+    old_texts = [t["text"] for t in old_tokens]
+    new_texts = [t["text"] for t in new_tokens]
+    n, m = len(old_texts), len(new_texts)
+
+    # dp[i][j] = length of LCS of old_texts[:i] and new_texts[:j]
+    dp = [[0] * (m + 1) for _ in range(n + 1)]
+    for i in range(1, n + 1):
+        for j in range(1, m + 1):
+            if old_texts[i - 1] == new_texts[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1] + 1
+            else:
+                dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
+
+    # Backtrack to find which new token positions map to which old token IDs
+    id_map: dict[int, str] = {}  # new_idx → old_token_id
+    i, j = n, m
+    while i > 0 and j > 0:
+        if old_texts[i - 1] == new_texts[j - 1]:
+            id_map[j - 1] = old_tokens[i - 1]["token_id"]
+            i -= 1
+            j -= 1
+        elif dp[i - 1][j] >= dp[i][j - 1]:
+            i -= 1
+        else:
+            j -= 1
+
+    # Apply preserved IDs
+    for new_j, tok in enumerate(new_tokens):
+        if new_j in id_map:
+            tok["token_id"] = id_map[new_j]
+
+    return new_tokens
+
+
 # ── Async DB helpers ──────────────────────────────────────────────────────────
 
 async def _persist_processing_results(
@@ -351,8 +423,8 @@ async def _persist_processing_results(
                         INSERT INTO book_blocks
                             (page_id, doc_id, block_index, block_type,
                              bbox_x0, bbox_y0, bbox_x1, bbox_y1,
-                             ocr_text, clean_text, ocr_confidence, is_header_footer)
-                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                             ocr_text, clean_text, ocr_confidence, is_header_footer, tokens)
+                        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
                         """,
                         [
                             (
@@ -360,6 +432,7 @@ async def _persist_processing_results(
                                 b["bbox_x0"], b["bbox_y0"], b["bbox_x1"], b["bbox_y1"],
                                 b["ocr_text"], b["clean_text"], b["ocr_confidence"],
                                 b["is_header_footer"],
+                                json.dumps(tokenize_block(b["clean_text"] or "")),
                             )
                             for b in page["blocks"]
                         ],
@@ -523,7 +596,7 @@ async def get_page_detail(pool: asyncpg.Pool, doc_id: str, page_number: int) -> 
                bbox_x0, bbox_y0, bbox_x1, bbox_y1,
                ocr_text, clean_text, corrected_text,
                correction_status, ocr_confidence, is_header_footer,
-               user_text_override
+               user_text_override, tokens
           FROM book_blocks
          WHERE page_id = $1
          ORDER BY block_index
@@ -539,9 +612,21 @@ async def get_page_detail(pool: asyncpg.Pool, doc_id: str, page_number: int) -> 
             corrected_text=b["corrected_text"],
             clean_text=b["clean_text"],
         )
+        raw_tokens = b["tokens"]
+        # Deserialize tokens: may be a string (JSON) or already a list
+        if isinstance(raw_tokens, str):
+            try:
+                tokens_list = json.loads(raw_tokens)
+            except (json.JSONDecodeError, TypeError):
+                tokens_list = []
+        elif isinstance(raw_tokens, list):
+            tokens_list = raw_tokens
+        else:
+            tokens_list = []
         blocks.append({
             **dict(b),
             "display_text": display_text,
+            "tokens": tokens_list,
         })
 
     return {
@@ -590,6 +675,7 @@ async def patch_block(
     """
     Apply a partial update to a block. Only supplied fields are changed.
     user_text_override='' clears the override.
+    If text-affecting fields change, re-tokenizes and updates the tokens column.
     Returns the updated block row or None if not found.
     """
     # Build SET clause dynamically
@@ -617,6 +703,46 @@ async def patch_block(
             block_id, doc_id,
         )
         return dict(row) if row else None
+
+    # Check if text is changing: either user_text_override or correction_status changed
+    text_is_changing = (user_text_override is not None) or (correction_status is not None)
+
+    if text_is_changing:
+        # Fetch current state to compute new display text and re-tokenize
+        current = await pool.fetchrow(
+            "SELECT user_text_override, correction_status, corrected_text, clean_text, tokens "
+            "FROM book_blocks WHERE block_id=$1 AND doc_id=$2",
+            block_id, doc_id,
+        )
+        if current:
+            # Simulate the new state for display text computation
+            new_uto = (user_text_override if user_text_override else None) \
+                      if user_text_override is not None else current["user_text_override"]
+            new_cs = correction_status if correction_status is not None else current["correction_status"]
+            new_ct = current["corrected_text"]
+            new_cl = current["clean_text"]
+
+            new_display = _resolve_display_text(
+                user_text_override=new_uto,
+                correction_status=new_cs,
+                corrected_text=new_ct,
+                clean_text=new_cl,
+            )
+
+            # Re-tokenize, preserving IDs for unchanged tokens via LCS
+            old_tokens_raw = current["tokens"]
+            if isinstance(old_tokens_raw, str):
+                old_tokens = json.loads(old_tokens_raw)
+            elif old_tokens_raw is None:
+                old_tokens = []
+            else:
+                old_tokens = list(old_tokens_raw)
+
+            new_tokens = retokenize_with_preservation(old_tokens, new_display)
+
+            # Add tokens update to the SET clause
+            params.append(json.dumps(new_tokens))
+            sets.append(f"tokens = ${len(params)}")
 
     query = f"""
         UPDATE book_blocks

@@ -99,7 +99,7 @@ async def check_answer(
     pool: asyncpg.Pool, uid: str, word_id: int, correct: bool
 ) -> None:
     async with pool.acquire() as conn:
-        user = await conn.fetchrow("SELECT 1 FROM user_table WHERE uid = $1", uid)
+        user = await conn.fetchrow("SELECT 1 FROM users WHERE user_id = $1", uid)
         if user is None:
             raise ValueError("User does not exist")
 

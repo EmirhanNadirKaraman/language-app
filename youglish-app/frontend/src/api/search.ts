@@ -21,6 +21,12 @@ export async function fetchLanguages(): Promise<string[]> {
   return res.json();
 }
 
+export async function fetchCategories(): Promise<string[]> {
+  const res = await fetch('/api/categories');
+  if (!res.ok) throw new Error('Failed to fetch categories');
+  return res.json();
+}
+
 export async function fetchWordForms(query: string): Promise<string[]> {
   const params = new URLSearchParams({ q: query });
   const res = await fetch(`/api/word-forms?${params}`);

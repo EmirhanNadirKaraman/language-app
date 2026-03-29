@@ -1,6 +1,7 @@
 import spacy
 import csv
 import os
+from functools import lru_cache
 
 # Load German model
 nlp = spacy.load("de_core_news_sm")
@@ -31,6 +32,8 @@ def load_verb_dictionary(file_path):
     return word_map
 
 
+_ARTICLES = {'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einen', 'einem', 'einer', 'eines'}
+
 verb_blueprint_map = load_verb_dictionary("data/final_result.txt")
 
 def generate_trigrams(word):
@@ -47,6 +50,32 @@ def generate_trigrams(word):
         trigrams.add(padded_word[i:i+3])
     return trigrams
 
+def _build_trigram_index(dictionary_map):
+    """
+    Build a trigram inverted index from the dictionary at load time.
+    Maps trigram -> list of dict keys whose base word contains that trigram.
+    Also pre-computes trigrams for each dict key to avoid regenerating them during lookup.
+    Space is O(dict_size * avg_trigrams_per_word) — fixed, never grows with the DB.
+    Returns (index, precomputed_trigrams).
+    """
+    index = {}
+    precomputed = {}
+    for dict_word in dictionary_map:
+        words = dict_word.split()
+        if len(words) > 1:
+            base_word = words[1] if words[0].lower() in _ARTICLES else words[0]
+        else:
+            base_word = dict_word
+        tgs = frozenset(generate_trigrams(base_word.lower()))
+        precomputed[dict_word] = tgs
+        for tg in tgs:
+            if tg not in index:
+                index[tg] = []
+            index[tg].append(dict_word)
+    return index, precomputed
+
+_trigram_index, _precomputed_trigrams = _build_trigram_index(verb_blueprint_map)
+
 def trigram_similarity(word1, word2):
     """
     Calculate similarity between two words using trigram overlap (Dice coefficient).
@@ -62,27 +91,34 @@ def trigram_similarity(word1, word2):
     dice = (2.0 * intersection) / (len(trigrams1) + len(trigrams2))
     return dice
 
-def find_best_match(target_word, dictionary_map, threshold=0.6):
+@lru_cache(maxsize=4096)
+def find_best_match(target_word, threshold=0.6):
     """
     Find the best matching word from the dictionary using trigram similarity.
+    Uses a pre-built inverted index to check only candidate keys that share at
+    least one trigram with the target, instead of scanning the full dictionary.
+    Results are cached via lru_cache to avoid redundant lookups.
     Returns (best_match, similarity_score) or (None, 0.0) if no match above threshold.
     """
-    # Common German articles to skip
-    articles = {'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einen', 'einem', 'einer', 'eines'}
+    target_trigrams = generate_trigrams(target_word.lower())
+
+    # Collect only candidates that share at least one trigram
+    candidates = set()
+    for tg in target_trigrams:
+        for dict_word in _trigram_index.get(tg, []):
+            candidates.add(dict_word)
 
     best_match = None
     best_score = 0.0
 
-    for dict_word in dictionary_map.keys():
-        # Extract the main word, skipping articles
-        words = dict_word.split()
-        if len(words) > 1:
-            # Skip the first word if it's an article
-            base_word = words[1] if words[0].lower() in articles else words[0]
-        else:
-            base_word = dict_word
+    for dict_word in candidates:
+        # Use pre-computed trigrams instead of regenerating
+        dict_trigrams = _precomputed_trigrams[dict_word]
+        if not dict_trigrams:
+            continue
+        intersection = len(target_trigrams & dict_trigrams)
+        score = (2.0 * intersection) / (len(target_trigrams) + len(dict_trigrams))
 
-        score = trigram_similarity(target_word, base_word)
         if score > best_score:
             best_score = score
             best_match = dict_word
@@ -103,14 +139,17 @@ def get_object_token(child):
         return "jdn." if is_person else "etw."
     return "etw."
 
-def extract_german_logic(text):
-    doc = nlp(text)
+def extract_german_logic(doc):
+    """
+    Extract phrases from a pre-computed spaCy doc.
+    Pass a doc (from nlp.pipe or nlp(text)) instead of raw text to avoid redundant NLP.
+    """
     result = []
     consumed = set()
 
     for token in doc:
-        # if token.i in consumed:
-        #     continue
+        if token.i in consumed:
+            continue
 
         # --- VERB MAPPING LOGIC ---
         if token.pos_ in ["VERB", "AUX"] and token.dep_ != "aux":
@@ -176,7 +215,7 @@ def extract_german_logic(text):
 
             # If not found, try trigram similarity matching
             if blueprint is None:
-                best_match, similarity = find_best_match(full_verb, verb_blueprint_map)
+                best_match, similarity = find_best_match(full_verb)
                 if best_match:
                     blueprint = verb_blueprint_map[best_match]
                     match_info = f"fuzzy ({similarity:.2f}): {best_match}"
@@ -219,7 +258,7 @@ def extract_german_logic(text):
 
             # If still not found, try trigram similarity matching
             if dictionary_entry is None:
-                best_match, similarity = find_best_match(noun_lemma, verb_blueprint_map)
+                best_match, similarity = find_best_match(noun_lemma)
                 if best_match:
                     dictionary_entry = verb_blueprint_map[best_match]
                     match_info = f"fuzzy ({similarity:.2f}): {best_match}"
@@ -246,7 +285,7 @@ def extract_german_logic(text):
             match_info = "exact"
 
             if dictionary_entry is None:
-                best_match, similarity = find_best_match(pronoun_lemma, verb_blueprint_map)
+                best_match, similarity = find_best_match(pronoun_lemma)
                 if best_match:
                     dictionary_entry = verb_blueprint_map[best_match]
                     match_info = f"fuzzy ({similarity:.2f}): {best_match}"
@@ -272,7 +311,7 @@ def extract_german_logic(text):
             match_info = "exact"
 
             if dictionary_entry is None:
-                best_match, similarity = find_best_match(adverb_lemma, verb_blueprint_map)
+                best_match, similarity = find_best_match(adverb_lemma)
                 if best_match:
                     dictionary_entry = verb_blueprint_map[best_match]
                     match_info = f"fuzzy ({similarity:.2f}): {best_match}"
@@ -298,7 +337,7 @@ def extract_german_logic(text):
             match_info = "exact"
 
             if dictionary_entry is None:
-                best_match, similarity = find_best_match(adj_lemma, verb_blueprint_map)
+                best_match, similarity = find_best_match(adj_lemma)
                 if best_match:
                     dictionary_entry = verb_blueprint_map[best_match]
                     match_info = f"fuzzy ({similarity:.2f}): {best_match}"
@@ -328,7 +367,7 @@ def extract_german_logic(text):
             match_info = "exact"
 
             if dictionary_entry is None:
-                best_match, similarity = find_best_match(word_lemma, verb_blueprint_map)
+                best_match, similarity = find_best_match(word_lemma)
                 if best_match:
                     dictionary_entry = verb_blueprint_map[best_match]
                     match_info = f"fuzzy ({similarity:.2f}): {best_match}"
@@ -351,7 +390,8 @@ def get_words_array(text):
     Extract words from text and return as a simple array.
     Returns list of dictionary entries (lemmas).
     """
-    analysis = extract_german_logic(text)
+    doc = nlp(text)
+    analysis = extract_german_logic(doc)
     return [item['dictionary_entry'] for item in analysis]
 
 def get_words_detailed_array(text):
@@ -359,7 +399,8 @@ def get_words_detailed_array(text):
     Extract words from text and return as an array with details.
     Returns list of [word, lemma, pos_type, indices] tuples.
     """
-    analysis = extract_german_logic(text)
+    doc = nlp(text)
+    analysis = extract_german_logic(doc)
     words_array = []
     for item in analysis:
         word = ' '.join(item['sentence_phrase'])
@@ -389,7 +430,8 @@ def main():
 
     # Full analysis (original)
     print("FULL ANALYSIS:")
-    analysis = extract_german_logic(sentence)
+    doc = nlp(sentence)
+    analysis = extract_german_logic(doc)
     for item in analysis:
         print(f"Phrase:  {' '.join(item['sentence_phrase'])}")
         print(f"Logic:   {item['logic']}")

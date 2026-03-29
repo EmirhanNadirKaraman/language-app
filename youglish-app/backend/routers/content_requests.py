@@ -1,5 +1,8 @@
-from typing import Literal
+import asyncio
+import sys
 from datetime import datetime
+from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -8,6 +11,21 @@ from ..core.deps import get_current_user
 from ..database import get_pool
 
 router = APIRouter(prefix="/content-requests", tags=["content-requests"])
+
+PIPELINE_SCRIPT = Path(__file__).parents[3] / "subtitle-scraper" / "pipeline.py"
+
+# Holds a reference to the currently running pipeline subprocess, if any.
+_pipeline_proc: asyncio.subprocess.Process | None = None
+
+
+async def _spawn_pipeline() -> None:
+    """Spawn pipeline.py --requests-only if it isn't already running."""
+    global _pipeline_proc
+    if _pipeline_proc is not None and _pipeline_proc.returncode is None:
+        return  # already running — it will pick up the new request too
+    _pipeline_proc = await asyncio.create_subprocess_exec(
+        sys.executable, str(PIPELINE_SCRIPT), "--requests-only",
+    )
 
 
 class ContentRequestCreate(BaseModel):
@@ -35,6 +53,7 @@ async def submit_request(
 
     - If the request already exists and failed, it is reset to pending.
     - If it's already pending or done, the existing row is returned unchanged.
+    The pipeline is spawned immediately in the background to process it.
     """
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -55,7 +74,14 @@ async def submit_request(
             body.request_type,
             body.content_id,
         )
-    return dict(row)
+
+    result = dict(row)
+
+    # Only spawn if the request is actually pending (not already done/in-progress)
+    if result["status"] == "pending":
+        asyncio.ensure_future(_spawn_pipeline())
+
+    return result
 
 
 @router.get("", response_model=list[ContentRequestRead])

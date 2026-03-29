@@ -319,6 +319,12 @@ export interface BookPageSummary {
   block_count: number;
 }
 
+export interface StoredToken {
+  token_id: string;
+  text: string;
+  is_word: boolean;
+}
+
 export interface BookBlock {
   block_id: number;
   block_index: number;
@@ -335,6 +341,7 @@ export interface BookBlock {
   is_header_footer: boolean;
   user_text_override: string | null;
   display_text: string;
+  tokens: StoredToken[];
 }
 
 export interface BookPageDetail {
@@ -360,7 +367,7 @@ export interface LLMRepairResponse {
 
 export interface ReadingSelectionAnchor {
   block_id: number;
-  token_index: number;
+  token_id: string;
   surface: string;
 }
 

@@ -22,6 +22,7 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
     const [submitted, setSubmitted] = useState(false);
     const [requests, setRequests] = useState<ContentRequest[]>([]);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [showAll, setShowAll] = useState(false);
 
     useEffect(() => {
         listContentRequests(token)
@@ -146,9 +147,19 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
 
             {/* Existing requests */}
             <div style={{ marginTop: '32px' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: 600, color: muted, marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Your Requests
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <h3 style={{ fontSize: '14px', fontWeight: 600, color: muted, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        Your Requests
+                    </h3>
+                    {requests.length > 5 && (
+                        <button
+                            onClick={() => setShowAll(v => !v)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: '#1a237e', fontWeight: 600, padding: 0 }}
+                        >
+                            {showAll ? 'Show less' : `Show all (${requests.length})`}
+                        </button>
+                    )}
+                </div>
 
                 {loadError && <p style={{ color: '#c62828', fontSize: '13px' }}>{loadError}</p>}
 
@@ -157,7 +168,7 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
                 )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {requests.map(r => (
+                    {(showAll ? requests : requests.slice(0, 5)).map(r => (
                         <div
                             key={r.request_id}
                             style={{

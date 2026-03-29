@@ -17,6 +17,7 @@ Endpoints:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from pathlib import Path
 
@@ -33,6 +34,7 @@ from ..models.schemas import (
     BookPageSummary,
     LLMRepairResponse,
     SentenceCountUpdate,
+    StoredBlockToken,
 )
 from ..services import book_service, book_llm_service
 
@@ -68,6 +70,16 @@ def _row_to_block(b: dict) -> BookBlockRead:
         corrected_text=b.get("corrected_text"),
         clean_text=b.get("clean_text"),
     )
+    # Parse tokens from JSONB (may be string or list depending on asyncpg version)
+    raw_tokens = b.get("tokens")
+    if isinstance(raw_tokens, str):
+        try:
+            raw_tokens = json.loads(raw_tokens)
+        except (json.JSONDecodeError, TypeError):
+            raw_tokens = []
+    if not isinstance(raw_tokens, list):
+        raw_tokens = []
+    tokens = [StoredBlockToken(**t) for t in raw_tokens]
     return BookBlockRead(
         block_id=b["block_id"],
         block_index=b["block_index"],
@@ -84,6 +96,7 @@ def _row_to_block(b: dict) -> BookBlockRead:
         is_header_footer=b.get("is_header_footer", False),
         user_text_override=b.get("user_text_override"),
         display_text=display_text,
+        tokens=tokens,
     )
 
 

@@ -1,7 +1,7 @@
 import asyncio
 import json
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 
 from ..core.deps import get_current_user
@@ -12,6 +12,7 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 @router.get("/stream")
 async def notification_stream(
+    request: Request,
     pool=Depends(get_pool),
     current_user: dict = Depends(get_current_user),
 ):
@@ -21,6 +22,9 @@ async def notification_stream(
     async def event_generator():
         try:
             while True:
+                if await request.is_disconnected():
+                    break
+
                 async with pool.acquire() as conn:
                     rows = await conn.fetch(
                         """
@@ -55,8 +59,8 @@ async def notification_stream(
         event_generator(),
         media_type="text/event-stream",
         headers={
-            "Cache-Control":    "no-cache",
+            "Cache-Control":     "no-cache",
             "X-Accel-Buffering": "no",
-            "Connection":       "keep-alive",
+            "Connection":        "keep-alive",
         },
     )

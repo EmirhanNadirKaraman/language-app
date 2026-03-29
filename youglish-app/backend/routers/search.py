@@ -47,3 +47,8 @@ async def word_forms(
 @router.get("/languages", response_model=list[str])
 async def languages(pool=Depends(get_pool)):
     return await search_service.get_languages(pool)
+
+
+@router.get("/categories", response_model=list[str])
+async def categories(pool=Depends(get_pool)):
+    return await search_service.get_categories(pool)

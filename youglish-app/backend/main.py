@@ -51,6 +51,20 @@ async def lifespan(app: FastAPI):
         import logging
         logging.getLogger(__name__).warning("Grammar rule seed failed at startup", exc_info=True)
 
+    # Resume any pending content requests left over from a previous run.
+    try:
+        from .routers.content_requests import _spawn_pipeline
+        pool = get_pool()
+        async with pool.acquire() as conn:
+            count = await conn.fetchval(
+                "SELECT COUNT(*) FROM content_request WHERE status = 'pending'"
+            )
+        if count:
+            await _spawn_pipeline()
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning("Failed to resume pending content requests", exc_info=True)
+
     yield
     await close_pool()
 

@@ -61,7 +61,7 @@ def _anchors_from_row(raw) -> list[ReadingSelectionAnchor]:
     return [
         ReadingSelectionAnchor(
             block_id=a["block_id"],
-            token_index=a["token_index"],
+            token_id=a.get("token_id", "legacy"),  # fallback for pre-migration data
             surface=a["surface"],
         )
         for a in raw

@@ -72,9 +72,10 @@ export function renderClickableText(
     onWordRightClick?: (word: string) => void,
     wordColors?: WordColorScheme,
 ): React.ReactNode {
-    const parts = text.split(/(\p{L}+)/u);
+    // Match the book reader's tokenizer: letters + optional combining marks, apostrophes, hyphens
+    const parts = text.split(/(\p{L}[\p{L}\p{M}'-]*)/u);
     return parts.map((part, i) => {
-        if (!/^\p{L}+$/u.test(part)) return part;
+        if (!/^\p{L}[\p{L}\p{M}'-]*$/u.test(part)) return part;
         const isHighlighted = highlightTerms.some(t => part.toLowerCase() === t.toLowerCase());
         const status = wordStatuses[part.toLowerCase()] ?? null;
         return (

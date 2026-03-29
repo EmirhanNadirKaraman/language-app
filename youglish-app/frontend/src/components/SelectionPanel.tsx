@@ -11,10 +11,10 @@ import {
 
 export interface SelectedToken {
   blockId: number;
-  tokenIndex: number;
+  tokenId: string;
+  tokenArrayIndex: number;  // position in block.tokens[] for within-block sorting
   text: string;
-  // Block-order position in the page (for sorting)
-  blockOrder: number;
+  blockOrder: number;  // Block-order position in the page (for sorting)
 }
 
 interface Props {
@@ -24,6 +24,7 @@ interface Props {
   selectedTokens: SelectedToken[];
   sentenceText: string;
   savedSelections: ReadingSelection[];
+  blockTokenMap: Map<number, Set<string>>;  // block_id → Set of valid token_ids
   onSaved: (sel: ReadingSelection) => void;
   onDeleted: (selectionId: string) => void;
   onClear: () => void;
@@ -33,9 +34,9 @@ interface Props {
 // ── Surface text construction ─────────────────────────────────────────────────
 
 function buildSurfaceText(tokens: SelectedToken[]): string {
-  // Sort by block order, then token index
+  // Sort by block order, then token array index (within-block position)
   const sorted = [...tokens].sort(
-    (a, b) => a.blockOrder - b.blockOrder || a.tokenIndex - b.tokenIndex,
+    (a, b) => a.blockOrder - b.blockOrder || a.tokenArrayIndex - b.tokenArrayIndex,
   );
   return sorted.map(t => t.text).join(' ');
 }
@@ -49,6 +50,7 @@ export function SelectionPanel({
   selectedTokens,
   sentenceText,
   savedSelections,
+  blockTokenMap,
   onSaved,
   onDeleted,
   onClear,
@@ -112,10 +114,10 @@ export function SelectionPanel({
     setError(null);
     try {
       const anchors = [...selectedTokens]
-        .sort((a, b) => a.blockOrder - b.blockOrder || a.tokenIndex - b.tokenIndex)
+        .sort((a, b) => a.blockOrder - b.blockOrder || a.tokenArrayIndex - b.tokenArrayIndex)
         .map(t => ({
           block_id: t.blockId,
-          token_index: t.tokenIndex,
+          token_id: t.tokenId,
           surface: t.text,
         }));
 
@@ -379,6 +381,7 @@ export function SelectionPanel({
               <SavedSelectionRow
                 key={sel.selection_id}
                 selection={sel}
+                blockTokenMap={blockTokenMap}
                 onDelete={() => handleDelete(sel.selection_id)}
                 dk={dk}
               />
@@ -394,14 +397,22 @@ export function SelectionPanel({
 
 function SavedSelectionRow({
   selection,
+  blockTokenMap,
   onDelete,
   dk = false,
 }: {
   selection: ReadingSelection;
+  blockTokenMap: Map<number, Set<string>>;
   onDelete: () => void;
   dk?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+
+  // Detect if this selection has stale anchors
+  const isStale = selection.anchors.some(a => {
+    const validIds = blockTokenMap.get(a.block_id);
+    return validIds !== undefined && !validIds.has(a.token_id);
+  });
 
   return (
     <div style={{
@@ -421,9 +432,24 @@ function SavedSelectionRow({
         }}
         onClick={() => setExpanded(e => !e)}
       >
-        <span style={{ fontSize: '13px', fontWeight: 600, color: dk ? '#9fa8da' : '#1a237e', flex: 1 }}>
-          {selection.surface_text}
-        </span>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: dk ? '#9fa8da' : '#1a237e' }}>
+              {selection.surface_text}
+            </span>
+            {isStale && (
+              <span style={{
+                fontSize: '9px',
+                color: '#d32f2f',
+                background: '#ffebee',
+                borderRadius: '4px',
+                padding: '2px 6px',
+              }}>
+                Outdated
+              </span>
+            )}
+          </div>
+        </div>
         <button
           onClick={e => { e.stopPropagation(); onDelete(); }}
           style={{

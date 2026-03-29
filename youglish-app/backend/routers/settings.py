@@ -28,6 +28,11 @@ async def update_preferences(
     current_user: dict = Depends(get_current_user),
 ):
     updates = body.model_dump(exclude_none=True)
+    # Map frontend field names to backend field names
+    if "liked_genres" in updates:
+        updates["liked_categories"] = updates.pop("liked_genres")
+    if "disliked_genres" in updates:
+        updates["disliked_categories"] = updates.pop("disliked_genres")
     return await settings_service.update_preferences(pool, current_user["user_id"], updates)
 
 

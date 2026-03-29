@@ -19,26 +19,25 @@ interface Props {
   autoMarkKnown?: boolean;
 }
 
-// ── Tokenizer ─────────────────────────────────────────────────────────────────
+// Split a block's display_text into sentence-like segments (split on . ! ? followed by space or end)
+function splitSentences(text: string): string[] {
+  const parts = text.split(/(?<=[.!?])\s+/u);
+  return parts.map(s => s.trim()).filter(Boolean);
+}
 
-interface BlockToken {
+// Local tokenizer for SentenceCard display (not used for selection anchors)
+interface LocalToken {
   index: number;
   text: string;
   isWord: boolean;
 }
 
-function tokenizeBlock(text: string): BlockToken[] {
+function tokenizeForDisplay(text: string): LocalToken[] {
   const parts = text.split(/(\p{L}[\p{L}\p{M}'-]*)/u);
   let index = 0;
   return parts
     .filter(p => p.length > 0)
     .map(p => ({ index: index++, text: p, isWord: /^\p{L}/u.test(p) }));
-}
-
-// Split a block's display_text into sentence-like segments (split on . ! ? followed by space or end)
-function splitSentences(text: string): string[] {
-  const parts = text.split(/(?<=[.!?])\s+/u);
-  return parts.map(s => s.trim()).filter(Boolean);
 }
 
 // ── Interactive block component ───────────────────────────────────────────────
@@ -48,7 +47,7 @@ interface InteractiveBlockProps {
   selectedKeys: Set<string>;
   savedAnchorKeys: Set<string>;
   wordStatuses: Record<string, string>;
-  onTokenClick: (blockId: number, tokenIndex: number, text: string) => void;
+  onTokenClick: (blockId: number, tokenId: string, text: string) => void;
   onWordRightClick?: (word: string) => void;
   translation?: string | null;
   showTranslation: boolean;
@@ -61,7 +60,8 @@ function InteractiveBlock({
   block, selectedKeys, savedAnchorKeys, wordStatuses, onTokenClick, onWordRightClick,
   translation, showTranslation, onRequestTranslation, translating, dk,
 }: InteractiveBlockProps) {
-  const tokens = useMemo(() => tokenizeBlock(block.display_text), [block.display_text]);
+  // Use server-managed tokens directly (no local tokenization)
+  const tokens = block.tokens;
 
   return (
     <div style={{ marginBottom: '1.2em' }}>
@@ -73,8 +73,8 @@ function InteractiveBlock({
         wordBreak: 'break-word',
       }}>
         {tokens.map(tok => {
-          if (!tok.isWord) return <span key={tok.index}>{tok.text}</span>;
-          const key = `${block.block_id}:${tok.index}`;
+          if (!tok.is_word) return <span key={tok.token_id}>{tok.text}</span>;
+          const key = `${block.block_id}:${tok.token_id}`;
           const isSelected = selectedKeys.has(key);
           const isSaved = savedAnchorKeys.has(key);
           const status = wordStatuses[tok.text.toLowerCase()];
@@ -93,8 +93,8 @@ function InteractiveBlock({
           }
 
           return (
-            <span key={tok.index} style={tokenStyle}
-              onClick={() => onTokenClick(block.block_id, tok.index, tok.text)}
+            <span key={tok.token_id} style={tokenStyle}
+              onClick={() => onTokenClick(block.block_id, tok.token_id, tok.text)}
               onContextMenu={onWordRightClick ? (e => { e.preventDefault(); onWordRightClick(tok.text); }) : undefined}
               title={isSaved ? 'Saved' : undefined}
             >
@@ -152,7 +152,7 @@ function SentenceCard({ sentence, blockId, language, token, wordStatuses, onSkip
   const [translation, setTranslation] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
 
-  const tokens = useMemo(() => tokenizeBlock(sentence), [sentence]);
+  const tokens = useMemo(() => tokenizeForDisplay(sentence), [sentence]);
 
   async function handleTranslate() {
     setTranslating(true);
@@ -458,7 +458,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   const navigateRef = useRef<(delta: number) => void>(() => {});
 
   // Word status picker (right-click)
-  const { selected: wsSelected, state: wsState, selectWord, updateStatus, dismiss: wsDismiss } = useWordStatus(token, doc.language);
+  const { selected: wsSelected, state: wsState, selectWord, updateStatus, dismiss: wsDismiss, toggleWordStatus } = useWordStatus(token, doc.language);
 
   // Interactive reading state
   const [selectedKeys, setSelectedKeys]       = useState<Set<string>>(new Set());
@@ -705,8 +705,8 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   }
 
   // Selection logic
-  function handleTokenClick(blockId: number, tokenIndex: number, _text: string) {
-    const key = `${blockId}:${tokenIndex}`;
+  function handleTokenClick(blockId: number, tokenId: string, _text: string) {
+    const key = `${blockId}:${tokenId}`;
     setSelectedKeys(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
@@ -715,6 +715,20 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   }
 
   function clearSelection() { setSelectedKeys(new Set()); }
+
+  // Wrap toggleWordStatus to update local state immediately for visual feedback
+  const handleToggleWordStatus = useCallback(async (word: string) => {
+    const CYCLE = ['unknown', 'learning', 'known'];
+    const currentStatus = wordStatuses[word.toLowerCase()] ?? 'unknown';
+    const idx = CYCLE.indexOf(currentStatus);
+    const nextStatus = CYCLE[(idx + 1) % CYCLE.length];
+
+    // Update UI immediately
+    setWordStatuses(prev => ({ ...prev, [word.toLowerCase()]: nextStatus }));
+
+    // Call the hook's toggle function (API call happens in background)
+    await toggleWordStatus(word);
+  }, [wordStatuses, toggleWordStatus]);
 
   async function openSavedPanel() {
     const willShow = !showSaved;
@@ -735,11 +749,16 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
     if (!pageData || selectedKeys.size === 0) return [];
     const tokens: SelectedToken[] = [];
     pageData.blocks.forEach((block, blockOrder) => {
-      const toks = tokenizeBlock(block.display_text);
-      toks.forEach(tok => {
-        const key = `${block.block_id}:${tok.index}`;
-        if (selectedKeys.has(key) && tok.isWord) {
-          tokens.push({ blockId: block.block_id, tokenIndex: tok.index, text: tok.text, blockOrder });
+      block.tokens.forEach((tok, arrayIdx) => {
+        const key = `${block.block_id}:${tok.token_id}`;
+        if (selectedKeys.has(key) && tok.is_word) {
+          tokens.push({
+            blockId: block.block_id,
+            tokenId: tok.token_id,
+            tokenArrayIndex: arrayIdx,
+            text: tok.text,
+            blockOrder,
+          });
         }
       });
     });
@@ -756,10 +775,19 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   const savedAnchorKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const sel of savedSelections) {
-      for (const anchor of sel.anchors) keys.add(`${anchor.block_id}:${anchor.token_index}`);
+      for (const anchor of sel.anchors) keys.add(`${anchor.block_id}:${anchor.token_id}`);
     }
     return keys;
   }, [savedSelections]);
+
+  // Map of block_id → Set of valid token_ids for stale selection detection
+  const blockTokenMap = useMemo(() => {
+    const map = new Map<number, Set<string>>();
+    for (const block of (pageData?.blocks ?? [])) {
+      map.set(block.block_id, new Set(block.tokens.map(t => t.token_id)));
+    }
+    return map;
+  }, [pageData]);
 
   const hasSelection  = selectedKeys.size > 0 && selectedTokens.length > 0;
   const hasLowConf    = pageData?.blocks.some(b => b.ocr_confidence !== null && b.ocr_confidence < 0.65 && b.correction_status === 'none') ?? false;
@@ -932,7 +960,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                       savedAnchorKeys={savedAnchorKeys}
                       wordStatuses={wordStatuses}
                       onTokenClick={handleTokenClick}
-                      onWordRightClick={selectWord}
+                      onWordRightClick={handleToggleWordStatus}
                       translation={translations[block.block_id] ?? null}
                       showTranslation={shownTranslations.has(block.block_id)}
                       onRequestTranslation={() => requestTranslation(block.block_id, block.display_text)}
@@ -974,7 +1002,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                         dk={dk}
                         autoMark={autoMark}
                         onTokenClick={handleTokenClick}
-                        onWordRightClick={selectWord}
+                        onWordRightClick={handleToggleWordStatus}
                         selectedKeys={selectedKeys}
                         savedAnchorKeys={savedAnchorKeys}
                       />
@@ -1006,6 +1034,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
               selectedTokens={selectedTokens}
               sentenceText={sentenceText}
               savedSelections={savedSelections}
+              blockTokenMap={blockTokenMap}
               onSaved={sel => {
                 const upsert = (prev: ReadingSelection[]) => {
                   const idx = prev.findIndex(s => s.selection_id === sel.selection_id);

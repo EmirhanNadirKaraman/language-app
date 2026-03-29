@@ -28,6 +28,7 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     row = dict(user)
+    row["user_id"] = str(row["user_id"])  # asyncpg returns UUID objects; normalize to str
     raw_settings = row.pop("settings") or "{}"
     settings = json.loads(raw_settings) if isinstance(raw_settings, str) else (raw_settings or {})
     row["is_admin"] = bool(settings.get("is_admin", False))

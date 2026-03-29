@@ -537,6 +537,8 @@ class ReminderSummary(BaseModel):
 class UserPreferences(BaseModel):
     liked_categories:       list[str]        = []
     disliked_categories:    list[str]        = []
+    liked_genres:           list[str]        = []  # alias for liked_categories (frontend compat)
+    disliked_genres:        list[str]        = []  # alias for disliked_categories (frontend compat)
     liked_channels:         list[str]        = []
     followed_channels:      list[str]        = []
     disliked_channels:      list[str]        = []
@@ -547,6 +549,8 @@ class UserPreferences(BaseModel):
     learning_word_color:    str              = "#f57c00"
     unknown_word_color:     str              = "#d32f2f"
     reminders_enabled:      bool             = True
+    dark_mode:              bool             = False
+    auto_mark_known:        bool             = False
 
 
 class UserPreferencesUpdate(BaseModel):
@@ -564,6 +568,10 @@ class UserPreferencesUpdate(BaseModel):
     learning_word_color:    str | None = None
     unknown_word_color:     str | None = None
     reminders_enabled:      bool | None = None
+    dark_mode:              bool | None = None
+    auto_mark_known:        bool | None = None
+    liked_genres:           list[str] | None = None  # alias for liked_categories (frontend compat)
+    disliked_genres:        list[str] | None = None  # alias for disliked_categories (frontend compat)
 
     @field_validator("known_word_color", "learning_word_color", "unknown_word_color", mode="before")
     @classmethod
@@ -619,6 +627,13 @@ class SentenceCountUpdate(BaseModel):
     sentence_count: int
 
 
+class StoredBlockToken(BaseModel):
+    """A single token as stored server-side with a stable UUID."""
+    token_id: str
+    text: str
+    is_word: bool
+
+
 class BookBlockRead(BaseModel):
     block_id: int
     block_index: int
@@ -635,6 +650,7 @@ class BookBlockRead(BaseModel):
     is_header_footer: bool
     user_text_override: str | None = None
     display_text: str                 # computed: override > approved correction > clean_text
+    tokens: list[StoredBlockToken] = []  # Server-managed token list with stable IDs
 
 
 class BookPageDetail(BaseModel):
@@ -667,7 +683,7 @@ class LLMRepairResponse(BaseModel):
 
 class ReadingSelectionAnchor(BaseModel):
     block_id: int
-    token_index: int
+    token_id: str       # UUID — replaced token_index for stability across edits
     surface: str
 
 

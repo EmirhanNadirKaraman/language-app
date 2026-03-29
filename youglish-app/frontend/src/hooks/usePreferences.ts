@@ -20,7 +20,7 @@ export function usePreferences(token: string | null) {
         let cancelled = false;
         setLoading(true);
         getPreferences(token)
-            .then(p => { if (!cancelled) setPrefs(p); })
+            .then(p => { if (!cancelled) setPrefs({ ...PREFERENCE_DEFAULTS, ...p }); })
             .catch(() => {})
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
@@ -29,7 +29,7 @@ export function usePreferences(token: string | null) {
     const savePreferences = useCallback(async (update: UserPreferencesUpdate): Promise<void> => {
         if (!token) return;
         const updated = await updatePreferences(token, update);
-        setPrefs(updated);
+        setPrefs(p => ({ ...PREFERENCE_DEFAULTS, ...p, ...updated }));
     }, [token]);
 
     const channelAction = useCallback(async (
@@ -39,7 +39,7 @@ export function usePreferences(token: string | null) {
     ): Promise<void> => {
         if (!token) return;
         const updated = await updateChannelPreference(token, channelId, channelName, action);
-        setPrefs(updated);
+        setPrefs(p => ({ ...PREFERENCE_DEFAULTS, ...p, ...updated }));
     }, [token]);
 
     const genreAction = useCallback(async (
@@ -48,7 +48,7 @@ export function usePreferences(token: string | null) {
     ): Promise<void> => {
         if (!token) return;
         const updated = await updateGenrePreference(token, genre, action);
-        setPrefs(updated);
+        setPrefs(p => ({ ...PREFERENCE_DEFAULTS, ...p, ...updated }));
     }, [token]);
 
     return { prefs, savePreferences, channelAction, genreAction, loading };

@@ -25,6 +25,7 @@ yt-dlp
 PyMuPDF
 pytesseract
 Pillow
+regex
 
 # dev / test
 httpx

@@ -344,3 +344,10 @@ async def get_word_forms(pool: asyncpg.Pool, terms: list[str]) -> list[str]:
 async def get_languages(pool: asyncpg.Pool) -> list[str]:
     rows = await pool.fetch("SELECT DISTINCT language FROM video ORDER BY language")
     return [r["language"] for r in rows]
+
+
+async def get_categories(pool: asyncpg.Pool) -> list[str]:
+    rows = await pool.fetch(
+        "SELECT category FROM video_category ORDER BY category"
+    )
+    return [r["category"] for r in rows]
