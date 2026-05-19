@@ -1,4 +1,7 @@
-import { defineConfig } from 'vite'
+// Use vitest/config's defineConfig so the `test` block type-checks. This is a
+// drop-in replacement for vite's defineConfig and supports the full vite API
+// plus vitest's test options.
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
 // https://vite.dev/config/

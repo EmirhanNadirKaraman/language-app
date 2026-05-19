@@ -398,6 +398,15 @@ def _mark_request(cursor, connection, request_id: int, status: str, error: str |
         "UPDATE content_request SET status = %s, error = %s, updated_at = NOW() WHERE request_id = %s",
         (status, error, request_id),
     )
+    # Emit a request_failed notification so users get push feedback on failures,
+    # mirroring the channel_done / video_done success paths. All six failure
+    # call sites pass an `error` string; if any future caller passes None we
+    # fall back to a generic reason so the notification still goes out.
+    if status == "failed":
+        _notify_user(
+            cursor, connection, request_id, "request_failed",
+            {"reason": error or "unknown"},
+        )
     connection.commit()
 
 

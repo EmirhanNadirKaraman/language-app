@@ -738,3 +738,167 @@ async def test_items_phrase_type_returns_empty(client, db_pool):
     assert resp.status_code == 200
     assert body["items"] == []
     assert body["item_type"] == "phrase"
+
+
+# ---------------------------------------------------------------------------
+# Unified enrichment dispatcher (#5c)
+# ---------------------------------------------------------------------------
+
+async def _make_user(db_pool) -> str:
+    from backend.services.auth_service import register_user
+    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    user = await register_user(db_pool, email, "password123")
+    return str(user["user_id"])
+
+
+async def test_enrich_by_type_buckets_words_and_phrases(db_pool):
+    """Mixed enrichment fans out to the per-type enrichers and returns a
+    composite-keyed dict."""
+    from backend.services.recommendation_service import enrich_by_type
+
+    word_row = await db_pool.fetchrow(
+        "SELECT word_id, word, language FROM word_table LIMIT 1"
+    )
+    phrase_row = await db_pool.fetchrow(
+        "SELECT phrase_id, surface_form, language FROM phrase_table LIMIT 1"
+    )
+    if word_row is None or phrase_row is None:
+        pytest.skip("word_table or phrase_table empty")
+
+    word_id  = word_row["word_id"]
+    phrase_id = phrase_row["phrase_id"]
+    language = word_row["language"]
+    if phrase_row["language"] != language:
+        pytest.skip("word and phrase languages differ")
+
+    uid = await _make_user(db_pool)
+
+    enrichment = await enrich_by_type(
+        db_pool, uid,
+        [("word", word_id), ("phrase", phrase_id)],
+        language,
+    )
+    assert ("word", word_id) in enrichment
+    assert ("phrase", phrase_id) in enrichment
+    assert enrichment[("word", word_id)]["display_text"]   == word_row["word"]
+    assert enrichment[("phrase", phrase_id)]["display_text"] == phrase_row["surface_form"]
+
+
+async def test_enrich_by_type_omits_unknown_ids(db_pool):
+    """IDs that don't exist in the relevant table are silently dropped."""
+    from backend.services.recommendation_service import enrich_by_type
+
+    uid = await _make_user(db_pool)
+    enrichment = await enrich_by_type(
+        db_pool, uid,
+        [("word", 999_999_999), ("phrase", 999_999_999), ("grammar_rule", 999_999_999)],
+        "de",
+    )
+    assert enrichment == {}
+
+
+async def test_enrich_by_type_no_collision_on_shared_int_id(db_pool):
+    """Composite key (item_type, item_id) keeps word_id=N and phrase_id=N
+    enrichments distinct, even if both happen to be the same integer."""
+    from backend.services.recommendation_service import enrich_by_type
+
+    # Find a word_id and a phrase_id that share the same integer value.
+    row = await db_pool.fetchrow(
+        """
+        SELECT wt.word_id AS shared_id, wt.word, pt.surface_form, wt.language
+          FROM word_table wt
+          JOIN phrase_table pt ON pt.phrase_id = wt.word_id
+         WHERE wt.language = pt.language
+         LIMIT 1
+        """
+    )
+    if row is None:
+        pytest.skip("no shared id between word_table and phrase_table — collision-free corpus")
+
+    shared_id = row["shared_id"]
+    language  = row["language"]
+    uid = await _make_user(db_pool)
+
+    enrichment = await enrich_by_type(
+        db_pool, uid,
+        [("word", shared_id), ("phrase", shared_id)],
+        language,
+    )
+
+    assert ("word",   shared_id) in enrichment
+    assert ("phrase", shared_id) in enrichment
+    # Distinct display_text proves no collision.
+    assert enrichment[("word",   shared_id)]["display_text"] == row["word"]
+    assert enrichment[("phrase", shared_id)]["display_text"] == row["surface_form"]
+
+
+async def test_recommend_items_returns_phrase_enrichment(db_pool, client):
+    """recommend_items(item_type='phrase') returns enriched phrase rows when the
+    user has a phrase in learning state (path that previously worked but had
+    its dispatch duplicated)."""
+    phrase_row = await db_pool.fetchrow(
+        "SELECT phrase_id, surface_form, language FROM phrase_table LIMIT 1"
+    )
+    if phrase_row is None:
+        pytest.skip("phrase_table empty")
+    phrase_id, surface_form, language = phrase_row["phrase_id"], phrase_row["surface_form"], phrase_row["language"]
+
+    token = await _auth_token(client)
+    uid = await db_pool.fetchval(
+        "SELECT user_id FROM users WHERE email LIKE 'test+%@example.com' ORDER BY user_id DESC LIMIT 1"
+    )
+    await db_pool.execute(
+        "INSERT INTO user_word_knowledge (user_id, item_id, item_type, status) "
+        "VALUES ($1::uuid, $2, 'phrase', 'learning')",
+        uid, phrase_id,
+    )
+
+    resp = await client.get(
+        "/api/v1/recommendations/items",
+        params={"language": language, "item_type": "phrase"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    body = resp.json()
+
+    assert resp.status_code == 200
+    matching = [i for i in body["items"] if i["item_id"] == phrase_id]
+    assert matching, "expected the learning phrase to appear"
+    assert matching[0]["item_type"]    == "phrase"
+    assert matching[0]["display_text"] == surface_form
+
+
+async def test_recommend_items_returns_grammar_rule_enrichment(db_pool, client):
+    """recommend_items(item_type='grammar_rule') used to return [] no matter
+    what (no enricher). After #5c it returns enriched rule rows."""
+    rule_row = await db_pool.fetchrow(
+        "SELECT rule_id, title, rule_type, language FROM grammar_rule_table LIMIT 1"
+    )
+    if rule_row is None:
+        pytest.skip("grammar_rule_table empty — seed step did not run")
+    rule_id, title, rule_type, language = (
+        rule_row["rule_id"], rule_row["title"], rule_row["rule_type"], rule_row["language"],
+    )
+
+    token = await _auth_token(client)
+    uid = await db_pool.fetchval(
+        "SELECT user_id FROM users WHERE email LIKE 'test+%@example.com' ORDER BY user_id DESC LIMIT 1"
+    )
+    await db_pool.execute(
+        "INSERT INTO user_word_knowledge (user_id, item_id, item_type, status) "
+        "VALUES ($1::uuid, $2, 'grammar_rule', 'learning')",
+        uid, rule_id,
+    )
+
+    resp = await client.get(
+        "/api/v1/recommendations/items",
+        params={"language": language, "item_type": "grammar_rule"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    body = resp.json()
+
+    assert resp.status_code == 200
+    matching = [i for i in body["items"] if i["item_id"] == rule_id]
+    assert matching, "expected the learning grammar rule to appear"
+    assert matching[0]["item_type"]      == "grammar_rule"
+    assert matching[0]["display_text"]   == title
+    assert matching[0]["secondary_text"] == rule_type

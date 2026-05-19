@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { VideoSentence } from '../types';
 import { WORD_COLORS } from '../config/wordColors';
+import type { WordColorScheme } from '../config/wordColors';
 
 export type NormalizedSentence = VideoSentence & {
     timeSec: number;

@@ -197,6 +197,111 @@ async def test_match_deduplicates_repeated_word(client: AsyncClient, db_pool):
 
 
 # ---------------------------------------------------------------------------
+# Phrase matching — match_learning_words delegates to matcher_service (#5b)
+# ---------------------------------------------------------------------------
+
+async def _get_phrase(db_pool, language: str = "de") -> tuple[int, str, str, str] | None:
+    """Return (phrase_id, canonical, surface_form, language) for any seeded phrase."""
+    row = await db_pool.fetchrow(
+        "SELECT phrase_id, canonical, surface_form, language FROM phrase_table "
+        "WHERE language = $1 LIMIT 1",
+        language,
+    )
+    return (row["phrase_id"], row["canonical"], row["surface_form"], row["language"]) if row else None
+
+
+async def test_match_returns_learning_phrase_by_surface(client: AsyncClient, db_pool):
+    """A phrase in 'learning' status whose surface form appears in the message
+    must be returned with item_type='phrase'."""
+    info = await _get_phrase(db_pool)
+    if info is None:
+        pytest.skip("phrase_table is empty — seed the phrase pipeline first")
+    phrase_id, canonical, surface_form, language = info
+
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    await db_pool.execute(
+        "INSERT INTO user_word_knowledge (user_id, item_id, item_type, status) "
+        "VALUES ($1::uuid, $2, 'phrase', 'learning') "
+        "ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET status = 'learning'",
+        uid, phrase_id,
+    )
+
+    matches = await match_learning_words(db_pool, uid, surface_form, language)
+    assert any(m["item_id"] == phrase_id and m["item_type"] == "phrase" for m in matches)
+
+
+async def test_match_inflected_phrase_matches_canonical(client: AsyncClient, db_pool):
+    """Inflected production (e.g. 'ich freue mich auf die Reise') must match the
+    canonical 'sich freuen auf' via the spaCy-based phrase_finder."""
+    row = await db_pool.fetchrow(
+        "SELECT phrase_id FROM phrase_table WHERE canonical = $1 AND language = 'de'",
+        "sich freuen auf",
+    )
+    if row is None:
+        pytest.skip("phrase 'sich freuen auf' not seeded — skip inflection test")
+    phrase_id = row["phrase_id"]
+
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    await db_pool.execute(
+        "INSERT INTO user_word_knowledge (user_id, item_id, item_type, status) "
+        "VALUES ($1::uuid, $2, 'phrase', 'learning') "
+        "ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET status = 'learning'",
+        uid, phrase_id,
+    )
+
+    matches = await match_learning_words(db_pool, uid, "Ich freue mich auf die Reise.", "de")
+    assert any(m["item_id"] == phrase_id and m["item_type"] == "phrase" for m in matches), (
+        "expected inflected 'freue mich auf' to map to canonical 'sich freuen auf'"
+    )
+
+
+async def test_match_excludes_known_phrases(client: AsyncClient, db_pool):
+    """A phrase with status='known' must NOT appear in matches."""
+    info = await _get_phrase(db_pool)
+    if info is None:
+        pytest.skip("phrase_table empty")
+    phrase_id, _, surface_form, language = info
+
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    await db_pool.execute(
+        "INSERT INTO user_word_knowledge (user_id, item_id, item_type, status) "
+        "VALUES ($1::uuid, $2, 'phrase', 'known') "
+        "ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET status = 'known'",
+        uid, phrase_id,
+    )
+
+    matches = await match_learning_words(db_pool, uid, surface_form, language)
+    assert not any(m["item_id"] == phrase_id and m["item_type"] == "phrase" for m in matches)
+
+
+async def test_match_word_and_phrase_returned_together(client: AsyncClient, db_pool):
+    """A message containing both a tracked word and a tracked phrase must return
+    both kinds of match in one call."""
+    info = await _get_phrase(db_pool)
+    if info is None:
+        pytest.skip("phrase_table empty")
+    phrase_id, _, surface_form, language = info
+
+    word_id, word, _ = await _get_word(db_pool)
+    if language != "de":
+        pytest.skip("test assumes de word + de phrase")
+
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    await _mark_learning(db_pool, uid, word_id)
+    await db_pool.execute(
+        "INSERT INTO user_word_knowledge (user_id, item_id, item_type, status) "
+        "VALUES ($1::uuid, $2, 'phrase', 'learning') "
+        "ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET status = 'learning'",
+        uid, phrase_id,
+    )
+
+    matches = await match_learning_words(db_pool, uid, f"{word} {surface_form}", language)
+    item_types = {m["item_type"] for m in matches}
+    assert "word" in item_types
+    assert "phrase" in item_types
+
+
+# ---------------------------------------------------------------------------
 # Integration tests — free chat HTTP endpoint (LLM mocked)
 # ---------------------------------------------------------------------------
 

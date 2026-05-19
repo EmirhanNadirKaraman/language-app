@@ -18,7 +18,10 @@ import { useNotifications } from './hooks/useNotifications';
 import { useSearch } from './hooks/useSearch';
 import { useReminders } from './hooks/useReminders';
 import { usePreferences } from './hooks/usePreferences';
+import { useViewport } from './hooks/useViewport';
 import { getToken } from './auth';
+import { AUTH_EXPIRED_EVENT } from './api/_http';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import type { UserPreferences, UserPreferencesUpdate, ChannelAction, GenreAction } from './api/settings';
 import type { SearchResult, BookDocument } from './types';
 
@@ -45,11 +48,26 @@ function Layout() {
     useReminders(token, prefs.reminders_enabled);
   const navigate = useNavigate();
   const darkMode = prefs.dark_mode;
+  const { isMobile } = useViewport();
 
   useEffect(() => {
     document.body.style.background = darkMode ? '#121212' : '';
     return () => { document.body.style.background = ''; };
   }, [darkMode]);
+
+  // Centralised auth-expiry handler: api/_http.ts dispatches AUTH_EXPIRED_EVENT
+  // whenever any request returns 401 (including the new detail='token_expired'
+  // branch from backend/core/deps.py). _http.ts has already cleared the stored
+  // token/email by the time this fires; we just sync React state and bounce
+  // the user back to home so any protected page they're on re-renders empty.
+  useEffect(() => {
+    function onAuthExpired() {
+      setToken(null);
+      navigate('/');
+    }
+    window.addEventListener(AUTH_EXPIRED_EVENT, onAuthExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onAuthExpired);
+  }, [navigate]);
 
   const ctx: AppCtx = { token, prefs, savePreferences, channelAction, genreAction, recLanguage, setRecLanguage };
 
@@ -72,7 +90,22 @@ function Layout() {
   return (
     <>
       <NotificationContainer notifications={notifications} onDismiss={dismissNotification} darkMode={darkMode} />
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '24px 16px', fontFamily: 'sans-serif', background: darkMode ? '#121212' : undefined, minHeight: '100vh', color: darkMode ? '#e0e0e0' : undefined }}>
+      <div style={{
+        maxWidth: '900px',
+        margin: '0 auto',
+        // Mobile (#27a): tighter side gutters; add safe-area top inset so a
+        // future iOS Capacitor wrap doesn't draw under the notch. The
+        // breakpoint is duplicated as a literal in useViewport — keep them
+        // aligned with --bp-md in index.css.
+        padding: isMobile ? '12px 8px' : '24px 16px',
+        paddingTop: isMobile
+          ? 'calc(12px + var(--safe-top))'
+          : 'calc(24px + var(--safe-top))',
+        fontFamily: 'sans-serif',
+        background: darkMode ? '#121212' : undefined,
+        minHeight: '100vh',
+        color: darkMode ? '#e0e0e0' : undefined,
+      }}>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
           <NavLink to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
@@ -101,7 +134,9 @@ function Layout() {
           />
         )}
 
-        <Outlet context={ctx} />
+        <ErrorBoundary>
+          <Outlet context={ctx} />
+        </ErrorBoundary>
       </div>
     </>
   );
@@ -117,8 +152,8 @@ type HomeNavState = {
 };
 
 function HomePage() {
-  const { token, prefs } = useAppCtx();
-  const { terms, query, addTerm, removeTerm, results, total, loading, error, hasMore, loadMore } = useSearch();
+  const { token, prefs, recLanguage } = useAppCtx();
+  const { terms, query, addTerm, removeTerm, results, total, loading, error, hasMore, loadMore } = useSearch(recLanguage || 'de');
   const [resultIdx, setResultIdx] = useState(0);
   const [showChat, setShowChat] = useState<'free' | 'guided' | null>(null);
   const [recResult, setRecResult] = useState<SearchResult | null>(null);

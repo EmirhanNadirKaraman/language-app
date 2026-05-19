@@ -4,9 +4,8 @@ import { fetchSearch } from '../api/search';
 
 const PAGE_SIZE = 20;
 
-export function useSearch() {
+export function useSearch(language: string = 'de') {
   const [terms, setTerms] = useState<string[]>([]);
-  const language = 'de';
   const [results, setResults] = useState<SearchResult[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);

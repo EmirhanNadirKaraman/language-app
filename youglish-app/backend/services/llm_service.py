@@ -899,3 +899,176 @@ async def evaluate_and_reply(
         "corrections": result.get("corrections", []),
         "word_matches": [],
     }
+
+
+# ---------------------------------------------------------------------------
+# Item gloss — short English label for SRS review prompts/answers (#0a-1)
+# ---------------------------------------------------------------------------
+
+_GLOSS_TOOL: anthropic.types.ToolParam = {
+    "name": "item_gloss",
+    "description": "Return a short English gloss for a foreign-language word or phrase.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "gloss": {
+                "type": "string",
+                "description": (
+                    "A concise English translation of the item — ideally 1-4 words. "
+                    "Not a full explanation. For verbs use the English infinitive (e.g. 'to eat'). "
+                    "For phrases give the natural English equivalent. Lowercase unless a proper noun."
+                ),
+            }
+        },
+        "required": ["gloss"],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# SRS production evaluation (#0a-2)
+# ---------------------------------------------------------------------------
+
+_PRODUCTION_EVAL_TOOL: anthropic.types.ToolParam = {
+    "name": "evaluate_production",
+    "description": (
+        "Judge whether the learner's answer correctly produces the target item. "
+        "Accept reasonable inflections and minor capitalization differences. "
+        "Reject answers that are clearly the wrong word, English instead of the "
+        "target language, or meaningfully different in meaning."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "correct": {
+                "type": "boolean",
+                "description": "True if the learner produced the target item correctly (allowing reasonable inflection / case differences).",
+            },
+            "feedback": {
+                "type": "string",
+                "description": "One short sentence (<= 120 chars) explaining the verdict to the learner.",
+            },
+            "corrected_form": {
+                "type": "string",
+                "description": "The canonical target form. Empty string when not applicable.",
+            },
+        },
+        "required": ["correct", "feedback", "corrected_form"],
+    },
+}
+
+
+async def evaluate_production(
+    target_text: str,
+    target_lemma: str | None,
+    user_answer: str,
+    language: str,
+) -> dict:
+    """Judge whether `user_answer` correctly produces the target item.
+
+    Not cached — input is user-supplied and high-cardinality. The caller is
+    expected to short-circuit obvious exact matches before invoking this.
+
+    Returns:
+        {
+            "correct": bool,
+            "feedback": str,
+            "corrected_form": str,
+        }
+    """
+    if _MOCK:
+        # Deterministic stub for tests: substring match of target in user answer.
+        normalized = (user_answer or "").strip().lower()
+        target_lower = target_text.strip().lower()
+        correct = bool(normalized) and target_lower in normalized
+        return {
+            "correct":        correct,
+            "feedback":       "[mock] match" if correct else "[mock] not the target",
+            "corrected_form": target_text,
+        }
+
+    lemma_clause = f"\nTarget lemma: {target_lemma}" if target_lemma else ""
+    response = await _client.messages.create(
+        model=_MODEL,
+        max_tokens=256,
+        system=(
+            f"You judge whether a learner's single-shot answer correctly produces a target "
+            f"{language} item (word or phrase). Be lenient on inflection, case, and minor "
+            f"spelling slips; be strict on meaning. Empty / wrong-language / unrelated answers "
+            f"are incorrect. You MUST call the evaluate_production tool."
+        ),
+        tools=[_PRODUCTION_EVAL_TOOL],
+        tool_choice={"type": "tool", "name": "evaluate_production"},
+        messages=[{
+            "role": "user",
+            "content": (
+                f"Target: {target_text}{lemma_clause}\n"
+                f"Learner answer: {user_answer}\n\n"
+                f"Did the learner produce the target correctly?"
+            ),
+        }],
+    )
+    tool_block = next(b for b in response.content if b.type == "tool_use")
+    return {
+        "correct":        bool(tool_block.input["correct"]),
+        "feedback":       str(tool_block.input["feedback"]),
+        "corrected_form": str(tool_block.input.get("corrected_form") or target_text),
+    }
+
+
+async def translate_item_gloss(
+    text: str,
+    item_type: str,
+    language: str,
+    *,
+    pool: asyncpg.Pool | None = None,
+) -> str:
+    """Return a short English gloss for `text`. Permanently cached.
+
+    Used by `review_service.get_due_cards` to populate prompt_text/answer_text
+    on SRS cards so the frontend can show English on one side and the German
+    item on the other (instead of showing the German on both sides today).
+
+    Handles item_type ∈ {'word', 'phrase'}. Grammar rules don't need an LLM
+    gloss — callers use `grammar_rule_table.short_explanation` directly.
+
+    Cache key shape (prompt_key='item_gloss'):
+        {"text": text.lower(), "item_type": item_type, "language": language}
+    """
+    if item_type not in ("word", "phrase"):
+        raise ValueError(f"translate_item_gloss handles 'word'/'phrase', got {item_type!r}")
+
+    if _MOCK:
+        return f"[gloss:{text}]"
+
+    cache_key: str | None = None
+    if pool is not None:
+        cache_key = llm_cache_service.make_cache_key(
+            "item_gloss", _MODEL,
+            {"text": text.lower(), "item_type": item_type, "language": language},
+        )
+        cached = await llm_cache_service.get_cached(pool, cache_key)
+        if cached is not None:
+            return cached["gloss"]
+
+    response = await _client.messages.create(
+        model=_MODEL,
+        max_tokens=64,
+        system=(
+            f"You produce concise English glosses for {language}-language learning vocabulary. "
+            f"Keep the gloss minimal (1-4 words for single words, short phrase for multi-word items). "
+            f"You MUST call the item_gloss tool."
+        ),
+        tools=[_GLOSS_TOOL],
+        tool_choice={"type": "tool", "name": "item_gloss"},
+        messages=[{"role": "user", "content": f"Item: {text}\nType: {item_type}"}],
+    )
+    tool_block = next(b for b in response.content if b.type == "tool_use")
+    gloss: str = tool_block.input["gloss"]
+
+    if pool is not None and cache_key is not None:
+        await llm_cache_service.set_cached(
+            pool, cache_key, "item_gloss", _MODEL,
+            {"gloss": gloss},
+        )
+    return gloss

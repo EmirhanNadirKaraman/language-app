@@ -1,3 +1,5 @@
+import { assertOkJson } from './_http';
+
 export interface UserPreferences {
     liked_genres: string[];
     liked_channels: string[];
@@ -41,10 +43,13 @@ function authHeaders(token: string): HeadersInit {
     return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
+// All settings fetches go through assertOkJson so a 401 triggers the shared
+// auth:expired flow in _http.ts (clears auth + dispatches the event Layout
+// listens for). Non-401 errors surface as readable messages for the caller.
+
 export async function getPreferences(token: string): Promise<UserPreferences> {
     const res = await fetch('/api/v1/settings/preferences', { headers: authHeaders(token) });
-    if (!res.ok) throw new Error('Failed to fetch preferences');
-    return res.json() as Promise<UserPreferences>;
+    return assertOkJson<UserPreferences>(res, 'Failed to fetch preferences');
 }
 
 export async function updatePreferences(
@@ -56,8 +61,7 @@ export async function updatePreferences(
         headers: authHeaders(token),
         body: JSON.stringify(update),
     });
-    if (!res.ok) throw new Error('Failed to update preferences');
-    return res.json() as Promise<UserPreferences>;
+    return assertOkJson<UserPreferences>(res, 'Failed to update preferences');
 }
 
 export async function updateChannelPreference(
@@ -71,8 +75,7 @@ export async function updateChannelPreference(
         headers: authHeaders(token),
         body: JSON.stringify({ channel_id: channelId, channel_name: channelName, action }),
     });
-    if (!res.ok) throw new Error('Failed to update channel preference');
-    return res.json() as Promise<UserPreferences>;
+    return assertOkJson<UserPreferences>(res, 'Failed to update channel preference');
 }
 
 export async function updateGenrePreference(
@@ -85,6 +88,5 @@ export async function updateGenrePreference(
         headers: authHeaders(token),
         body: JSON.stringify({ genre, action }),
     });
-    if (!res.ok) throw new Error('Failed to update genre preference');
-    return res.json() as Promise<UserPreferences>;
+    return assertOkJson<UserPreferences>(res, 'Failed to update genre preference');
 }

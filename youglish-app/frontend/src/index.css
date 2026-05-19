@@ -177,6 +177,16 @@ textarea {
     --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
     --mono: ui-monospace, Consolas, monospace;
 
+    /* Mobile responsive infrastructure (#27a).
+       NOTE: CSS variables cannot be used inside @media query conditions, so the
+       breakpoint values are duplicated as literals at each @media site
+       (480px for --bp-sm, 768px for --bp-md). Variables exist as design-tokens
+       and for JS consumption via getComputedStyle / matchMedia. */
+    --bp-sm: 480px;
+    --bp-md: 768px;
+    --safe-top:    env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+
     font: 18px/145% var(--sans);
     letter-spacing: 0.18px;
     color-scheme: light dark;
@@ -190,6 +200,17 @@ textarea {
     @media (max-width: 1024px) {
         font-size: 16px;
     }
+}
+
+/* iOS Safari: prevent text auto-resizing on orientation change. */
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
+/* 16px floor for body keeps inputs from triggering iOS Safari's "form input
+   focus zoom-in" behavior (it kicks in for any input <16px). */
+body {
+    font-size: 16px;
 }
 
 @media (prefers-color-scheme: dark) {

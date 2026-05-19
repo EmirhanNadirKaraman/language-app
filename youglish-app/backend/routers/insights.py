@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..core.deps import get_current_user
+from ..core.deps import get_current_user, rate_limit_llm
 from ..database import get_pool
 from ..models.schemas import (
     GenerateExamplesRequest,
@@ -38,7 +38,11 @@ async def get_cards(
     )
 
 
-@router.get("/prep", response_model=PrepViewData)
+@router.get(
+    "/prep",
+    response_model=PrepViewData,
+    dependencies=[Depends(rate_limit_llm)],
+)
 async def get_prep(
     item_id: int = Query(...),
     item_type: str = Query(...),
@@ -67,7 +71,11 @@ async def get_prep(
     return result
 
 
-@router.post("/prep/generate-examples", response_model=GenerateExamplesResponse)
+@router.post(
+    "/prep/generate-examples",
+    response_model=GenerateExamplesResponse,
+    dependencies=[Depends(rate_limit_llm)],
+)
 async def generate_examples(
     body: GenerateExamplesRequest,
     pool=Depends(get_pool),
@@ -118,7 +126,11 @@ async def get_grammar_rule(
     return {**rule, "long_explanation": long_explanation}
 
 
-@router.post("/grammar/{slug}/explain", response_model=GrammarRuleExplainResponse)
+@router.post(
+    "/grammar/{slug}/explain",
+    response_model=GrammarRuleExplainResponse,
+    dependencies=[Depends(rate_limit_llm)],
+)
 async def explain_grammar_rule(
     slug: str,
     language: str = Query(default=_DEFAULT_LANGUAGE),

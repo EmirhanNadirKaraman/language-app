@@ -118,21 +118,33 @@ def test_compute_delta_status_marked_learning():
     assert d.active_delta == 0
     assert d.times_seen_delta == 1
     assert d.passive_srs == "create"
-    assert d.active_srs is None
+    assert d.active_srs == "create"
 
 
 def test_compute_delta_status_marked_known():
+    """Manual 'Known' is user confidence — must not fabricate active progress.
+
+    Status flip to 'known' is written inside apply_progression's transaction
+    (via status_override). This rule only advances the passive SRS card;
+    active is untouched.
+    """
     d = compute_delta("status_marked_known")
-    assert d.passive_delta == 3
-    assert d.active_delta == 1
-    assert d.times_used_correctly_delta == 1
+    assert d.passive_delta == 0
+    assert d.active_delta == 0
+    assert d.times_used_correctly_delta == 0
     assert d.passive_srs == "correct"
-    assert d.active_srs == "correct"
+    assert d.active_srs is None
 
 
 def test_compute_delta_status_marked_unknown():
+    """Manual 'Unknown' resets existing SRS cards but leaves levels alone."""
     d = compute_delta("status_marked_unknown")
-    assert d == ProgressionDelta()  # all zeros, no SRS
+    assert d.passive_delta == 0
+    assert d.active_delta == 0
+    assert d.times_seen_delta == 0
+    assert d.times_used_correctly_delta == 0
+    assert d.passive_srs == "incorrect"
+    assert d.active_srs == "incorrect"
 
 
 def test_compute_delta_unknown_event_raises():
@@ -285,36 +297,404 @@ async def test_status_marked_learning_creates_passive_card(db_pool):
     assert card["repetitions"] == 0    # 'create' action — not advanced yet
 
 
-async def test_status_marked_learning_does_not_create_active_card(db_pool):
+async def test_status_marked_learning_creates_active_card(db_pool):
     uid = await _make_user(db_pool)
     wid = await _get_word_id(db_pool)
 
     await _apply(db_pool, uid, wid, "status_marked_learning")
 
     card = await _get_srs(db_pool, uid, wid, "active")
-    assert card is None
+    assert card is not None
+    assert card["repetitions"] == 0    # 'create' action — not advanced yet
 
 
-async def test_status_marked_known_creates_both_cards(db_pool):
+async def test_status_marked_known_creates_passive_card_only(db_pool):
+    """Manual known advances passive but must NOT create active SRS card."""
     uid = await _make_user(db_pool)
     wid = await _get_word_id(db_pool)
 
     await _apply(db_pool, uid, wid, "status_marked_known")
 
     assert await _get_srs(db_pool, uid, wid, "passive") is not None
-    assert await _get_srs(db_pool, uid, wid, "active") is not None
+    assert await _get_srs(db_pool, uid, wid, "active") is None
 
 
-async def test_status_marked_known_boosts_both_levels(db_pool):
+async def test_status_marked_known_does_not_change_levels(db_pool):
+    """Manual known is self-classification, not evidence — leaves levels untouched."""
     uid = await _make_user(db_pool)
     wid = await _get_word_id(db_pool)
 
+    # status_marked_known has no level deltas; called without status_override,
+    # no row is created. The router-side caller (test_words.py) covers the
+    # status_override=... path that *does* write a row.
     await _apply(db_pool, uid, wid, "status_marked_known")
 
     row = await _get_uwk(db_pool, uid, wid)
-    assert row["passive_level"] == 3
-    assert row["active_level"] == 1
-    assert row["times_used_correctly"] == 1
+    if row is not None:
+        assert row["passive_level"] == 0
+        assert row["active_level"] == 0
+        assert row["times_used_correctly"] == 0
+
+
+async def test_status_marked_known_does_not_advance_existing_active_card(db_pool):
+    """If the user already had an active card from learning, manual known must not
+    advance it as if they answered correctly. The card's SM-2 state stays put.
+    """
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Seed an active card by marking learning (creates both passive + active at
+    # interval=1.0, reps=0 thanks to #0b).
+    await _apply(db_pool, uid, wid, "status_marked_learning")
+    before = await _get_srs(db_pool, uid, wid, "active")
+    assert before is not None
+    assert before["repetitions"] == 0
+
+    # Manual known — must NOT touch the active card.
+    await _apply(db_pool, uid, wid, "status_marked_known")
+
+    after = await _get_srs(db_pool, uid, wid, "active")
+    assert after is not None
+    assert after["repetitions"] == before["repetitions"]
+    assert after["interval_days"] == before["interval_days"]
+    assert after["ease_factor"] == before["ease_factor"]
+    assert after["due_date"] == before["due_date"]
+
+
+async def test_status_marked_known_does_not_increment_times_used_correctly(db_pool):
+    """`times_used_correctly` tracks actual production — confidence clicks must not bump it."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Pre-seed a row so we can read times_used_correctly afterwards.
+    await _apply(db_pool, uid, wid, "status_marked_learning")
+    before = await _get_uwk(db_pool, uid, wid)
+    before_count = before["times_used_correctly"] if before else 0
+
+    await _apply(db_pool, uid, wid, "status_marked_known")
+
+    after = await _get_uwk(db_pool, uid, wid)
+    after_count = after["times_used_correctly"] if after else 0
+    assert after_count == before_count
+
+
+# Sanity: existing production events must still bump active_level — the rule
+# change must not regress these. (Tests for guided_counted exist above; the
+# additions below cover the events that weren't explicitly asserted before.)
+
+async def test_active_review_correct_still_increments_active_level(db_pool):
+    """active_review_correct must still bump active_level after the status_marked_known fix."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Need an existing active card so SM-2 advance applies.
+    await _apply(db_pool, uid, wid, "status_marked_learning")
+    before = await _get_uwk(db_pool, uid, wid)
+    before_active = before["active_level"] if before else 0
+
+    await _apply(db_pool, uid, wid, "active_review_correct")
+
+    after = await _get_uwk(db_pool, uid, wid)
+    assert after["active_level"] == before_active + 1
+    assert after["times_used_correctly"] >= 1
+
+
+async def test_free_chat_used_correctly_still_increments_active_level(db_pool):
+    """free_chat_used_correctly must still bump active_level (German production)."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await _apply(db_pool, uid, wid, "free_chat_used_correctly")
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["active_level"] >= 1
+    assert row["times_used_correctly"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# status_marked_unknown — resets existing cards, never creates new ones
+# ---------------------------------------------------------------------------
+
+async def test_status_marked_unknown_resets_existing_passive_card(db_pool):
+    """An advanced passive card should be knocked back to 1 day, reps=0."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Build up a passive card with multiple correct reviews.
+    await _apply(db_pool, uid, wid, "status_marked_learning")
+    for _ in range(3):
+        await _apply(db_pool, uid, wid, "passive_review_correct")
+
+    before = await _get_srs(db_pool, uid, wid, "passive")
+    assert before["repetitions"] >= 3
+    assert before["interval_days"] > 1.0
+
+    await _apply(db_pool, uid, wid, "status_marked_unknown")
+
+    after = await _get_srs(db_pool, uid, wid, "passive")
+    assert after is not None
+    assert after["interval_days"] == 1.0
+    assert after["repetitions"] == 0
+    # ease drops by 0.15, floored at 1.3
+    assert after["ease_factor"] < before["ease_factor"]
+
+
+async def test_status_marked_unknown_resets_existing_active_card(db_pool):
+    """If active card already exists (from learning), it should also reset."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Learning creates both cards (#0b); a guided_counted then advances active.
+    await _apply(db_pool, uid, wid, "status_marked_learning")
+    await _apply(db_pool, uid, wid, "guided_counted")
+
+    before = await _get_srs(db_pool, uid, wid, "active")
+    assert before is not None
+    assert before["repetitions"] >= 1
+
+    await _apply(db_pool, uid, wid, "status_marked_unknown")
+
+    after = await _get_srs(db_pool, uid, wid, "active")
+    assert after is not None
+    assert after["interval_days"] == 1.0
+    assert after["repetitions"] == 0
+
+
+async def test_status_marked_unknown_does_not_create_active_card_when_missing(db_pool):
+    """Critical: clicking Unknown must NEVER fabricate an active card.
+
+    Verifies the documented contract that action='incorrect' is a no-op when
+    the card doesn't exist (progression_service.py line ~333).
+    """
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Confirm precondition: no active card.
+    assert await _get_srs(db_pool, uid, wid, "active") is None
+
+    await _apply(db_pool, uid, wid, "status_marked_unknown")
+
+    assert await _get_srs(db_pool, uid, wid, "active") is None
+
+
+async def test_status_marked_unknown_does_not_create_passive_card_when_missing(db_pool):
+    """Same defensive check for the passive side."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    assert await _get_srs(db_pool, uid, wid, "passive") is None
+
+    await _apply(db_pool, uid, wid, "status_marked_unknown")
+
+    assert await _get_srs(db_pool, uid, wid, "passive") is None
+
+
+async def test_status_marked_unknown_does_not_change_levels(db_pool):
+    """Levels are not touched by the rule — no fabricated regression evidence."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Build up levels via real activity.
+    for _ in range(3):
+        await _apply(db_pool, uid, wid, "guided_counted")
+    before = await _get_uwk(db_pool, uid, wid)
+    assert before["passive_level"] == 3
+    assert before["active_level"]  == 3
+
+    await _apply(db_pool, uid, wid, "status_marked_unknown")
+
+    after = await _get_uwk(db_pool, uid, wid)
+    assert after["passive_level"] == before["passive_level"]
+    assert after["active_level"]  == before["active_level"]
+    assert after["times_used_correctly"] == before["times_used_correctly"]
+
+
+# ---------------------------------------------------------------------------
+# passive_review_correct now bumps passive_level
+# ---------------------------------------------------------------------------
+
+async def test_passive_review_correct_increments_passive_level(db_pool):
+    """A correct passive review should advance the 'Understood' metric."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Card needs to exist first (review flow always operates on a real card).
+    await _apply(db_pool, uid, wid, "status_marked_learning")
+    before = await _get_uwk(db_pool, uid, wid)
+    before_passive = before["passive_level"]
+
+    await _apply(db_pool, uid, wid, "passive_review_correct")
+
+    after = await _get_uwk(db_pool, uid, wid)
+    assert after["passive_level"] == before_passive + 1
+
+
+async def test_passive_review_correct_still_advances_card(db_pool):
+    """Adding passive_delta=1 to the rule must not break SM-2 card advancement."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await _apply(db_pool, uid, wid, "status_marked_learning")
+    before = await _get_srs(db_pool, uid, wid, "passive")
+
+    await _apply(db_pool, uid, wid, "passive_review_correct")
+
+    after = await _get_srs(db_pool, uid, wid, "passive")
+    assert after["repetitions"] == before["repetitions"] + 1
+    assert after["interval_days"] > before["interval_days"]
+    assert after["ease_factor"] >= before["ease_factor"]
+
+
+# ---------------------------------------------------------------------------
+# status_override — atomic status + progression in one transaction (#2)
+# ---------------------------------------------------------------------------
+
+async def test_status_override_learning_writes_status_and_creates_cards(db_pool):
+    """One call should atomically: set status='learning', bump passive_level,
+    and create both passive and active SRS cards."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    result = await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+
+    assert result is not None
+    assert result["status"] == "learning"
+    assert result["passive_level"] == 1
+    assert result["times_seen"] == 1
+
+    # Persisted state matches.
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["status"] == "learning"
+
+    # SRS cards created per #0b.
+    assert await _get_srs(db_pool, uid, wid, "passive") is not None
+    assert await _get_srs(db_pool, uid, wid, "active") is not None
+
+
+async def test_status_override_known_writes_status_without_fabricating_active(db_pool):
+    """status_override='known' must persist the status flip but the rule's
+    no-active-credit semantics must hold."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    result = await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_known", status_override="known",
+    )
+
+    assert result is not None
+    assert result["status"] == "known"
+    assert result["active_level"] == 0
+    assert result["times_used_correctly"] == 0
+
+    # No active card was created (rule has active_srs=None).
+    assert await _get_srs(db_pool, uid, wid, "active") is None
+    # Passive card exists (rule has passive_srs='correct').
+    assert await _get_srs(db_pool, uid, wid, "passive") is not None
+
+
+async def test_status_override_unknown_writes_status_and_resets_existing_cards(db_pool):
+    """status_override='unknown' must persist the status flip AND knock down
+    existing SRS schedules via the rule's incorrect actions."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Build up cards via the normal learning loop.
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    await _apply(db_pool, uid, wid, "guided_counted")  # advances active
+    for _ in range(2):
+        await _apply(db_pool, uid, wid, "passive_review_correct")
+    before_p = await _get_srs(db_pool, uid, wid, "passive")
+    before_a = await _get_srs(db_pool, uid, wid, "active")
+    assert before_p["interval_days"] > 1.0
+    assert before_a["repetitions"] >= 1
+
+    # Now click Unknown.
+    result = await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_unknown", status_override="unknown",
+    )
+
+    assert result is not None
+    assert result["status"] == "unknown"
+
+    after_p = await _get_srs(db_pool, uid, wid, "passive")
+    after_a = await _get_srs(db_pool, uid, wid, "active")
+    assert after_p["interval_days"] == 1.0
+    assert after_p["repetitions"] == 0
+    assert after_a["interval_days"] == 1.0
+    assert after_a["repetitions"] == 0
+
+
+async def test_status_override_creates_row_even_without_level_deltas(db_pool):
+    """status_marked_known has no level deltas. Pre-#2 the row would be created
+    by upsert_word_status (now deleted). After #2, apply_progression itself
+    must create the row via status_override on a fresh user."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # No prior row.
+    assert await _get_uwk(db_pool, uid, wid) is None
+
+    result = await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_known", status_override="known",
+    )
+
+    assert result is not None
+    assert result["status"] == "known"
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row is not None
+    assert row["status"] == "known"
+
+
+async def test_status_override_overwrites_existing_status(db_pool):
+    """When the row already exists with a different status, status_override must
+    update it (ON CONFLICT DO UPDATE SET status = ...)."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    assert (await _get_uwk(db_pool, uid, wid))["status"] == "learning"
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_known", status_override="known",
+    )
+    assert (await _get_uwk(db_pool, uid, wid))["status"] == "known"
+
+
+async def test_apply_progression_without_status_override_does_not_touch_status(db_pool):
+    """Sanity: other event paths (SRS reviews, chat) must not silently change
+    the status field when they don't pass status_override."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Establish status='learning'.
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+
+    # A passive review correct without status_override — status must remain 'learning'.
+    await _apply(db_pool, uid, wid, "passive_review_correct")
+    assert (await _get_uwk(db_pool, uid, wid))["status"] == "learning"
+
+
+async def test_apply_progression_returns_none_when_no_write_happens(db_pool):
+    """Events with no level deltas, no SRS-touching-uwk write, and no status_override
+    (e.g. guided_not_used when no card exists) should return None — confirms the
+    return contract for callers that ignore it (SRS reviews, etc.)."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # status_marked_unknown without status_override: rule has only SRS actions
+    # (which no-op when cards are missing) and zero level deltas. No write.
+    result = await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_unknown",
+    )
+    assert result is None
 
 
 async def test_passive_promotion_to_learning(db_pool):

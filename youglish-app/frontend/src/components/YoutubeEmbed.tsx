@@ -88,10 +88,21 @@ export const YoutubeEmbed = forwardRef<YoutubeEmbedHandle, Props>(
     }, [videoId, startTime, autoplay]);
 
     return (
-      <div style={{ position: 'relative', paddingTop: '56.25%', background: '#000' }}>
+      // Modern responsive 16:9 container. `aspectRatio` is supported on all
+      // modern browsers including iOS Safari 14.5+. The container grows to its
+      // parent's width — on mobile that's the full PlayerView width; on desktop
+      // it's capped by the 900px Layout maxWidth.
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          aspectRatio: '16 / 9',
+          background: '#000',
+        }}
+      >
         <div
           ref={containerRef}
-          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
         />
       </div>
     );

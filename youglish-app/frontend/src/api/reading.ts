@@ -1,4 +1,5 @@
 import type { ReadingSelection, ReadingSelectionAnchor, DueSelectionItem } from '../types';
+import { assertOk } from './_http';
 
 function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}` };
@@ -6,19 +7,6 @@ function authHeaders(token: string): Record<string, string> {
 
 function jsonHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-}
-
-async function assertOk(res: Response): Promise<void> {
-  if (!res.ok) {
-    let msg = res.statusText;
-    try {
-      const body = await res.json();
-      msg = body?.detail ?? msg;
-    } catch {
-      // ignore parse error
-    }
-    throw new Error(msg);
-  }
 }
 
 // ── Word statuses ─────────────────────────────────────────────────────────────

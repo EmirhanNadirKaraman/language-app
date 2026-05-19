@@ -24,7 +24,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from ..core.deps import get_current_user
+from ..core.deps import get_current_user, rate_limit_llm
 from ..database import get_pool
 from ..models.schemas import (
     BlockPatchRequest,
@@ -273,7 +273,11 @@ async def patch_block(
 
 # ── LLM repair ────────────────────────────────────────────────────────────────
 
-@router.post("/books/{doc_id}/blocks/{block_id}/llm-repair", response_model=LLMRepairResponse)
+@router.post(
+    "/books/{doc_id}/blocks/{block_id}/llm-repair",
+    response_model=LLMRepairResponse,
+    dependencies=[Depends(rate_limit_llm)],
+)
 async def llm_repair_block(
     doc_id: str,
     block_id: int,
@@ -327,7 +331,10 @@ async def delete_page(
         raise HTTPException(status_code=404, detail="Page not found or not authorized")
 
 
-@router.post("/books/{doc_id}/pages/{page_number}/batch-llm-repair")
+@router.post(
+    "/books/{doc_id}/pages/{page_number}/batch-llm-repair",
+    dependencies=[Depends(rate_limit_llm)],
+)
 async def batch_llm_repair(
     doc_id: str,
     page_number: int,

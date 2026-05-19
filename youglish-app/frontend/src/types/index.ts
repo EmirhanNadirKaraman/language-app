@@ -399,6 +399,19 @@ export interface SRSReviewCard {
   passive_level: number;
   active_level: number;
   display_text: string;
+  // Added in #0a-1: prompt = front of the card, answer = back.
+  // For passive cards: prompt is German display, answer is English gloss.
+  // For active cards: swapped.
+  prompt_text: string;
+  answer_text: string;
+}
+
+export interface SRSProductionResult {
+  card_id: number;
+  correct: boolean;
+  expected: string;   // the canonical German form the user should have produced
+  submitted: string;  // echoed back
+  feedback: string;   // one-sentence explanation
 }
 
 export interface DueSelectionItem {

@@ -35,6 +35,7 @@ export function MessageInput({ onSend, disabled }: Props) {
             background: '#fafafa',
         }}>
             <textarea
+                data-testid="chat-input"
                 ref={ref}
                 value={value}
                 onChange={e => setValue(e.target.value)}
@@ -43,23 +44,28 @@ export function MessageInput({ onSend, disabled }: Props) {
                 enterKeyHint="send"
                 disabled={disabled}
                 rows={2}
+                // iOS Safari zooms in on any input below 16px on focus. 16px
+                // is the minimum that keeps the focus-zoom behaviour off.
                 style={{
                     flex: 1,
+                    minWidth: 0,
                     resize: 'none',
-                    padding: '7px 11px',
+                    padding: '8px 12px',
                     borderRadius: '8px',
                     border: '1px solid #ccc',
-                    fontSize: '14px',
+                    fontSize: '16px',
                     fontFamily: 'inherit',
                     outline: 'none',
                     lineHeight: 1.4,
                 }}
             />
             <button
+                data-testid="chat-send"
                 onClick={submit}
                 disabled={!canSend}
                 style={{
                     padding: '0 18px',
+                    minHeight: '44px',
                     borderRadius: '8px',
                     border: 'none',
                     background: canSend ? '#1a237e' : '#ccc',
@@ -69,6 +75,7 @@ export function MessageInput({ onSend, disabled }: Props) {
                     fontWeight: 600,
                     alignSelf: 'stretch',
                     minWidth: '64px',
+                    touchAction: 'manipulation',
                 }}
             >
                 {disabled ? '…' : 'Send'}

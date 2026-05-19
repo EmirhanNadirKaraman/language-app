@@ -60,11 +60,16 @@ export function GuidedChatPage({ result, token, targetItemId, targetItemType, on
                     {summary ? 'Session Summary' : 'Guided Practice'}
                 </span>
                 <button
+                    data-testid="guided-close"
                     onClick={onClose}
                     style={{
+                        // 44×44 finger-tappable close.
+                        minWidth: '44px', minHeight: '44px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
                         background: 'none', border: 'none',
                         color: '#fff', fontSize: '20px',
-                        cursor: 'pointer', lineHeight: 1, padding: '0 2px',
+                        cursor: 'pointer', lineHeight: 1, padding: 0,
+                        touchAction: 'manipulation',
                     }}
                 >
                     ×
@@ -113,20 +118,23 @@ export function GuidedChatPage({ result, token, targetItemId, targetItemType, on
                     {/* End session button — only shown once the user has at least one turn */}
                     {messages.filter(m => m.role === 'user').length > 0 && (
                         <button
+                            data-testid="guided-end-session"
                             onClick={() => complete(hintLevel)}
                             disabled={completing || sending}
                             style={{
                                 marginLeft: 'auto',
+                                minHeight: '36px',
                                 background: 'none',
                                 border: '1px solid #aaa',
                                 borderRadius: '10px',
-                                padding: '2px 10px',
-                                fontSize: '11px',
+                                padding: '6px 14px',
+                                fontSize: '13px',
                                 fontWeight: 600,
                                 color: '#555',
                                 cursor: completing || sending ? 'not-allowed' : 'pointer',
                                 opacity: completing || sending ? 0.5 : 1,
                                 flexShrink: 0,
+                                touchAction: 'manipulation',
                             }}
                         >
                             {completing ? 'Finishing…' : 'End Session'}
@@ -137,7 +145,11 @@ export function GuidedChatPage({ result, token, targetItemId, targetItemType, on
 
             {/* Hint panel — hidden when summary is shown */}
             {!summary && session?.hints && hintLevel > 0 && (
-                <HintPanel hints={session.hints} hintLevel={hintLevel} onAdvance={() => setHintLevel(l => Math.min(3, l + 1) as 0 | 1 | 2 | 3)} />
+                // The hintLevel > 0 guard guarantees we're in {1, 2, 3} here, but TS doesn't
+                // narrow numeric literal unions through a `> 0` test — cast to the inner
+                // HintPanel's tightened type. The state itself stays 0 | 1 | 2 | 3 so the
+                // "no hint shown yet" initial state remains representable.
+                <HintPanel hints={session.hints} hintLevel={hintLevel as 1 | 2 | 3} onAdvance={() => setHintLevel(l => Math.min(3, l + 1) as 0 | 1 | 2 | 3)} />
             )}
 
             {/* Summary view */}
@@ -192,18 +204,21 @@ function HintButton({ hintLevel, onAdvance }: { hintLevel: 0 | 1 | 2 | 3; onAdva
     if (hintLevel === 3) return null;
     return (
         <button
+            data-testid="guided-hint-button"
             onClick={onAdvance}
             style={{
                 marginLeft: 'auto',
+                minHeight: '36px',
                 background: 'none',
                 border: '1px solid #ffb74d',
                 borderRadius: '10px',
-                padding: '2px 10px',
-                fontSize: '11px',
+                padding: '6px 14px',
+                fontSize: '13px',
                 fontWeight: 600,
                 color: '#e65100',
                 cursor: 'pointer',
                 flexShrink: 0,
+                touchAction: 'manipulation',
             }}
         >
             {hintLevel === 0 ? 'Need a hint?' : 'See more'}
@@ -248,12 +263,17 @@ function HintPanel({
                         style={{
                             background: 'none',
                             border: 'none',
-                            padding: 0,
-                            fontSize: '11px',
+                            // 32px target — text-link styled, kept smaller than 44 to
+                            // not visually dominate the hint row, but big enough for
+                            // a fingertip in landscape.
+                            minHeight: '32px',
+                            padding: '4px 0',
+                            fontSize: '13px',
                             color: '#bf360c',
                             cursor: 'pointer',
                             fontWeight: 600,
                             textDecoration: 'underline',
+                            touchAction: 'manipulation',
                         }}
                     >
                         {hintLevel === 1 ? 'Show German hint →' : 'Show example →'}
@@ -295,23 +315,20 @@ function TargetProgress({ lookup }: { lookup: WordLookupResult }) {
             <ProgressPill
                 label="Understood"
                 dots={passive}
-                max={PASSIVE_MAX}
                 dueText={passiveDue}
             />
             <ProgressPill
                 label="Can use"
                 dots={active}
-                max={ACTIVE_MAX}
                 dueText={activeDue}
             />
         </div>
     );
 }
 
-function ProgressPill({ label, dots, max, dueText }: {
+function ProgressPill({ label, dots, dueText }: {
     label: string;
     dots: { filled: number; empty: number };
-    max: number;
     dueText: string | null;
 }) {
     return (

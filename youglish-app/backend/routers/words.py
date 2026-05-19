@@ -1,7 +1,7 @@
 import asyncio
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 
 from ..core.deps import get_current_user
 from ..database import get_pool
@@ -63,25 +63,24 @@ async def update_status(
     pool=Depends(get_pool),
     current_user: dict = Depends(get_current_user),
 ):
-    # item_type is validated by Literal — FastAPI returns 422 automatically for unknown values
+    # item_type and status are validated by Literal — Pydantic returns 422 for bad values.
     user_id = str(current_user["user_id"])
-    try:
-        result = await word_service.upsert_word_status(pool, user_id, item_type, item_id, body.status)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
-    # Apply passive/active progression (awaited — primary knowledge-state update)
     _progression_event = {
         "learning": "status_marked_learning",
         "known":    "status_marked_known",
         "unknown":  "status_marked_unknown",
     }
-    await progression_service.apply_progression(
+
+    # Single atomic write: status + level deltas + SRS card moves all happen
+    # inside one transaction in apply_progression. No silent-failure window.
+    result = await progression_service.apply_progression(
         pool, user_id, item_id, item_type,
         _progression_event[body.status],
+        status_override=body.status,
     )
 
-    # Record analytics event
+    # Analytics event — fire-and-forget; analytics failure must not fail the request.
     _outcome_map = {"known": "correct", "learning": "used", "unknown": "seen"}
     asyncio.create_task(
         usage_events_service.record_event(

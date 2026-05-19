@@ -11,17 +11,30 @@ import type { ChannelAction, GenreAction, UserPreferences, UserPreferencesUpdate
 export function usePreferences(token: string | null) {
     const [prefs, setPrefs] = useState<UserPreferences>(PREFERENCE_DEFAULTS);
     const [loading, setLoading] = useState(false);
+    const [error,   setError]   = useState<string | null>(null);
 
     useEffect(() => {
         if (!token) {
             setPrefs(PREFERENCE_DEFAULTS);
+            setError(null);
             return;
         }
         let cancelled = false;
         setLoading(true);
+        setError(null);
         getPreferences(token)
-            .then(p => { if (!cancelled) setPrefs({ ...PREFERENCE_DEFAULTS, ...p }); })
-            .catch(() => {})
+            .then(p => {
+                if (!cancelled) setPrefs({ ...PREFERENCE_DEFAULTS, ...p });
+            })
+            .catch((e: unknown) => {
+                // 401 → already handled by _http.ts (auth:expired event fired).
+                // Other errors: surface the message; intentionally keep the
+                // existing `prefs` state so the UI doesn't snap back to
+                // defaults on a transient fetch failure.
+                if (!cancelled) {
+                    setError(e instanceof Error ? e.message : 'Failed to load preferences');
+                }
+            })
             .finally(() => { if (!cancelled) setLoading(false); });
         return () => { cancelled = true; };
     }, [token]);
@@ -51,5 +64,5 @@ export function usePreferences(token: string | null) {
         setPrefs(p => ({ ...PREFERENCE_DEFAULTS, ...p, ...updated }));
     }, [token]);
 
-    return { prefs, savePreferences, channelAction, genreAction, loading };
+    return { prefs, savePreferences, channelAction, genreAction, loading, error };
 }

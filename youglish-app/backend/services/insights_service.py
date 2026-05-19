@@ -27,7 +27,7 @@ import asyncpg
 
 from .prioritization_service import get_prioritized_items
 from .usage_events_service import most_frequent_unknown_items, recently_failed_items
-from .recommendation_service import enrich_items
+from .recommendation_service import enrich_by_type, enrich_items
 from .phrase_service import enrich_phrases
 from . import llm_service, grammar_service
 
@@ -79,21 +79,17 @@ async def _build_card(
     if not top:
         return {**config, "card_type": card_type, "items": []}
 
-    word_ids   = [c["item_id"] for c in top if c["item_type"] == "word"]
-    phrase_ids = [c["item_id"] for c in top if c["item_type"] == "phrase"]
-
-    async def _empty() -> dict:
-        return {}
-
-    word_enrichment, phrase_enrichment = await asyncio.gather(
-        enrich_items(pool, user_id, word_ids, language)     if word_ids   else _empty(),
-        enrich_phrases(pool, user_id, phrase_ids, language) if phrase_ids else _empty(),
+    # Unified enrichment — handles word/phrase/grammar_rule in one call and
+    # keys by (item_type, item_id) so identical IDs across types don't collide.
+    enrichment = await enrich_by_type(
+        pool, user_id,
+        [(c["item_type"], c["item_id"]) for c in top],
+        language,
     )
-    enrichment = {**word_enrichment, **phrase_enrichment}
 
     items = []
     for c in top:
-        meta = enrichment.get(c["item_id"])
+        meta = enrichment.get((c["item_type"], c["item_id"]))
         if meta is None:
             continue
 

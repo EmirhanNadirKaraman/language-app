@@ -56,7 +56,7 @@ async def most_frequent_unknown_items(
          AND uwk.item_type = e.item_type
         WHERE e.user_id = $1::uuid
           AND uwk.status  = 'unknown'
-          AND e.context  IN ('free_chat', 'guided_chat', 'status_change')
+          AND e.context  IN ('free_chat', 'guided_chat', 'status_change', 'transcript')
         GROUP BY e.item_id, e.item_type, wt.word
         ORDER BY event_count DESC
         LIMIT $2

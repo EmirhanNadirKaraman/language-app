@@ -194,7 +194,8 @@ interface BuildViewProps {
     addLoading: boolean;
     addError: string | null;
     onAddWord: () => void;
-    inputRef: React.RefObject<HTMLInputElement>;
+    // React 19 widened useRef's return type to RefObject<T | null>; mirror it here.
+    inputRef: React.RefObject<HTMLInputElement | null>;
     loadingRecs: boolean;
     onLoadRecommended: () => void;
     generating: boolean;

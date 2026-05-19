@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { SRSReviewCard } from '../types';
-import { getDueCards, submitReviewAnswer } from '../api/srs';
+import type { SRSReviewCard, SRSProductionResult } from '../types';
+import { getDueCards, submitReviewAnswer, submitProductionAnswer } from '../api/srs';
 
 const LANGUAGES = [
     { code: 'de', label: 'German' },
@@ -34,9 +34,21 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
     const [done, setDone]           = useState(false);
     const [reviewed, setReviewed]   = useState(0); // how many answered this session
 
-    // Feedback state: shown after answering, before advancing to the next card
-    type Feedback = { correct: boolean; displayText: string; direction: 'passive' | 'active' };
+    // Feedback state: shown after answering, before advancing to the next card.
+    // For passive cards: self-graded, shows answer_text on reveal.
+    // For active cards: production result from the LLM evaluator.
+    type Feedback = {
+        correct:    boolean;
+        answerText: string;            // canonical German answer for this card
+        direction:  'passive' | 'active';
+        // Active-only fields:
+        submitted?: string;            // what the user typed
+        message?:   string;            // LLM/eval one-sentence verdict
+    };
     const [feedback, setFeedback]   = useState<Feedback | null>(null);
+
+    // Active-production state
+    const [producedText, setProducedText] = useState('');
 
     const load = useCallback(async () => {
         if (!language) return;
@@ -47,6 +59,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
         setReviewed(0);
         setRevealed(false);
         setFeedback(null);
+        setProducedText('');
         try {
             const data = await getDueCards(token, language, 30);
             setCards(data);
@@ -63,16 +76,18 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
 
     const current = cards[index] ?? null;
 
+    // Passive cards: user self-grades after revealing the answer. Active cards
+    // either go through handleProduce() below (typed input + LLM eval) or use
+    // this same path with correct=false for the "I don't know" button.
     async function handleAnswer(correct: boolean) {
         if (!current || submitting) return;
         setSubmitting(true);
         try {
             await submitReviewAnswer(token, current.card_id, correct);
             setReviewed(r => r + 1);
-            // Show feedback before advancing; advance() is called from the feedback panel
             setFeedback({
                 correct,
-                displayText: current.display_text,
+                answerText: current.answer_text ?? current.display_text,
                 direction: current.direction as 'passive' | 'active',
             });
         } catch {
@@ -82,15 +97,190 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
         }
     }
 
+    // Active cards only: type the German answer; backend evaluates.
+    async function handleProduce() {
+        if (!current || submitting) return;
+        const answer = producedText.trim();
+        if (!answer) return;
+        setSubmitting(true);
+        try {
+            const result: SRSProductionResult = await submitProductionAnswer(
+                token, current.card_id, answer,
+            );
+            setReviewed(r => r + 1);
+            setFeedback({
+                correct:    result.correct,
+                answerText: result.expected || current.answer_text || current.display_text,
+                direction:  'active',
+                submitted:  result.submitted,
+                message:    result.feedback,
+            });
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : 'Failed to evaluate answer.');
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
     function advance() {
         setFeedback(null);
         setRevealed(false);
+        setProducedText('');
         const next = index + 1;
         if (next >= cards.length) {
             setDone(true);
         } else {
             setIndex(next);
         }
+    }
+
+    // Passive direction: existing self-graded flow. Reveal the English gloss,
+    // then user clicks "I knew it" / "I didn't know it".
+    function renderPassiveControls() {
+        if (!current) return null;
+        if (!revealed) {
+            return (
+                <button
+                    onClick={() => setRevealed(true)}
+                    style={{
+                        marginTop: '8px', padding: '10px 32px', borderRadius: '6px',
+                        border: '1px solid #c5cae9', background: '#e8eaf6',
+                        color: '#1a237e', fontSize: '14px', fontWeight: 600,
+                        cursor: 'pointer',
+                    }}
+                >
+                    Show answer
+                </button>
+            );
+        }
+        return (
+            <>
+                <div style={{
+                    fontSize: '15px', color: '#1a237e', fontWeight: 600,
+                    background: '#f5f6ff', border: '1px solid #e8eaf6',
+                    borderRadius: '6px', padding: '8px 16px',
+                    maxWidth: '100%',
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'break-word',
+                }}>
+                    {current.answer_text ?? current.display_text}
+                </div>
+                <div style={{
+                    display: 'flex', gap: '10px', marginTop: '4px',
+                    width: '100%', maxWidth: '340px',
+                    flexWrap: 'wrap',
+                }}>
+                    <button
+                        data-testid="srs-passive-incorrect"
+                        onClick={() => handleAnswer(false)}
+                        disabled={submitting}
+                        style={{
+                            flex: '1 1 140px', minHeight: '44px',
+                            padding: '10px 8px', borderRadius: '6px',
+                            border: '1px solid #e5393520',
+                            background: submitting ? '#f5f5f5' : '#ffebee',
+                            color: submitting ? '#aaa' : '#c62828',
+                            fontSize: '14px', fontWeight: 600,
+                            cursor: submitting ? 'default' : 'pointer',
+                            touchAction: 'manipulation',
+                        }}
+                    >
+                        I didn't know it
+                    </button>
+                    <button
+                        data-testid="srs-passive-correct"
+                        onClick={() => handleAnswer(true)}
+                        disabled={submitting}
+                        style={{
+                            flex: '1 1 140px', minHeight: '44px',
+                            padding: '10px 8px', borderRadius: '6px',
+                            border: '1px solid #2e7d3220',
+                            background: submitting ? '#f5f5f5' : '#e8f5e9',
+                            color: submitting ? '#aaa' : '#2e7d32',
+                            fontSize: '14px', fontWeight: 600,
+                            cursor: submitting ? 'default' : 'pointer',
+                            touchAction: 'manipulation',
+                        }}
+                    >
+                        I knew it ✓
+                    </button>
+                </div>
+            </>
+        );
+    }
+
+    // Active direction: real production test. User types German; backend evaluates.
+    // No "I knew it" self-grade button — active cards must require either typed
+    // input or "I don't know" (which routes through the existing /review/{id}).
+    function renderActiveControls() {
+        if (!current) return null;
+        const canSubmit = !!producedText.trim() && !submitting;
+        return (
+            <>
+                <input
+                    data-testid="srs-active-input"
+                    type="text"
+                    value={producedText}
+                    onChange={e => setProducedText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && canSubmit) handleProduce(); }}
+                    placeholder="Type the German answer"
+                    disabled={submitting}
+                    autoFocus
+                    // iOS Safari zooms in on any focused input below 16px font.
+                    // 16px is the minimum that keeps the zoom-on-focus behaviour
+                    // off. Do not lower this without testing on a real device.
+                    style={{
+                        width: '100%', maxWidth: '340px',
+                        minHeight: '44px',
+                        padding: '10px 14px', borderRadius: '6px',
+                        border: '1px solid #c5cae9',
+                        fontSize: '16px',
+                        textAlign: 'center',
+                        boxSizing: 'border-box',
+                    }}
+                />
+                <div style={{
+                    display: 'flex', gap: '10px', marginTop: '4px',
+                    width: '100%', maxWidth: '340px',
+                    flexWrap: 'wrap',
+                }}>
+                    <button
+                        data-testid="srs-active-dont-know"
+                        onClick={() => handleAnswer(false)}
+                        disabled={submitting}
+                        style={{
+                            flex: '1 1 140px', minHeight: '44px',
+                            padding: '10px 8px', borderRadius: '6px',
+                            border: '1px solid #e5393520',
+                            background: submitting ? '#f5f5f5' : '#ffebee',
+                            color: submitting ? '#aaa' : '#c62828',
+                            fontSize: '14px', fontWeight: 600,
+                            cursor: submitting ? 'default' : 'pointer',
+                            touchAction: 'manipulation',
+                        }}
+                    >
+                        I don't know
+                    </button>
+                    <button
+                        data-testid="srs-active-submit"
+                        onClick={handleProduce}
+                        disabled={!canSubmit}
+                        style={{
+                            flex: '1 1 140px', minHeight: '44px',
+                            padding: '10px 8px', borderRadius: '6px',
+                            border: '1px solid #1a237e30',
+                            background: !canSubmit ? '#f5f5f5' : '#3949ab',
+                            color: !canSubmit ? '#aaa' : '#fff',
+                            fontSize: '14px', fontWeight: 600,
+                            cursor: !canSubmit ? 'default' : 'pointer',
+                            touchAction: 'manipulation',
+                        }}
+                    >
+                        {submitting ? 'Checking…' : 'Submit'}
+                    </button>
+                </div>
+            </>
+        );
     }
 
     const total = cards.length;
@@ -100,7 +290,8 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
         <div style={{
             border: '1px solid #e8eaf6',
             borderRadius: '8px',
-            padding: '16px 20px',
+            // Fluid side padding — tight on mobile, comfortable on desktop.
+            padding: 'clamp(12px, 4vw, 20px)',
             background: '#fafafa',
             marginBottom: '16px',
         }}>
@@ -110,8 +301,17 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                     Review{total > 0 && !done ? ` (${total - index} left)` : ''}
                 </h2>
                 <button
+                    data-testid="srs-close"
                     onClick={onClose}
-                    style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#888' }}
+                    style={{
+                        // 44×44 finger-tappable close button.
+                        minWidth: '44px', minHeight: '44px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'none', border: 'none',
+                        fontSize: '20px', cursor: 'pointer', color: '#888',
+                        padding: 0,
+                        touchAction: 'manipulation',
+                    }}
                     aria-label="Close"
                 >
                     ×
@@ -124,8 +324,10 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                     value={language}
                     onChange={e => onLanguageChange(e.target.value)}
                     style={{
-                        padding: '5px 10px', border: '1px solid #ccc',
-                        borderRadius: '5px', fontSize: '13px',
+                        // 16px keeps iOS from zooming on focus; minHeight 44 for tap.
+                        padding: '6px 10px', border: '1px solid #ccc',
+                        borderRadius: '5px', fontSize: '16px',
+                        minHeight: '44px',
                         background: '#fff', cursor: 'pointer',
                     }}
                 >
@@ -138,11 +340,13 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                     onClick={load}
                     disabled={loading || !language}
                     style={{
-                        padding: '5px 14px', border: '1px solid #c5cae9',
+                        padding: '6px 14px', minHeight: '44px',
+                        border: '1px solid #c5cae9',
                         borderRadius: '5px', background: '#fff',
-                        color: '#1a237e', fontSize: '13px', fontWeight: 600,
+                        color: '#1a237e', fontSize: '14px', fontWeight: 600,
                         cursor: loading || !language ? 'not-allowed' : 'pointer',
                         opacity: loading || !language ? 0.5 : 1,
+                        touchAction: 'manipulation',
                     }}
                 >
                     {loading ? 'Loading…' : 'Reload'}
@@ -218,7 +422,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                             background: feedback.correct ? '#f1f8e9' : '#fff8e1',
                             border: `1px solid ${feedback.correct ? '#a5d6a7' : '#ffe082'}`,
                             borderRadius: '8px',
-                            padding: '28px 24px',
+                            padding: 'clamp(20px, 5vw, 28px) clamp(16px, 5vw, 24px)',
                             textAlign: 'center',
                             minHeight: '200px',
                             display: 'flex',
@@ -227,36 +431,65 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                             justifyContent: 'center',
                             gap: '14px',
                         }}>
-                            {/* Result indicator */}
                             <div style={{
-                                fontSize: '28px',
+                                fontSize: 'clamp(22px, 6vw, 28px)',
                                 fontWeight: 700,
                                 color: feedback.correct ? '#2e7d32' : '#e65100',
                             }}>
                                 {feedback.correct ? '✓ Correct' : '✗ Incorrect'}
                             </div>
 
-                            {/* Answer reveal for active-direction cards */}
-                            {feedback.direction === 'active' && (
-                                <div style={{
+                            {/* Answer reveal — always shown so the user sees the target. */}
+                            <div
+                                data-testid="srs-feedback-answer"
+                                style={{
                                     fontSize: '13px',
                                     color: '#555',
                                     background: '#fff',
                                     border: '1px solid #e0e0e0',
                                     borderRadius: '6px',
                                     padding: '8px 16px',
+                                    maxWidth: '100%',
+                                    overflowWrap: 'anywhere',
+                                    wordBreak: 'break-word',
+                                }}
+                            >
+                                <span style={{ color: '#999', marginRight: '6px' }}>
+                                    {feedback.direction === 'active' ? 'Target:' : 'Means:'}
+                                </span>
+                                <span style={{ fontWeight: 700, color: '#1a237e' }}>{feedback.answerText}</span>
+                            </div>
+
+                            {/* What the user typed (active cards only) */}
+                            {feedback.direction === 'active' && feedback.submitted !== undefined && (
+                                <div style={{
+                                    fontSize: '12px', color: '#666',
+                                    maxWidth: '100%',
+                                    overflowWrap: 'anywhere',
+                                    wordBreak: 'break-word',
                                 }}>
-                                    <span style={{ color: '#999', marginRight: '6px' }}>Target:</span>
-                                    <span style={{ fontWeight: 700, color: '#1a237e' }}>{feedback.displayText}</span>
+                                    You wrote: <span style={{ fontStyle: 'italic' }}>{feedback.submitted}</span>
                                 </div>
                             )}
 
-                            {/* Continue button */}
+                            {/* Optional LLM verdict */}
+                            {feedback.message && (
+                                <div style={{
+                                    fontSize: '12px', color: '#555',
+                                    maxWidth: '420px',
+                                    overflowWrap: 'anywhere',
+                                    wordBreak: 'break-word',
+                                }}>
+                                    {feedback.message}
+                                </div>
+                            )}
+
                             <button
                                 onClick={advance}
                                 style={{
                                     marginTop: '4px',
                                     padding: '10px 32px',
+                                    minHeight: '44px',
                                     borderRadius: '6px',
                                     border: 'none',
                                     background: '#3949ab',
@@ -264,6 +497,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                                     fontSize: '14px',
                                     fontWeight: 600,
                                     cursor: 'pointer',
+                                    touchAction: 'manipulation',
                                 }}
                             >
                                 Continue →
@@ -275,7 +509,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                             background: '#fff',
                             border: '1px solid #e8eaf6',
                             borderRadius: '8px',
-                            padding: '28px 24px',
+                            padding: 'clamp(20px, 5vw, 28px) clamp(16px, 5vw, 24px)',
                             textAlign: 'center',
                             minHeight: '200px',
                             display: 'flex',
@@ -295,76 +529,38 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                                 {current.direction === 'passive' ? 'Recognition' : 'Production'}
                             </span>
 
-                            {/* The word / phrase */}
-                            <div style={{ fontSize: '32px', fontWeight: 700, color: '#1a237e', lineHeight: 1.2 }}>
-                                {current.display_text}
+                            {/* Front of the card — prompt_text from the backend.
+                                Passive cards: German display.
+                                Active cards: English gloss.
+                                Fluid font: 24px on phone, 32px on desktop. */}
+                            <div style={{
+                                fontSize: 'clamp(24px, 7vw, 32px)',
+                                fontWeight: 700, color: '#1a237e', lineHeight: 1.2,
+                                maxWidth: '100%',
+                                overflowWrap: 'anywhere',
+                                wordBreak: 'break-word',
+                            }}>
+                                {current.prompt_text ?? current.display_text}
                             </div>
 
                             {/* Instruction */}
                             <p style={{ margin: 0, fontSize: '13px', color: '#888' }}>
                                 {current.direction === 'passive'
                                     ? 'Do you recognise and understand this?'
-                                    : 'Can you use this naturally in a sentence?'}
+                                    : 'Type the German for this item.'}
                             </p>
 
                             {/* Level indicators */}
-                            <div style={{ display: 'flex', gap: '14px', fontSize: '11px', color: '#bbb' }}>
+                            <div style={{ display: 'flex', gap: '14px', fontSize: '11px', color: '#bbb', flexWrap: 'wrap', justifyContent: 'center' }}>
                                 <span>passive {current.passive_level}</span>
                                 <span>active {current.active_level}</span>
                                 <span>rep {current.repetitions}</span>
                             </div>
 
-                            {/* Reveal / assess buttons */}
-                            {!revealed ? (
-                                <button
-                                    onClick={() => setRevealed(true)}
-                                    style={{
-                                        marginTop: '8px',
-                                        padding: '10px 32px',
-                                        borderRadius: '6px',
-                                        border: '1px solid #c5cae9',
-                                        background: '#e8eaf6',
-                                        color: '#1a237e',
-                                        fontSize: '14px', fontWeight: 600,
-                                        cursor: 'pointer',
-                                    }}
-                                >
-                                    Show answer buttons
-                                </button>
-                            ) : (
-                                <div style={{ display: 'flex', gap: '10px', marginTop: '8px', width: '100%', maxWidth: '340px' }}>
-                                    <button
-                                        onClick={() => handleAnswer(false)}
-                                        disabled={submitting}
-                                        style={{
-                                            flex: 1, padding: '10px 8px',
-                                            borderRadius: '6px',
-                                            border: '1px solid #e5393520',
-                                            background: submitting ? '#f5f5f5' : '#ffebee',
-                                            color: submitting ? '#aaa' : '#c62828',
-                                            fontSize: '13px', fontWeight: 600,
-                                            cursor: submitting ? 'default' : 'pointer',
-                                        }}
-                                    >
-                                        I didn't know it
-                                    </button>
-                                    <button
-                                        onClick={() => handleAnswer(true)}
-                                        disabled={submitting}
-                                        style={{
-                                            flex: 1, padding: '10px 8px',
-                                            borderRadius: '6px',
-                                            border: '1px solid #2e7d3220',
-                                            background: submitting ? '#f5f5f5' : '#e8f5e9',
-                                            color: submitting ? '#aaa' : '#2e7d32',
-                                            fontSize: '13px', fontWeight: 600,
-                                            cursor: submitting ? 'default' : 'pointer',
-                                        }}
-                                    >
-                                        I knew it ✓
-                                    </button>
-                                </div>
-                            )}
+                            {current.direction === 'passive'
+                                ? renderPassiveControls()
+                                : renderActiveControls()
+                            }
                         </div>
                     )}
 

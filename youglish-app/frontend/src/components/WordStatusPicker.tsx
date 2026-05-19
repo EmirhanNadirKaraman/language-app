@@ -24,7 +24,7 @@ export function WordStatusPicker({ word, lookup, loading, saving, onSelect, onDi
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            padding: '9px 16px',
+            padding: '9px clamp(10px, 3vw, 16px)',
             borderTop: '1px solid #e8eaf6',
             background: '#f5f6ff',
             flexWrap: 'wrap',
@@ -46,16 +46,22 @@ export function WordStatusPicker({ word, lookup, loading, saving, onSelect, onDi
                     {lookup.lemma.toLowerCase() !== word.toLowerCase() && (
                         <span style={{ color: '#888', fontSize: '12px' }}>({lookup.lemma})</span>
                     )}
-                    <div style={{ display: 'flex', gap: '6px' }}>
+                    {/* Status row wraps on narrow phones so all 3 buttons stay
+                        tappable instead of overflowing horizontally. */}
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {STATUSES.map(s => {
                             const active = lookup.current_status === s.value;
                             return (
                                 <button
                                     key={s.value}
+                                    data-testid="word-status-button"
                                     disabled={saving}
                                     onClick={() => onSelect(lookup.word_id, s.value)}
                                     style={{
-                                        padding: '7px 12px',
+                                        // 44×44 minimum touch target (iOS HIG / Material).
+                                        minHeight: '44px',
+                                        minWidth: '44px',
+                                        padding: '7px 14px',
                                         borderRadius: '12px',
                                         border: `1px solid ${s.color}`,
                                         background: active ? s.bg : '#fff',
@@ -75,16 +81,24 @@ export function WordStatusPicker({ word, lookup, loading, saving, onSelect, onDi
             )}
 
             <button
+                data-testid="word-status-close"
                 onClick={onDismiss}
                 style={{
                     marginLeft: 'auto',
+                    // 44×44 finger-tappable close, but visually keep it minimal.
+                    minWidth: '44px',
+                    minHeight: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
                     color: '#aaa',
-                    fontSize: '18px',
+                    fontSize: '20px',
                     lineHeight: 1,
                     padding: 0,
+                    touchAction: 'manipulation',
                 }}
             >
                 ×

@@ -142,7 +142,10 @@ interface SentenceCardProps {
   isLast: boolean;
   dk?: boolean;
   autoMark?: boolean;
-  onTokenClick?: (blockId: number, tokenIndex: number, text: string) => void;
+  // Matches handleTokenClick / BlockView shape — tokenId is a string since
+  // migration 025 (block_token_ids). The sentence-mode tokenizer produces a
+  // local numeric index, so we stringify at the call site below.
+  onTokenClick?: (blockId: number, tokenId: string, text: string) => void;
   onWordRightClick?: (word: string) => void;
   selectedKeys?: Set<string>;
   savedAnchorKeys?: Set<string>;
@@ -190,7 +193,7 @@ function SentenceCard({ sentence, blockId, language, token, wordStatuses, onSkip
           }
           return (
             <span key={tok.index} style={style}
-              onClick={onTokenClick ? () => onTokenClick(blockId, tok.index, tok.text) : undefined}
+              onClick={onTokenClick ? () => onTokenClick(blockId, String(tok.index), tok.text) : undefined}
               onContextMenu={onWordRightClick ? (e => { e.preventDefault(); onWordRightClick(tok.text); }) : undefined}
             >
               {tok.text}
@@ -458,7 +461,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   const navigateRef = useRef<(delta: number) => void>(() => {});
 
   // Word status picker (right-click)
-  const { selected: wsSelected, state: wsState, selectWord, updateStatus, dismiss: wsDismiss, toggleWordStatus } = useWordStatus(token, doc.language);
+  const { selected: wsSelected, state: wsState, updateStatus, dismiss: wsDismiss, toggleWordStatus } = useWordStatus(token, doc.language);
 
   // Interactive reading state
   const [selectedKeys, setSelectedKeys]       = useState<Set<string>>(new Set());
@@ -791,7 +794,6 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
 
   const hasSelection  = selectedKeys.size > 0 && selectedTokens.length > 0;
   const hasLowConf    = pageData?.blocks.some(b => b.ocr_confidence !== null && b.ocr_confidence < 0.65 && b.correction_status === 'none') ?? false;
-  const showRightPanel = hasSelection || showSaved; // Edit panel is now annotation split view
 
   // Global sentence counter
   const sentencesBefore = pageList.slice(0, pageNum - 1).reduce((acc, pNum) => acc + (sentenceCountMap[pNum] ?? 0), 0);

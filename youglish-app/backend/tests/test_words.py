@@ -69,7 +69,10 @@ async def test_first_status_update_creates_row(client: AsyncClient, db_pool):
     assert data["item_id"] == word_id
     assert data["item_type"] == "word"
     assert data["status"] == "learning"
-    assert data["passive_level"] == 0   # untouched on status-only update
+    # status update + progression now run in a single transaction, so the
+    # response reflects the post-progression state. status_marked_learning has
+    # passive_delta=1.
+    assert data["passive_level"] == 1
     assert data["active_level"] == 0
 
 
@@ -220,3 +223,128 @@ async def test_by_text_returns_null_for_unknown_word_not_in_db(client: AsyncClie
     )
     assert resp.status_code == 200
     assert resp.json() is None
+
+
+# ---------------------------------------------------------------------------
+# PUT status=known — contract: confidence, not fabricated active mastery.
+# Mirrors the actual frontend call. Pinned to lock the behaviour.
+# ---------------------------------------------------------------------------
+
+async def _get_word_for_lookup(db_pool) -> tuple[int, str, str]:
+    """Return (word_id, word_text, language) for a row that supports by-text lookup."""
+    row = await db_pool.fetchrow(
+        "SELECT word_id, word, language FROM word_table LIMIT 1"
+    )
+    if row is None:
+        pytest.skip("word_table is empty")
+    return row["word_id"], row["word"], row["language"]
+
+
+async def test_put_known_writes_status_known(client: AsyncClient, db_pool):
+    """Status field is written inside apply_progression's transaction via
+    status_override — a single atomic write covering status + SRS + levels."""
+    word_id, word, language = await _get_word_for_lookup(db_pool)
+    token = await _registered_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = await client.put(
+        f"/api/v1/words/word/{word_id}/status",
+        json={"status": "known"},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "known"
+
+    # Round-trip via /by-text to confirm persisted state.
+    lookup = await client.get(BY_TEXT, params={"word": word, "language": language}, headers=headers)
+    assert lookup.json()["current_status"] == "known"
+
+
+async def test_put_known_does_not_create_active_srs_card(client: AsyncClient, db_pool):
+    """Manual known must NOT schedule active production review."""
+    word_id, _, _ = await _get_word_for_lookup(db_pool)
+    token = await _registered_token(client)
+    uid = await db_pool.fetchval(
+        "SELECT user_id FROM users WHERE email LIKE 'test+%@example.com' ORDER BY user_id DESC LIMIT 1"
+    )
+
+    await client.put(
+        f"/api/v1/words/word/{word_id}/status",
+        json={"status": "known"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    active = await db_pool.fetchrow(
+        "SELECT card_id FROM srs_cards WHERE user_id=$1::uuid AND item_id=$2 "
+        "AND item_type='word' AND direction='active'",
+        uid, word_id,
+    )
+    assert active is None
+
+
+async def test_put_known_does_not_increment_active_level(client: AsyncClient, db_pool):
+    """Manual known must not inflate active_level — that's reserved for production evidence."""
+    word_id, _, _ = await _get_word_for_lookup(db_pool)
+    token = await _registered_token(client)
+    uid = await db_pool.fetchval(
+        "SELECT user_id FROM users WHERE email LIKE 'test+%@example.com' ORDER BY user_id DESC LIMIT 1"
+    )
+
+    await client.put(
+        f"/api/v1/words/word/{word_id}/status",
+        json={"status": "known"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    row = await db_pool.fetchrow(
+        "SELECT active_level, times_used_correctly FROM user_word_knowledge "
+        "WHERE user_id=$1::uuid AND item_id=$2 AND item_type='word'",
+        uid, word_id,
+    )
+    # Row is created by apply_progression (via status_override) — assert level fields stay zero.
+    if row is not None:
+        assert row["active_level"] == 0
+        assert row["times_used_correctly"] == 0
+
+
+async def test_put_known_after_learning_does_not_advance_active_card(client: AsyncClient, db_pool):
+    """If a learning word already has an active SRS card (from #0b), marking
+    it known must NOT advance it as if the user answered correctly."""
+    word_id, _, _ = await _get_word_for_lookup(db_pool)
+    token = await _registered_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    uid = await db_pool.fetchval(
+        "SELECT user_id FROM users WHERE email LIKE 'test+%@example.com' ORDER BY user_id DESC LIMIT 1"
+    )
+
+    # First mark learning → creates active card at interval=1.0, reps=0.
+    await client.put(
+        f"/api/v1/words/word/{word_id}/status",
+        json={"status": "learning"},
+        headers=headers,
+    )
+    before = await db_pool.fetchrow(
+        "SELECT interval_days, repetitions, ease_factor, due_date FROM srs_cards "
+        "WHERE user_id=$1::uuid AND item_id=$2 AND item_type='word' AND direction='active'",
+        uid, word_id,
+    )
+    assert before is not None
+
+    # Now mark known. Must NOT advance the active card.
+    await client.put(
+        f"/api/v1/words/word/{word_id}/status",
+        json={"status": "known"},
+        headers=headers,
+    )
+
+    after = await db_pool.fetchrow(
+        "SELECT interval_days, repetitions, ease_factor, due_date FROM srs_cards "
+        "WHERE user_id=$1::uuid AND item_id=$2 AND item_type='word' AND direction='active'",
+        uid, word_id,
+    )
+    assert after is not None
+    assert after["repetitions"]   == before["repetitions"]
+    assert after["interval_days"] == before["interval_days"]
+    assert after["ease_factor"]   == before["ease_factor"]
+    assert after["due_date"]      == before["due_date"]

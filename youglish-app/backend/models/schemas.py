@@ -80,7 +80,7 @@ class WordKnowledgeRead(BaseModel):
 
 
 class WordStatusUpdate(BaseModel):
-    status: str  # 'unknown' | 'learning' | 'known'
+    status: Literal["unknown", "learning", "known"]
 
 
 # ---------------------------------------------------------------------------
@@ -169,48 +169,6 @@ class WordLookupResult(BaseModel):
 # ---------------------------------------------------------------------------
 # SRS (spaced-repetition)
 # ---------------------------------------------------------------------------
-
-
-class CheckAnswerRequest(BaseModel):
-    uid: str
-    word_id: int
-    correct: bool
-
-
-class MagicSentencesRequest(BaseModel):
-    uid: str
-    word_id: int
-    language: str
-    full_sentence: bool
-    page: int = Field(default=1, ge=1)
-    rows_per_page: int = Field(default=10, ge=1, le=100)
-
-
-class SentenceResult(BaseModel):
-    content: str
-    sentence_id: int
-    video_properties: dict
-    unknown_count: int
-
-
-class MagicSentencesResponse(BaseModel):
-    sentences: list[SentenceResult]
-    total_count: int
-
-
-class ClozeQuestionsRequest(BaseModel):
-    uid: str
-    native_language: str
-    target_language: str
-    is_exact: bool
-
-
-class ClozeQuestionResult(BaseModel):
-    word: str
-    target_sentence: str
-    translation: str
-    removed: str
-    word_id: int
 
 
 # ---------------------------------------------------------------------------
@@ -747,6 +705,12 @@ class SRSReviewCard(BaseModel):
     passive_level: int
     active_level:  int
     display_text:  str
+    # For passive cards: prompt is the German item, answer is the English gloss
+    # (user tries to recognize). For active cards: prompt is the English gloss,
+    # answer is the German item (user tries to produce). Grammar rules use the
+    # rule title as the prompt and the short_explanation as the answer.
+    prompt_text:   str
+    answer_text:   str
 
 
 class SRSAnswerRequest(BaseModel):
@@ -756,6 +720,20 @@ class SRSAnswerRequest(BaseModel):
 class SRSAnswerResponse(BaseModel):
     card_id: int
     success: bool
+
+
+class SRSProductionRequest(BaseModel):
+    # The German answer the learner typed for an active card. Empty strings are
+    # treated as incorrect by the evaluator.
+    answer: str
+
+
+class SRSProductionResponse(BaseModel):
+    card_id:   int
+    correct:   bool
+    expected:  str    # the target_text the user should have produced
+    submitted: str    # echoed back; useful for the feedback panel
+    feedback:  str    # one-sentence explanation
 
 
 class TranslateRequest(BaseModel):

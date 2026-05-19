@@ -94,18 +94,27 @@ async def match_learning_words(
     """
     Find non-mastered vocabulary items the user is tracking that appear in `text`.
 
-    Tokenizes the message into lowercase alphabetic words, then queries word_table
-    joined with user_word_knowledge for any item whose surface form OR lemma matches.
-    Returns a deduplicated list of {item_id, item_type, word}.
+    Two paths combined:
+      WORDS   — tokenises the message into lowercase alphabetic words and matches
+                against word_table (surface OR lemma).
+      PHRASES — delegates to matcher_service.match_sentence_with_ids, which runs
+                the spaCy-based phrase extractor (verb patterns, separable verbs,
+                reflexive verbs) and returns canonical phrase IDs. This catches
+                inflected production like "ich freue mich auf X" matching the
+                canonical "sich freuen auf".
 
-    Used by the free-chat path to identify vocabulary exposure server-side,
-    without requiring the LLM to know the user's item IDs.
+    Returns a deduplicated list of dicts shaped:
+        {item_id, item_type ∈ {'word','phrase'}, word}
+
+    The polymorphic shape lets routers/chat.py:send_message iterate the matches
+    and call apply_progression(..., item_type, ...) for each — words and phrases
+    advance through the same free_chat_* events.
     """
     tokens = list({w.lower() for w in re.findall(r"[^\W\d_]+", text, re.UNICODE)})
     if not tokens:
         return []
 
-    rows = await pool.fetch(
+    word_rows = await pool.fetch(
         """
         SELECT DISTINCT wt.word_id AS item_id, 'word'::text AS item_type, wt.word
           FROM word_table wt
@@ -119,7 +128,40 @@ async def match_learning_words(
         """,
         user_id, tokens, language,
     )
-    return [dict(r) for r in rows]
+    results: list[dict] = [dict(r) for r in word_rows]
+
+    # Phrase matching — defer the import to avoid the matcher_service module-level
+    # spaCy/phrase_finder bootstrap during chat_service import (and to make tests
+    # that don't touch chat insensitive to matcher init failures).
+    from . import matcher_service
+
+    try:
+        phrase_hits = await matcher_service.match_sentence_with_ids(pool, text, language)
+    except Exception:
+        # Free chat must not crash if phrase extraction errors — analytics-grade only.
+        phrase_hits = []
+
+    phrase_ids = list({p["phrase_id"] for p in phrase_hits if p.get("phrase_id") is not None})
+    if phrase_ids:
+        phrase_rows = await pool.fetch(
+            """
+            SELECT DISTINCT pt.phrase_id AS item_id,
+                   'phrase'::text       AS item_type,
+                   pt.surface_form      AS word
+              FROM phrase_table pt
+              JOIN user_word_knowledge uwk
+                   ON uwk.item_id   = pt.phrase_id
+                  AND uwk.item_type = 'phrase'
+                  AND uwk.user_id   = $1::uuid
+             WHERE pt.phrase_id  = ANY($2::int[])
+               AND pt.language   = $3
+               AND uwk.status   != 'known'
+            """,
+            user_id, phrase_ids, language,
+        )
+        results.extend(dict(r) for r in phrase_rows)
+
+    return results
 
 
 # ---------------------------------------------------------------------------

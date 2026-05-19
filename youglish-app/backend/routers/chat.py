@@ -2,7 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from ..core.deps import get_current_user
+from ..core.deps import get_current_user, rate_limit_llm
 from ..database import get_pool
 from ..models.schemas import (
     ChatMessageRead,
@@ -60,6 +60,7 @@ async def get_messages(
     "/guided-sessions",
     response_model=GuidedSessionRead,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_llm)],
 )
 async def create_guided_session(
     body: GuidedSessionCreate,
@@ -126,6 +127,7 @@ async def create_guided_session(
     "/sessions/{session_id}/messages",
     response_model=SendMessageResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(rate_limit_llm)],
 )
 async def send_message(
     session_id: str,
@@ -258,6 +260,7 @@ async def _handle_guided_message(
 @router.post(
     "/guided-sessions/{session_id}/complete",
     response_model=GuidedSessionSummary,
+    dependencies=[Depends(rate_limit_llm)],
 )
 async def complete_guided_session(
     session_id: str,

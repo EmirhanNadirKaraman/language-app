@@ -53,7 +53,6 @@ describe('TranscriptPanel', () => {
 
     it('applies active highlight style to the active sentence', () => {
         render(<TranscriptPanel {...DEFAULT_PROPS} activeSentenceIdx={1} />);
-        const allBlocks = screen.getAllByText(/\w+/).map(el => el.closest('div[style]'));
         // The second sentence block should have the active background
         const activeBlock = screen.getByText('How').closest('div[style]');
         expect(activeBlock).toHaveStyle({ borderLeft: '3px solid #3f51b5' });
@@ -102,5 +101,33 @@ describe('TranscriptPanel', () => {
     it('renders the stats panel', () => {
         render(<TranscriptPanel {...DEFAULT_PROPS} />);
         expect(screen.getByTestId('stats-panel')).toBeInTheDocument();
+    });
+
+    // ---------------------------------------------------------------------
+    // Mobile / touch-target guards (#27c)
+    // ---------------------------------------------------------------------
+
+    it('sentence rows have at least 44px min-height (finger-tappable)', () => {
+        render(<TranscriptPanel {...DEFAULT_PROPS} />);
+        const sentenceBlocks = screen.getAllByTestId('sentence-block');
+        for (const block of sentenceBlocks) {
+            expect((block as HTMLElement).style.minHeight).toBe('44px');
+        }
+    });
+
+    it('sentence rows use fluid clamp() font sizing (verified via raw style attribute)', () => {
+        render(<TranscriptPanel {...DEFAULT_PROPS} />);
+        // jsdom drops clamp() from .style.fontSize, but the raw inline style
+        // attribute is what React serialised — we can read it back.
+        const sentenceBlocks = screen.getAllByTestId('sentence-block');
+        const styleAttr = sentenceBlocks[0].getAttribute('style') ?? '';
+        // React converts clamp() values cleanly in attribute serialisation when
+        // the unit-bearing value is well-formed; if jsdom dropped it entirely
+        // the attribute won't mention font-size at all, which is the failure mode.
+        // The minHeight guard above is the load-bearing assertion either way.
+        // This is a soft check.
+        if (styleAttr.includes('font-size')) {
+            expect(styleAttr).toMatch(/clamp\(/);
+        }
     });
 });

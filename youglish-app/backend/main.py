@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
@@ -71,9 +72,27 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="YouGlish Clone", lifespan=lifespan)
 
+
+def _parse_cors_origins(raw: str | None) -> list[str]:
+    """Parse a comma-separated CORS_ORIGINS env var.
+
+    - whitespace around each origin is stripped
+    - empty entries are dropped
+    - falsy input (None / empty / whitespace-only) falls back to localhost dev origin
+    """
+    default = ["http://localhost:5173"]
+    if not raw:
+        return default
+    origins = [piece.strip() for piece in raw.split(",")]
+    origins = [o for o in origins if o]
+    return origins or default
+
+
+CORS_ORIGINS = _parse_cors_origins(os.getenv("CORS_ORIGINS"))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=CORS_ORIGINS,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
@@ -84,7 +103,7 @@ app.include_router(words_router,           prefix="/api/v1")    # /api/v1/words/
 app.include_router(videos_router,          prefix="/api/v1")    # /api/v1/videos/{video_id}/reading-stats
 app.include_router(matcher_router,         prefix="/api/v1")    # /api/v1/sentences/match
 app.include_router(phrases_router,         prefix="/api/v1")    # /api/v1/phrases, /api/v1/phrases/match, /api/v1/phrases/seed
-app.include_router(srs_router,             prefix="/api/v1")    # /api/v1/srs/check-answer, /magic-sentences, /cloze-questions
+app.include_router(srs_router,             prefix="/api/v1")    # /api/v1/srs/due, /api/v1/srs/review/{card_id}
 app.include_router(chat_router,            prefix="/api/v1")    # /api/v1/chat/sessions, /api/v1/chat/sessions/{id}/messages
 app.include_router(analytics_router,       prefix="/api/v1")    # /api/v1/analytics/...
 app.include_router(insights_router,        prefix="/api/v1")    # /api/v1/insights/cards, /prep, /prep/generate-examples

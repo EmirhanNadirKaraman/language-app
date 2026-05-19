@@ -58,14 +58,22 @@ export function TranscriptPanel({
                                 if (e.target === e.currentTarget) onSentenceClick(idx);
                             }}
                             style={{
-                                padding: '6px 16px',
+                                // Mobile (#27c): bump padding so each row gives a finger-friendly
+                                // tap area without changing desktop density much. clamp() keeps
+                                // the side padding tight on phones and roomy on desktop.
+                                padding: '10px clamp(10px, 3vw, 16px)',
+                                minHeight: '44px',
+                                boxSizing: 'border-box',
                                 cursor: 'pointer',
                                 background: isActive ? '#e8eaf6' : 'transparent',
                                 borderLeft: isActive ? '3px solid #3f51b5' : '3px solid transparent',
-                                fontSize: '15px',
+                                // Fluid sentence font: 14px on a 320px phone, 16px on desktop.
+                                fontSize: 'clamp(14px, 3.5vw, 16px)',
                                 lineHeight: 1.65,
                                 color: '#1a237e',
                                 transition: 'background 0.15s',
+                                overflowWrap: 'anywhere',
+                                wordBreak: 'break-word',
                             }}
                         >
                             {renderClickableText(sentence.content, highlightTerms, onWordClick, wordStatuses, onWordRightClick, wordColors)}

@@ -1,18 +1,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
-from ..core.deps import get_current_user
+from ..core.deps import get_current_user, rate_limit_llm
 from ..database import get_pool
 from ..models.schemas import (
-    CheckAnswerRequest,
-    ClozeQuestionResult,
-    ClozeQuestionsRequest,
-    MagicSentencesRequest,
-    MagicSentencesResponse,
     SRSAnswerRequest,
     SRSAnswerResponse,
+    SRSProductionRequest,
+    SRSProductionResponse,
     SRSReviewCard,
 )
-from ..services import review_service, srs_service
+from ..services import review_service
 
 router = APIRouter(prefix="/srs", tags=["srs"])
 
@@ -52,49 +49,39 @@ async def submit_review_answer(
     return SRSAnswerResponse(**result)
 
 
-# ---------------------------------------------------------------------------
-# Legacy endpoints below — reference tables from an older schema that do not
-# exist in this project's migrations. Kept to avoid routing changes but will
-# fail at runtime if called.
-# ---------------------------------------------------------------------------
+@router.post(
+    "/review/{card_id}/produce",
+    response_model=SRSProductionResponse,
+    dependencies=[Depends(rate_limit_llm)],
+)
+async def submit_production_answer(
+    body: SRSProductionRequest,
+    card_id: int = Path(..., ge=1),
+    current_user: dict = Depends(get_current_user),
+    pool=Depends(get_pool),
+):
+    """Submit a typed German answer for an active SRS card.
 
+    Active cards must require either typed production (this endpoint) or an
+    "I don't know" press (which uses the existing POST /review/{card_id}
+    endpoint with correct=false). Self-grading is intentionally not exposed
+    for active direction at the UI level.
 
-@router.post("/check-answer", status_code=status.HTTP_200_OK)
-async def check_answer(body: CheckAnswerRequest, pool=Depends(get_pool)):
+    Rejects:
+      - card not owned by the user → 404
+      - passive card                → 400
+      - grammar_rule card           → 400 (grammar is passive-only by design)
+      - underlying target row gone  → 404
+    """
     try:
-        await srs_service.check_answer(pool, body.uid, body.word_id, body.correct)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return {"success": True}
-
-
-@router.post("/magic-sentences", response_model=MagicSentencesResponse)
-async def get_magic_sentences(body: MagicSentencesRequest, pool=Depends(get_pool)):
-    try:
-        data = await srs_service.get_magic_sentences(
-            pool,
-            uid=body.uid,
-            word_id=body.word_id,
-            language=body.language,
-            full_sentence=body.full_sentence,
-            page=body.page,
-            rows_per_page=body.rows_per_page,
+        result = await review_service.submit_production_answer(
+            pool, str(current_user["user_id"]), card_id, body.answer,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return data
-
-
-@router.post("/cloze-questions", response_model=list[ClozeQuestionResult])
-async def get_cloze_questions(body: ClozeQuestionsRequest, pool=Depends(get_pool)):
-    try:
-        data = await srs_service.get_cloze_questions(
-            pool,
-            uid=body.uid,
-            native_language=body.native_language,
-            target_language=body.target_language,
-            is_exact=body.is_exact,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    return data
+        message = str(exc)
+        if message in ("card_not_found", "target_missing"):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=message)
+        if message in ("passive_card", "grammar_rule"):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+        raise
+    return SRSProductionResponse(**result)

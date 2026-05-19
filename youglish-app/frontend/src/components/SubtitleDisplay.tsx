@@ -16,12 +16,16 @@ export function SubtitleDisplay({ text, highlightTerms, onWordClick, onWordRight
         : highlightText(text, highlightTerms);
 
     return (
+        // Container changes for #27b:
+        //   * fixed 200px height → 200px minHeight (lets long subtitles grow
+        //     instead of clipping on mobile / large fonts)
+        //   * tighter padding via clamp() instead of an isMobile branch (kept
+        //     in CSS so we don't need useViewport for a purely-visual rule)
         <div
             style={{
                 width: '100%',
-                height: '200px',
-                padding: '32px 28px',
-                overflow: 'hidden',
+                minHeight: '200px',
+                padding: 'clamp(16px, 4vw, 32px) clamp(12px, 4vw, 28px)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -36,7 +40,10 @@ export function SubtitleDisplay({ text, highlightTerms, onWordClick, onWordRight
                     maxWidth: '100%',
                     minWidth: 0,
                     flex: '1 1 auto',
-                    fontSize: '38px',
+                    // Fluid font: 20px on a 320px phone, 38px on desktop. The
+                    // 5vw middle term means it scales smoothly with viewport
+                    // width without a useViewport branch.
+                    fontSize: 'clamp(20px, 5vw, 38px)',
                     fontWeight: 500,
                     lineHeight: 1.4,
                     textAlign: 'center',

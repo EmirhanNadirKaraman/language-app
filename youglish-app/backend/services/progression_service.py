@@ -97,19 +97,52 @@ _RULES: dict[str, ProgressionDelta] = {
     ),
 
     # --- Manual status changes ---
-    # Marking 'learning': user has seen the word, wants to practise it
+    # Marking 'learning': user has seen the word, wants to practise it.
+    # Creates BOTH passive and active SRS cards so the active-direction queue
+    # isn't permanently empty for users who don't open guided chat.
     "status_marked_learning": ProgressionDelta(
         passive_delta=1, times_seen_delta=1,
-        passive_srs="create",
+        passive_srs="create", active_srs="create",
     ),
-    # Marking 'known': user claims mastery of both tracks
+    # Marking 'known' is USER CONFIDENCE — a self-classification, NOT proof of
+    # production. The status field is written inside apply_progression's
+    # transaction when the router passes status_override='known'. Here we ONLY
+    # advance the passive SRS card (defensible: the user is claiming passive
+    # recognition).
+    #
+    # Intentional choices:
+    #   - passive_delta=0      → leave passive_level unchanged. The level field
+    #                            reflects accumulated *evidence*; manual marking is
+    #                            self-classification, not new exposure evidence.
+    #                            (Option A from the design note — no fabrication.)
+    #   - active_delta=0       → manual known must NOT inflate active mastery.
+    #                            Active level only grows from real production
+    #                            events: guided_counted, free_chat_used_correctly,
+    #                            active_review_correct.
+    #   - times_used_correctly_delta=0 → that counter tracks correct production,
+    #                            not confidence clicks.
+    #   - passive_srs="correct" → advance the passive card (or create it at 1 day
+    #                            if missing). Filtered from /srs/due by the
+    #                            status='known' check anyway.
+    #   - active_srs=None      → DO NOT create or advance the active SRS card.
+    #                            Fabricating active progress is the bug this rule
+    #                            change closes.
     "status_marked_known": ProgressionDelta(
-        passive_delta=3, active_delta=1,
-        times_used_correctly_delta=1,
-        passive_srs="correct", active_srs="correct",
+        passive_srs="correct",
     ),
-    # Marking 'unknown': reset intention, but keep accumulated level data
-    "status_marked_unknown": ProgressionDelta(),
+    # Marking 'unknown' is the user saying "I don't know this anymore" — the SRS
+    # schedule should bring it back soon. We knock down whichever cards already
+    # exist via the SM-2 incorrect branch (which sets interval=1 day, ease-0.15,
+    # reps=0). Levels are intentionally left alone (no fabrication, mirroring
+    # status_marked_known's choice).
+    #
+    # Important: action='incorrect' in _update_srs is a no-op when the card is
+    # missing (see line ~333). So this rule will NEVER create an active card
+    # just because the user clicked Unknown — it only resets cards that the
+    # user already had from earlier activity.
+    "status_marked_unknown": ProgressionDelta(
+        passive_srs="incorrect", active_srs="incorrect",
+    ),
 
     # --- Transcript interaction ---
     # transcript_clicked: user left-clicked a word in the subtitle/transcript.
@@ -130,7 +163,11 @@ _RULES: dict[str, ProgressionDelta] = {
     "free_chat_mixed_lang":     ProgressionDelta(passive_delta=1, times_seen_delta=1, passive_srs="correct"),
 
     # --- SRS reviews ---
-    "passive_review_correct":  ProgressionDelta(passive_srs="correct"),
+    # A controlled review is stronger evidence than a subtitle click — both
+    # should grow the "Understood" passive_level metric. Previously
+    # passive_review_correct had passive_delta=0, which meant successful reviews
+    # never moved the dots while subtitle clicks did. Inconsistent; fixed.
+    "passive_review_correct":  ProgressionDelta(passive_delta=1, passive_srs="correct"),
     "passive_review_incorrect": ProgressionDelta(passive_srs="incorrect"),
     "active_review_correct":   ProgressionDelta(passive_delta=1, active_delta=1, times_used_correctly_delta=1, active_srs="correct"),
     "active_review_incorrect": ProgressionDelta(active_srs="incorrect"),
@@ -159,55 +196,123 @@ async def apply_progression(
     item_id: int,
     item_type: str,
     event: str,
-) -> None:
+    *,
+    status_override: str | None = None,
+) -> dict | None:
     """
     Apply the progression delta for *event* inside a single transaction.
 
-    Steps:
-      1. If any level/counter changes, upsert user_word_knowledge (increments only;
-         status is not changed here — only by promotion logic below).
-      2. Check whether the new levels trigger automatic status promotion.
+    Steps (all inside one `async with conn.transaction()`):
+      1. If status_override is provided OR there are level/counter changes,
+         upsert user_word_knowledge. When status_override is set, the status
+         column is written in the same statement — making the router-level
+         "set status then apply progression" sequence atomic.
+      2. If level deltas applied, check whether new levels trigger automatic
+         status promotion.
       3. Update SRS cards in the affected direction(s).
+
+    Returns the post-transaction user_word_knowledge row as a dict when a write
+    happened (status_override or level deltas), or None otherwise. Callers that
+    don't need the row (e.g. SRS reviews) can ignore the return value.
+
+    status_override
+    ---------------
+    Used by routers/words.py:update_status to fold the explicit status flip
+    into the same transaction as the rule's level/SRS changes. Single writer
+    to user_word_knowledge.status — eliminates the silent-failure window
+    between two separate transactions.
     """
     delta = compute_delta(event)
     prefs = await settings_service.get_preferences(pool, user_id)
     passive_threshold = prefs["passive_reps_for_known"]
     active_threshold = prefs["active_reps_for_known"]
 
+    has_level_changes = bool(
+        delta.passive_delta or delta.active_delta
+        or delta.times_seen_delta or delta.times_used_correctly_delta
+    )
+    needs_uwk_write = has_level_changes or status_override is not None
+
     async with pool.acquire() as conn:
         async with conn.transaction():
             row = None
 
-            if (delta.passive_delta or delta.active_delta
-                    or delta.times_seen_delta or delta.times_used_correctly_delta):
-                row = await conn.fetchrow(
-                    """
-                    INSERT INTO user_word_knowledge
-                        (user_id, item_id, item_type, status,
-                         passive_level, active_level,
-                         times_seen, times_used_correctly, last_seen)
-                    VALUES ($1::uuid, $2, $3, 'unknown',
-                            $4, $5, $6, $7, NOW())
-                    ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET
-                        passive_level        = user_word_knowledge.passive_level        + $4,
-                        active_level         = user_word_knowledge.active_level         + $5,
-                        times_seen           = user_word_knowledge.times_seen           + $6,
-                        times_used_correctly = user_word_knowledge.times_used_correctly + $7,
-                        last_seen            = NOW()
-                    RETURNING passive_level, active_level, status
-                    """,
-                    user_id, item_id, item_type,
-                    delta.passive_delta, delta.active_delta,
-                    delta.times_seen_delta, delta.times_used_correctly_delta,
-                )
+            if needs_uwk_write:
+                # status_override is written on both INSERT (initial status) and
+                # UPDATE (overwrite existing status). When None, default 'unknown'
+                # is used for INSERT and the existing status is preserved on UPDATE.
+                if status_override is not None:
+                    row = await conn.fetchrow(
+                        """
+                        INSERT INTO user_word_knowledge
+                            (user_id, item_id, item_type, status,
+                             passive_level, active_level,
+                             times_seen, times_used_correctly, last_seen)
+                        VALUES ($1::uuid, $2, $3, $4,
+                                $5, $6, $7, $8, NOW())
+                        ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET
+                            status               = $4,
+                            passive_level        = user_word_knowledge.passive_level        + $5,
+                            active_level         = user_word_knowledge.active_level         + $6,
+                            times_seen           = user_word_knowledge.times_seen           + $7,
+                            times_used_correctly = user_word_knowledge.times_used_correctly + $8,
+                            last_seen            = NOW()
+                        RETURNING passive_level, active_level, status
+                        """,
+                        user_id, item_id, item_type, status_override,
+                        delta.passive_delta, delta.active_delta,
+                        delta.times_seen_delta, delta.times_used_correctly_delta,
+                    )
+                else:
+                    row = await conn.fetchrow(
+                        """
+                        INSERT INTO user_word_knowledge
+                            (user_id, item_id, item_type, status,
+                             passive_level, active_level,
+                             times_seen, times_used_correctly, last_seen)
+                        VALUES ($1::uuid, $2, $3, 'unknown',
+                                $4, $5, $6, $7, NOW())
+                        ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET
+                            passive_level        = user_word_knowledge.passive_level        + $4,
+                            active_level         = user_word_knowledge.active_level         + $5,
+                            times_seen           = user_word_knowledge.times_seen           + $6,
+                            times_used_correctly = user_word_knowledge.times_used_correctly + $7,
+                            last_seen            = NOW()
+                        RETURNING passive_level, active_level, status
+                        """,
+                        user_id, item_id, item_type,
+                        delta.passive_delta, delta.active_delta,
+                        delta.times_seen_delta, delta.times_used_correctly_delta,
+                    )
 
-                await _maybe_promote(conn, user_id, item_id, item_type, row,
-                                     passive_threshold, active_threshold)
+                if has_level_changes:
+                    await _maybe_promote(conn, user_id, item_id, item_type, row,
+                                         passive_threshold, active_threshold)
 
             if delta.passive_srs:
                 await _update_srs(conn, user_id, item_id, item_type, "passive", delta.passive_srs)
             if delta.active_srs:
                 await _update_srs(conn, user_id, item_id, item_type, "active", delta.active_srs)
+
+            # Re-fetch the final row so callers (e.g. the HTTP route) see post-
+            # promotion status without an extra round-trip. Only when a write
+            # happened — otherwise return None.
+            if needs_uwk_write:
+                final = await conn.fetchrow(
+                    """
+                    SELECT item_id, item_type, status,
+                           passive_level, active_level,
+                           times_seen, times_used_correctly,
+                           notes, last_seen
+                      FROM user_word_knowledge
+                     WHERE user_id = $1::uuid
+                       AND item_id = $2
+                       AND item_type = $3
+                    """,
+                    user_id, item_id, item_type,
+                )
+                return dict(final) if final else None
+            return None
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +368,12 @@ async def _update_srs(
     'correct'  — create (if missing) and advance interval (SM-2 correct branch)
     'incorrect' — penalise existing card; no-op if missing
     """
+    # Grammar rules are passive-only: a rule like "trennbare Verben" isn't
+    # something the user "produces" — it's recognised and applied. Skip active
+    # card creation for this item type.
+    if item_type == "grammar_rule" and direction == "active":
+        return
+
     if action == "create":
         await conn.execute(
             """

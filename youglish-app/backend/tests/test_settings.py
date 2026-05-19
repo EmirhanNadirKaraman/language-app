@@ -99,9 +99,15 @@ async def _create_user(pool) -> str:
 
 
 async def test_get_preferences_new_user_returns_defaults(db_pool):
+    """A fresh user sees DEFAULTS plus empty derived category/genre lists."""
     user_id = await _create_user(db_pool)
     result = await get_preferences(db_pool, user_id)
-    assert result == DEFAULTS
+    expected = {
+        **DEFAULTS,
+        "liked_categories": [], "disliked_categories": [],
+        "liked_genres":     [], "disliked_genres":     [],
+    }
+    assert result == expected
 
 
 async def test_update_preferences_single_field(db_pool):
@@ -165,12 +171,15 @@ async def _auth_token(client) -> str:
     return resp.json()["access_token"]
 
 
-ALL_PREFERENCE_KEYS = {
+# Derive from settings_service.DEFAULTS (the source of truth) plus the four
+# derived keys that get_preferences always returns alongside the JSON blob:
+#   liked_categories / disliked_categories — from user_video_category table
+#   liked_genres     / disliked_genres     — frontend-facing aliases for above
+# Anything new added to DEFAULTS will flow through automatically. Adding a new
+# *derived* key (i.e. one not in DEFAULTS) requires updating this union.
+ALL_PREFERENCE_KEYS = set(DEFAULTS) | {
     "liked_categories", "disliked_categories",
-    "liked_channels", "followed_channels", "disliked_channels", "channel_names",
-    "passive_reps_for_known", "active_reps_for_known",
-    "known_word_color", "learning_word_color", "unknown_word_color",
-    "reminders_enabled",
+    "liked_genres",     "disliked_genres",
 }
 
 

@@ -57,6 +57,12 @@ async def client(db_pool):
 
 @pytest.fixture(autouse=True)
 async def cleanup(db_pool):
-    """Delete all test users created during a test."""
+    """Delete all test users created during a test, and clear any in-memory
+    rate-limiter state so per-user counters from one test don't carry into
+    the next."""
     yield
     await db_pool.execute("DELETE FROM users WHERE email LIKE 'test+%@example.com'")
+    # Reset in-process LLM rate limiter (#12). Importing here keeps the
+    # fixture cheap when the limiter module isn't loaded.
+    from backend.services import rate_limiter
+    rate_limiter.reset_for_tests()

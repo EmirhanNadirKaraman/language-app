@@ -311,3 +311,67 @@ async def get_rule_by_slug(
         slug, language,
     )
     return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Enrichment — feeds recommendation_service.enrich_by_type
+# ---------------------------------------------------------------------------
+
+async def enrich_grammar_rules(
+    pool: asyncpg.Pool,
+    user_id: str,
+    rule_ids: list[int],
+    language: str,
+) -> dict[int, dict]:
+    """
+    Fetch display metadata and user progress for a list of grammar rule_ids.
+
+    Mirrors phrase_service.enrich_phrases / recommendation_service.enrich_items.
+    Returns rule_id → enrichment dict. Rule IDs absent from grammar_rule_table
+    for the given language are silently omitted.
+
+    Display fields:
+        display_text   = grammar_rule_table.title
+        secondary_text = rule_type (e.g. 'reflexive_verb', 'verb_pattern')
+
+    Progress fields come from user_word_knowledge + srs_cards (passive only;
+    grammar rules are passive-only per progression_service._update_srs guard).
+    """
+    if not rule_ids:
+        return {}
+    rows = await pool.fetch(
+        """
+        SELECT
+            gr.rule_id,
+            gr.title,
+            gr.rule_type,
+            uwk.status          AS current_status,
+            uwk.passive_level,
+            uwk.active_level,
+            sc.due_date
+        FROM grammar_rule_table gr
+        LEFT JOIN user_word_knowledge uwk
+               ON uwk.item_id   = gr.rule_id
+              AND uwk.item_type = 'grammar_rule'
+              AND uwk.user_id   = $1::uuid
+        LEFT JOIN srs_cards sc
+               ON sc.item_id   = gr.rule_id
+              AND sc.item_type = 'grammar_rule'
+              AND sc.user_id   = $1::uuid
+              AND sc.direction = 'passive'
+        WHERE gr.rule_id  = ANY($2::int[])
+          AND gr.language = $3
+        """,
+        user_id, rule_ids, language,
+    )
+    return {
+        r["rule_id"]: {
+            "display_text":   r["title"],
+            "secondary_text": r["rule_type"],
+            "current_status": r["current_status"],
+            "passive_level":  r["passive_level"] or 0,
+            "active_level":   r["active_level"] or 0,
+            "due_date":       r["due_date"],
+        }
+        for r in rows
+    }

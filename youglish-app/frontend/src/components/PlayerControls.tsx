@@ -14,10 +14,15 @@ interface Props {
     sentenceCount: number;
 }
 
+// 44×44 touch target meets iOS Human Interface Guidelines and Material's
+// minimum. `minWidth`/`minHeight` so buttons can grow but never shrink below
+// the threshold on very narrow phones.
 const btnStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: '44px',
+    minHeight: '44px',
     width: '44px',
     height: '44px',
     border: '1px solid #ccc',
@@ -34,11 +39,17 @@ export function PlayerControls({
     sentenceIdx, sentenceCount,
 }: Props) {
     return (
+        // flexWrap lets the sentence counter drop below the button row on
+        // narrow phones (5 × 44 + gaps ≈ 244px already — anything below 320px
+        // viewport had no room for the counter on the same line).
+        // Gap added on the outer flex so wrapped rows have breathing space.
         <div
             style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px',
                 padding: '10px 16px',
                 background: '#f5f5f5',
                 borderTop: '1px solid #e0e0e0',

@@ -1,9 +1,6 @@
 
 import asyncpg
 
-VALID_STATUSES = {"unknown", "learning", "known"}
-VALID_ITEM_TYPES = {"word", "phrase", "grammar_rule"}
-
 
 async def lookup_word_by_text(
     pool: asyncpg.Pool,
@@ -73,40 +70,3 @@ async def get_user_knowledge(pool: asyncpg.Pool, user_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
-async def upsert_word_status(
-    pool: asyncpg.Pool,
-    user_id: str,
-    item_type: str,
-    item_id: int,
-    status: str,
-) -> dict:
-    """
-    Insert or update a user's knowledge status for a word/phrase/grammar_rule.
-
-    - First call for a (user, item_id, item_type) pair → inserts a new row.
-    - Subsequent calls → updates status and last_seen only.
-      (passive_level, active_level, times_seen are updated by other services.)
-
-    Raises ValueError on invalid item_type or status.
-    """
-    if item_type not in VALID_ITEM_TYPES:
-        raise ValueError(f"item_type must be one of {sorted(VALID_ITEM_TYPES)}, got {item_type!r}")
-    if status not in VALID_STATUSES:
-        raise ValueError(f"status must be one of {sorted(VALID_STATUSES)}, got {status!r}")
-
-    row = await pool.fetchrow(
-        """
-        INSERT INTO user_word_knowledge (user_id, item_id, item_type, status, last_seen)
-        VALUES ($1::uuid, $2, $3, $4, NOW())
-        ON CONFLICT (user_id, item_id, item_type)
-        DO UPDATE SET
-            status    = EXCLUDED.status,
-            last_seen = NOW()
-        RETURNING item_id, item_type, status, passive_level, active_level, notes, last_seen
-        """,
-        user_id,
-        item_id,
-        item_type,
-        status,
-    )
-    return dict(row)

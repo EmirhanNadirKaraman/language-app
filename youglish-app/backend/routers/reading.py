@@ -28,7 +28,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..core.deps import get_current_user
+from ..core.deps import get_current_user, rate_limit_llm
 from ..database import get_pool
 from ..models.schemas import (
     DueSelectionItem,
@@ -332,7 +332,11 @@ async def delete_selection(
 # LLM — sentence translation
 # ---------------------------------------------------------------------------
 
-@router.post("/reading/translate", response_model=TranslateResponse)
+@router.post(
+    "/reading/translate",
+    response_model=TranslateResponse,
+    dependencies=[Depends(rate_limit_llm)],
+)
 async def translate(
     body: TranslateRequest,
     user=Depends(get_current_user),  # noqa: ARG001  (auth guard only)
@@ -352,7 +356,11 @@ async def translate(
 # LLM — contextual explanation
 # ---------------------------------------------------------------------------
 
-@router.post("/reading/explain", response_model=ExplainResponse)
+@router.post(
+    "/reading/explain",
+    response_model=ExplainResponse,
+    dependencies=[Depends(rate_limit_llm)],
+)
 async def explain(
     body: ExplainRequest,
     user=Depends(get_current_user),  # noqa: ARG001  (auth guard only)

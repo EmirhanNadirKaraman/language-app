@@ -35,11 +35,22 @@ finally:
         pass
 
 
+def _extract(sentence: str) -> list[dict]:
+    """nlp(sentence) → Doc → phrase extraction. Sync — run via executor.
+
+    `extract_german_logic` expects a spaCy Doc (it iterates tokens and reads
+    `token.i`). Passing a string causes AttributeError mid-loop. We do the
+    nlp() conversion here so callers can pass plain text.
+    """
+    doc = _pf.nlp(sentence)
+    return _pf.extract_german_logic(doc)
+
+
 async def match_sentence(sentence: str) -> list[dict]:
-    """Run extract_german_logic in a thread so the sync spaCy call
+    """Run nlp() + extract_german_logic in a thread so the sync spaCy call
     doesn't block the event loop."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _pf.extract_german_logic, sentence)
+    return await loop.run_in_executor(None, _extract, sentence)
 
 
 def get_blueprint_map() -> dict[str, str]:

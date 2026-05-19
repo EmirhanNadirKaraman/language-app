@@ -35,6 +35,7 @@ Channel / category preference scoring
 """
 from __future__ import annotations
 
+import asyncio
 import math
 
 import asyncpg
@@ -440,13 +441,16 @@ async def enrich_items(
     language: str,
 ) -> dict[int, dict]:
     """
-    Fetch display text and knowledge metadata for a list of word item_ids.
+    WORD-ONLY enricher. Returns word_id → enrichment dict.
 
-    Returns item_id → enrichment dict.  Items not found in word_table for the
-    given language are absent from the result — the caller skips them.
+    This is the canonical word enricher and is one of three backends for
+    `enrich_by_type`. Phrase enrichment lives in `phrase_service.enrich_phrases`;
+    grammar-rule enrichment lives in `grammar_service.enrich_grammar_rules`.
+    Mixed-type callers should use `enrich_by_type` instead — it dispatches to
+    all three and keys results by `(item_type, item_id)` to avoid ID collisions
+    across tables.
 
-    Only handles item_type='word'.  Phrase and grammar_rule enrichment is a
-    TODO: add their lookup tables here when available.
+    Words not found in word_table for the given language are silently omitted.
     """
     if not item_ids:
         return {}
@@ -465,6 +469,53 @@ async def enrich_items(
     }
 
 
+async def enrich_by_type(
+    pool: asyncpg.Pool,
+    user_id: str,
+    items: list[tuple[str, int]],
+    language: str,
+) -> dict[tuple[str, int], dict]:
+    """
+    Unified mixed-type enricher. Buckets (item_type, item_id) pairs and calls
+    the per-type enricher for each non-empty bucket in parallel.
+
+    Returns a dict keyed by ``(item_type, item_id)``. The composite key avoids
+    collisions when, e.g., word_id=5 and phrase_id=5 both exist — a real risk
+    with three independent SERIAL primary keys feeding into the same
+    polymorphic surface.
+
+    Item types not in {'word', 'phrase', 'grammar_rule'} are silently skipped.
+    """
+    by_type: dict[str, list[int]] = {"word": [], "phrase": [], "grammar_rule": []}
+    for item_type, item_id in items:
+        bucket = by_type.get(item_type)
+        if bucket is not None:
+            bucket.append(item_id)
+
+    # Lazy imports to avoid a circular dependency (phrase_service and
+    # grammar_service both live alongside recommendation_service).
+    from .phrase_service import enrich_phrases
+    from .grammar_service import enrich_grammar_rules
+
+    async def _empty() -> dict:
+        return {}
+
+    word_res, phrase_res, rule_res = await asyncio.gather(
+        enrich_items(pool, user_id, by_type["word"], language)            if by_type["word"]         else _empty(),
+        enrich_phrases(pool, user_id, by_type["phrase"], language)        if by_type["phrase"]       else _empty(),
+        enrich_grammar_rules(pool, user_id, by_type["grammar_rule"], language) if by_type["grammar_rule"] else _empty(),
+    )
+
+    merged: dict[tuple[str, int], dict] = {}
+    for iid, meta in word_res.items():
+        merged[("word", iid)] = meta
+    for iid, meta in phrase_res.items():
+        merged[("phrase", iid)] = meta
+    for iid, meta in rule_res.items():
+        merged[("grammar_rule", iid)] = meta
+    return merged
+
+
 async def recommend_items(
     pool: asyncpg.Pool,
     user_id: str,
@@ -475,33 +526,25 @@ async def recommend_items(
     """
     Return ranked item recommendations enriched with display text.
 
-    Delegates scoring entirely to get_prioritized_items(), then enriches
-    with the appropriate table depending on item_type:
-      'word'   → word_table via enrich_items()
-      'phrase' → phrase_table via phrase_service.enrich_phrases()
-      other    → returns empty (not yet supported)
-
-    Items not found in the relevant table for the given language are silently
-    skipped (cross-language IDs can legitimately appear in signals).
+    Delegates scoring to get_prioritized_items() and enrichment to the unified
+    enrich_by_type() dispatcher — which handles words, phrases, and grammar
+    rules uniformly. Items not found in their respective table for the given
+    language are silently skipped.
     """
     items = await get_prioritized_items(pool, user_id, item_type=item_type, limit=limit)
 
     if not items:
         return {"items": [], "item_type": item_type, "language": language, "total": 0}
 
-    item_ids = [item.item_id for item in items]
-
-    if item_type == "word":
-        enrichment = await enrich_items(pool, user_id, item_ids, language)
-    elif item_type == "phrase":
-        from .phrase_service import enrich_phrases
-        enrichment = await enrich_phrases(pool, user_id, item_ids, language)
-    else:
-        return {"items": [], "item_type": item_type, "language": language, "total": 0}
+    enrichment = await enrich_by_type(
+        pool, user_id,
+        [(it.item_type, it.item_id) for it in items],
+        language,
+    )
 
     result = []
     for item in items:
-        meta = enrichment.get(item.item_id)
+        meta = enrichment.get((item.item_type, item.item_id))
         if meta is None:
             continue
         result.append({

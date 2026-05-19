@@ -82,9 +82,13 @@ async def _mark_learning_and_get_card_id(client, headers, language, word_id) -> 
 # ---------------------------------------------------------------------------
 
 def test_passive_review_correct_delta():
-    """Passive correct review: only advances passive SRS card, no level deltas."""
+    """Passive correct review: advances passive SRS card AND bumps passive_level.
+
+    A controlled review is stronger evidence than a subtitle click (which gives
+    passive_delta=1), so successful reviews should at minimum match that.
+    """
     d = compute_delta("passive_review_correct")
-    assert d.passive_delta == 0
+    assert d.passive_delta == 1
     assert d.active_delta == 0
     assert d.passive_srs == "correct"
     assert d.active_srs is None
@@ -133,7 +137,7 @@ async def test_due_returns_empty_list_for_new_user(client: AsyncClient, db_pool)
 
 
 async def test_due_returns_card_after_marking_word_learning(client: AsyncClient, db_pool):
-    """status_marked_learning creates a passive SRS card due NOW → appears in /srs/due."""
+    """status_marked_learning creates both passive and active SRS cards due NOW → both appear in /srs/due."""
     word_id, _, language = await _get_word(db_pool)
     headers, _ = await _register_and_get_user(client, db_pool, _email())
 
@@ -147,13 +151,14 @@ async def test_due_returns_card_after_marking_word_learning(client: AsyncClient,
 
     assert resp.status_code == 200
     cards = resp.json()
-    assert len(cards) == 1
-    card = cards[0]
-    assert card["item_id"] == word_id
-    assert card["item_type"] == "word"
-    assert card["direction"] == "passive"
-    assert "card_id" in card
-    assert "display_text" in card
+    assert len(cards) == 2
+    directions = {c["direction"] for c in cards}
+    assert directions == {"passive", "active"}
+    for card in cards:
+        assert card["item_id"] == word_id
+        assert card["item_type"] == "word"
+        assert "card_id" in card
+        assert "display_text" in card
 
 
 async def test_due_card_display_text_is_word_surface_form(client: AsyncClient, db_pool):

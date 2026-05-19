@@ -16,6 +16,11 @@ export function clearToken(): void {
     localStorage.removeItem(TOKEN_KEY);
 }
 
+/**
+ * Read the signed-in user's email from localStorage. Returns `null` when no
+ * user is signed in OR when the email was never persisted (older app versions
+ * didn't store it). Callers MUST handle `null` — do not assert non-null.
+ */
 export function getStoredEmail(): string | null {
     return localStorage.getItem(EMAIL_KEY);
 }

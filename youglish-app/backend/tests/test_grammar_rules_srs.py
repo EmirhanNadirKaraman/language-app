@@ -226,6 +226,55 @@ async def test_double_put_grammar_rule_learning_is_idempotent(
     assert count == 1
 
 
+# ---------------------------------------------------------------------------
+# enrich_grammar_rules (#5c) — feeds recommendation_service.enrich_by_type
+# ---------------------------------------------------------------------------
+
+async def test_enrich_grammar_rules_returns_metadata(db_pool):
+    from backend.services.grammar_service import enrich_grammar_rules
+
+    rule_id, _, title = await _get_german_rule(db_pool)
+    uid = await db_pool.fetchval(
+        "INSERT INTO users (email, password_hash) VALUES ($1, 'x') RETURNING user_id",
+        f"test+{__import__('uuid').uuid4().hex[:10]}@example.com",
+    )
+    uid = str(uid)
+    # Track the rule so passive_level / status are non-default.
+    await db_pool.execute(
+        "INSERT INTO user_word_knowledge (user_id, item_id, item_type, status, passive_level) "
+        "VALUES ($1::uuid, $2, 'grammar_rule', 'learning', 2)",
+        uid, rule_id,
+    )
+
+    enrichment = await enrich_grammar_rules(db_pool, uid, [rule_id], "de")
+
+    assert rule_id in enrichment
+    meta = enrichment[rule_id]
+    assert meta["display_text"]   == title
+    assert meta["secondary_text"] is not None   # rule_type
+    assert meta["current_status"] == "learning"
+    assert meta["passive_level"]  == 2
+    assert meta["active_level"]   == 0
+
+
+async def test_enrich_grammar_rules_omits_unknown_ids(db_pool):
+    from backend.services.grammar_service import enrich_grammar_rules
+
+    uid = await db_pool.fetchval(
+        "INSERT INTO users (email, password_hash) VALUES ($1, 'x') RETURNING user_id",
+        f"test+{__import__('uuid').uuid4().hex[:10]}@example.com",
+    )
+    uid = str(uid)
+
+    enrichment = await enrich_grammar_rules(db_pool, uid, [999_999_999], "de")
+    assert enrichment == {}
+
+
+async def test_enrich_grammar_rules_empty_input_is_empty_output(db_pool):
+    from backend.services.grammar_service import enrich_grammar_rules
+    assert await enrich_grammar_rules(db_pool, str(uuid.uuid4()), [], "de") == {}
+
+
 async def test_german_grammar_rule_not_in_due_for_french(client: AsyncClient, db_pool):
     """A German grammar rule must NOT appear when querying /srs/due?language=fr."""
     rule_id, slug, title = await _get_german_rule(db_pool)
