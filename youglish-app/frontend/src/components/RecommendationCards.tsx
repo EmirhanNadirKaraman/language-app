@@ -79,15 +79,18 @@ function ActionButton({
             onClick={onClick}
             disabled={disabled}
             style={{
-                padding: '5px 12px',
+                // ≥36px tappable inside dense recommendation cards.
+                padding: '8px 14px',
                 borderRadius: '5px',
                 border: primary ? 'none' : '1px solid #c5cae9',
                 background: primary ? '#1a237e' : '#fff',
                 color: primary ? '#fff' : '#1a237e',
-                fontSize: '12px',
+                fontSize: '13px',
                 fontWeight: 600,
                 cursor: disabled ? 'not-allowed' : 'pointer',
                 opacity: disabled ? 0.5 : 1,
+                minHeight: '36px',
+                touchAction: 'manipulation',
             }}
         >
             {label}

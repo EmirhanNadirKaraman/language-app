@@ -9,6 +9,7 @@ import type { SelectedToken } from './SelectionPanel';
 import { SelectionReviewPanel } from './SelectionReviewPanel';
 import { WORD_COLORS } from '../config/wordColors';
 import { useWordStatus } from '../hooks/useWordStatus';
+import { useViewport } from '../hooks/useViewport';
 import { WordStatusPicker } from './WordStatusPicker';
 
 interface Props {
@@ -406,6 +407,9 @@ function btnStyle(bg: string, color: string) {
 
 export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }: Props) {
   const [dk, setDk] = useState(darkMode ?? false);
+  // #27d: switch the side-by-side reader/panel layout to a vertical stack on
+  // mobile so a 375px viewport doesn't get a 55%+42% horizontal split.
+  const { isMobile } = useViewport();
   const th = {
     bg:     dk ? '#121212' : '#fff',
     bgBar:  dk ? '#1a1a2e' : '#f8f9ff',
@@ -804,12 +808,22 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   return (
     <div style={{ position: 'fixed', inset: 0, background: th.bg, zIndex: 900, display: 'flex', flexDirection: 'column', overflow: 'hidden', color: th.text }}>
 
-      {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', borderBottom: `1px solid ${th.border}`, background: th.bgBar, flexShrink: 0, flexWrap: 'wrap' }}>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '16px', cursor: 'pointer', color: th.accent, fontWeight: 700 }}>
+      {/* Top bar — flex-wraps; chrome controls are ≥36px tall for tap. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px clamp(10px, 3vw, 16px)', borderBottom: `1px solid ${th.border}`, background: th.bgBar, flexShrink: 0, flexWrap: 'wrap' }}>
+        <button
+          data-testid="book-back"
+          onClick={onClose}
+          style={{
+            minHeight: '44px',
+            background: 'none', border: 'none', fontSize: '16px',
+            cursor: 'pointer', color: th.accent, fontWeight: 700,
+            padding: '6px 4px',
+            touchAction: 'manipulation',
+          }}
+        >
           ← Back
         </button>
-        <span style={{ fontWeight: 700, fontSize: '15px', color: th.accent, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <span style={{ fontWeight: 700, fontSize: '15px', color: th.accent, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
           {doc.title}
         </span>
 
@@ -818,10 +832,12 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
           {(['page', 'sentence'] as const).map(m => (
             <button key={m} onClick={() => { setReadingMode(m); setSentenceIdx(0); }}
               style={{
-                padding: '4px 12px', fontSize: '12px', border: 'none',
+                minHeight: '36px',
+                padding: '6px 14px', fontSize: '13px', border: 'none',
                 background: readingMode === m ? (dk ? '#2a2a4e' : '#e8eaf6') : (dk ? '#1e1e2e' : '#fff'),
                 color: readingMode === m ? (dk ? '#9fa8da' : '#1a237e') : (dk ? '#666' : '#888'),
                 cursor: 'pointer', fontWeight: readingMode === m ? 600 : 400,
+                touchAction: 'manipulation',
               }}>
               {m === 'page' ? 'Page' : 'Sentence'}
             </button>
@@ -860,11 +876,14 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
           style={navBtnStyle(readingMode === 'sentence' ? (sentenceIdx > 0 || pageNum > 1) : pageNum > 1, dk)}
         >◀</button>
         <span style={{ fontSize: '13px', color: th.muted }}>Page</span>
-        <input type="text" value={inputPage}
+        <input
+          data-testid="book-page-input"
+          type="text" value={inputPage}
           onChange={e => setInputPage(e.target.value)}
           onKeyDown={handlePageInput}
           onBlur={() => setInputPage(String(pageNum))}
-          style={{ width: '48px', textAlign: 'center', padding: '3px 6px', border: `1px solid ${dk ? '#444' : '#ccc'}`, borderRadius: '4px', fontSize: '13px', background: dk ? '#1e1e2e' : '#fff', color: th.text }}
+          // fontSize: 16px blocks iOS Safari's focus-zoom. minHeight 44 for tap.
+          style={{ width: '56px', textAlign: 'center', padding: '6px 8px', border: `1px solid ${dk ? '#444' : '#ccc'}`, borderRadius: '4px', fontSize: '16px', minHeight: '44px', background: dk ? '#1e1e2e' : '#fff', color: th.text }}
         />
         <span style={{ fontSize: '13px', color: th.muted }}>of {totalPages}</span>
         <button
@@ -904,14 +923,34 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
         {batchMsg && <span style={{ fontSize: '12px', color: '#388e3c' }}>{batchMsg}</span>}
       </div>
 
-      {/* Content area */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden', background: th.bg }}>
+      {/* Content area — row on desktop, column on mobile (#27d). When stacked,
+          the reader takes the available space and the right-side panel
+          (selection / saved review / scan image / annotation list) flows below. */}
+      <div
+        data-testid="book-content-area"
+        style={{
+          display: 'flex',
+          flex: 1,
+          overflow: 'hidden',
+          background: th.bg,
+          flexDirection: isMobile ? 'column' : 'row',
+        }}
+      >
 
         {/* ── Annotation split view (Edit mode) ─────────────────────────────── */}
         {showReview && !hasSelection && !showSaved && pageData && (
           <>
-            {/* Left: block annotation list */}
-            <div style={{ flex: '1 1 50%', overflowY: 'auto', borderRight: `1px solid ${th.border}`, background: th.bgSub }}>
+            {/* Left: block annotation list. On mobile this becomes the top
+                of the stack with a flexible height; on desktop it's the left
+                50% column. */}
+            <div style={{
+              flex: isMobile ? '1 1 auto' : '1 1 50%',
+              minHeight: 0,
+              overflowY: 'auto',
+              borderRight: isMobile ? 'none' : `1px solid ${th.border}`,
+              borderBottom: isMobile ? `1px solid ${th.border}` : 'none',
+              background: th.bgSub,
+            }}>
               <div style={{ padding: '10px 14px', borderBottom: `1px solid ${th.border}`, background: dk ? '#2a2a3e' : '#f0f0ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontWeight: 600, fontSize: '13px', color: th.accent }}>Annotation — Page {pageNum}</span>
                 <span style={{ fontSize: '12px', color: th.muted }}>{pageData.blocks.length} blocks</span>
@@ -928,8 +967,16 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                 />
               ))}
             </div>
-            {/* Right: scanned page image */}
-            <div style={{ flex: '0 0 50%', overflowY: 'auto', background: dk ? '#1a1a1a' : '#f5f5f5', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {/* Right (or bottom on mobile): scanned page image */}
+            <div style={{
+              flex: isMobile ? '0 0 auto' : '0 0 50%',
+              maxHeight: isMobile ? '50vh' : undefined,
+              overflowY: 'auto',
+              background: dk ? '#1a1a1a' : '#f5f5f5',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+            }}>
               {imageSrc ? (
                 <img src={imageSrc} alt={`Page ${pageNum} scan`} style={{ width: '100%', display: 'block' }} />
               ) : pageData.has_image ? (
@@ -943,7 +990,18 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
 
         {/* ── Normal reading pane (non-edit) ────────────────────────────────── */}
         {!(showReview && !hasSelection && !showSaved) && (<>
-        <div style={{ flex: (hasSelection || showSaved) ? '1 1 55%' : showImage ? '1 1 55%' : '1 1 100%', overflowY: 'auto', padding: '24px', transition: 'flex 0.2s' }}>
+        <div style={{
+          // Mobile: reader takes available height; right-panel stacks below.
+          // Desktop: existing horizontal split (55/42 with image, 55/45 with selection panel).
+          flex: isMobile
+            ? '1 1 auto'
+            : (hasSelection || showSaved) ? '1 1 55%' : showImage ? '1 1 55%' : '1 1 100%',
+          minHeight: 0,
+          overflowY: 'auto',
+          // Fluid side padding so 24px doesn't waste a 320px viewport.
+          padding: 'clamp(12px, 4vw, 24px)',
+          transition: 'flex 0.2s',
+        }}>
           {loading && <p style={{ color: th.muted, textAlign: 'center', marginTop: '48px' }}>Loading page…</p>}
           {error   && <p style={{ color: '#d32f2f', textAlign: 'center', marginTop: '48px' }}>{error}</p>}
 
@@ -1016,9 +1074,19 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
           )}
         </div>
 
-        {/* Scan image panel — side by side with text */}
+        {/* Scan image panel — side-by-side on desktop, stacked below on mobile. */}
         {showImage && (imageSrc || pageData?.has_image) && (
-          <div style={{ flex: '0 0 42%', overflowY: 'auto', borderLeft: `1px solid ${th.border}`, background: dk ? '#1a1a1a' : '#f0f0f0', display: 'flex', alignItems: 'flex-start', justifyContent: 'center' }}>
+          <div style={{
+            flex: isMobile ? '0 0 auto' : '0 0 42%',
+            maxHeight: isMobile ? '50vh' : undefined,
+            overflowY: 'auto',
+            borderLeft: isMobile ? 'none' : `1px solid ${th.border}`,
+            borderTop:  isMobile ? `1px solid ${th.border}` : 'none',
+            background: dk ? '#1a1a1a' : '#f0f0f0',
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+          }}>
             {imageSrc
               ? <img src={imageSrc} alt={`Page ${pageNum} scan`} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
               : <p style={{ color: th.muted, padding: '24px', textAlign: 'center' }}>Loading scan…</p>
@@ -1092,17 +1160,27 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
 }
 
 function navBtnStyle(enabled: boolean, dk = false) {
+  // Page-nav arrows are primary controls — 44×44 finger target.
   return {
-    padding: '4px 10px', border: `1px solid ${dk ? '#444' : '#ddd'}`, borderRadius: '4px',
+    minWidth: '44px', minHeight: '44px',
+    padding: '6px 12px',
+    border: `1px solid ${dk ? '#444' : '#ddd'}`, borderRadius: '4px',
     cursor: enabled ? 'pointer' : 'not-allowed', background: dk ? '#1e1e2e' : '#fff',
-    color: enabled ? (dk ? '#9fa8da' : '#1a237e') : (dk ? '#555' : '#ccc'), fontSize: '14px',
+    color: enabled ? (dk ? '#9fa8da' : '#1a237e') : (dk ? '#555' : '#ccc'),
+    fontSize: '16px',
+    touchAction: 'manipulation' as const,
   } as const;
 }
 
 function topBtnStyle(active: boolean, dk = false) {
+  // Top-bar buttons are secondary; ≥36px is finger-friendly without crowding
+  // the row when many controls (Back, Mode, Scan, Saved, Edit, Dark/Light) wrap.
   return {
-    padding: '5px 12px', border: `1px solid ${dk ? '#4a4a6a' : '#c5cae9'}`, borderRadius: '5px',
+    minHeight: '36px',
+    padding: '7px 12px',
+    border: `1px solid ${dk ? '#4a4a6a' : '#c5cae9'}`, borderRadius: '5px',
     background: active ? (dk ? '#2a2a4e' : '#e8eaf6') : (dk ? '#1e1e2e' : '#fff'),
-    color: dk ? '#9fa8da' : '#1a237e', fontSize: '12px', cursor: 'pointer',
+    color: dk ? '#9fa8da' : '#1a237e', fontSize: '13px', cursor: 'pointer',
+    touchAction: 'manipulation' as const,
   } as const;
 }

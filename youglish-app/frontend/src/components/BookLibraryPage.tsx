@@ -172,7 +172,16 @@ export function BookLibraryPage({ token, onOpen, onClose, darkMode }: Props) {
           </div>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: th.muted, lineHeight: 1 }}
+            style={{
+              background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer',
+              color: th.muted, lineHeight: 1,
+              minWidth: '44px', minHeight: '44px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 0,
+              touchAction: 'manipulation',
+            }}
+            aria-label="Close"
+            data-testid="book-library-close"
           >
             ×
           </button>
@@ -206,17 +215,29 @@ export function BookLibraryPage({ token, onOpen, onClose, darkMode }: Props) {
                 value={title}
                 onChange={e => setTitle(e.target.value)}
                 placeholder="Book title"
-                style={{ width: '100%', padding: '6px 8px', border: '1px solid #ccc', borderRadius: '6px', fontSize: '13px', boxSizing: 'border-box' }}
+                // fontSize: 16px blocks iOS Safari focus-zoom. minHeight 44 = touch target.
+                style={{
+                  width: '100%', padding: '8px 10px', border: '1px solid #ccc',
+                  borderRadius: '6px', fontSize: '16px', minHeight: '44px',
+                  boxSizing: 'border-box',
+                }}
+                data-testid="book-upload-title"
               />
             </div>
-            <div style={{ flex: '0 0 90px' }}>
+            <div style={{ flex: '0 0 110px' }}>
               <label style={{ fontSize: '11px', color: '#666', display: 'block', marginBottom: '4px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Language
               </label>
               <select
                 value={language}
                 onChange={e => setLanguage(e.target.value)}
-                style={{ width: '100%', padding: '6px 8px', border: '1px solid #ccc', borderRadius: '6px', fontSize: '13px' }}
+                // fontSize: 16px blocks iOS Safari focus-zoom on <select>.
+                style={{
+                  width: '100%', padding: '8px 10px', border: '1px solid #ccc',
+                  borderRadius: '6px', fontSize: '16px', minHeight: '44px',
+                  boxSizing: 'border-box',
+                }}
+                data-testid="book-upload-language"
               >
                 {Object.entries(LANG_LABELS).map(([code, label]) => (
                   <option key={code} value={code}>{label}</option>
@@ -227,12 +248,15 @@ export function BookLibraryPage({ token, onOpen, onClose, darkMode }: Props) {
               type="submit"
               disabled={!selectedFile || uploading}
               style={{
-                padding: '7px 18px', background: '#1a237e', color: '#fff',
-                border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600,
+                padding: '10px 20px', background: '#1a237e', color: '#fff',
+                border: 'none', borderRadius: '6px', fontSize: '14px', fontWeight: 600,
                 cursor: selectedFile && !uploading ? 'pointer' : 'not-allowed',
                 opacity: selectedFile && !uploading ? 1 : 0.5,
                 whiteSpace: 'nowrap', flexShrink: 0,
+                minHeight: '44px',
+                touchAction: 'manipulation',
               }}
+              data-testid="book-upload-submit"
             >
               {uploading ? 'Uploading…' : 'Upload'}
             </button>
@@ -329,14 +353,15 @@ export function BookLibraryPage({ token, onOpen, onClose, darkMode }: Props) {
               </div>
 
               {/* Actions */}
-              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
                 {book.status === 'ready' && (
                   <button
                     onClick={() => onOpen(book)}
                     style={{
-                      padding: '5px 14px', background: '#1a237e', color: '#fff',
+                      padding: '8px 14px', background: '#1a237e', color: '#fff',
                       border: 'none', borderRadius: '6px',
-                      fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                      fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                      minHeight: '36px', touchAction: 'manipulation',
                     }}
                   >
                     Read
@@ -350,13 +375,23 @@ export function BookLibraryPage({ token, onOpen, onClose, darkMode }: Props) {
                     <button
                       onClick={() => handleDelete(book.doc_id)}
                       disabled={deleting === book.doc_id}
-                      style={{ padding: '4px 10px', background: '#d32f2f', color: '#fff', border: 'none', borderRadius: '5px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                      style={{
+                        padding: '8px 12px', background: '#d32f2f', color: '#fff',
+                        border: 'none', borderRadius: '5px',
+                        fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+                        minHeight: '36px', touchAction: 'manipulation',
+                      }}
                     >
                       {deleting === book.doc_id ? '…' : 'Confirm'}
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(null)}
-                      style={{ padding: '4px 10px', background: '#eee', color: '#444', border: '1px solid #ddd', borderRadius: '5px', fontSize: '11px', cursor: 'pointer' }}
+                      style={{
+                        padding: '8px 12px', background: '#eee', color: '#444',
+                        border: '1px solid #ddd', borderRadius: '5px',
+                        fontSize: '12px', cursor: 'pointer',
+                        minHeight: '36px', touchAction: 'manipulation',
+                      }}
                     >
                       Cancel
                     </button>
@@ -364,7 +399,12 @@ export function BookLibraryPage({ token, onOpen, onClose, darkMode }: Props) {
                 ) : (
                   <button
                     onClick={() => setDeleteConfirm(book.doc_id)}
-                    style={{ padding: '5px 10px', background: '#fff', color: '#d32f2f', border: '1px solid #ffcdd2', borderRadius: '6px', fontSize: '12px', cursor: 'pointer' }}
+                    style={{
+                      padding: '8px 12px', background: '#fff', color: '#d32f2f',
+                      border: '1px solid #ffcdd2', borderRadius: '6px',
+                      fontSize: '13px', cursor: 'pointer',
+                      minHeight: '36px', touchAction: 'manipulation',
+                    }}
                   >
                     Delete
                   </button>

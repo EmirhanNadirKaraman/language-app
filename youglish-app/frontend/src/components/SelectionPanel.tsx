@@ -178,10 +178,16 @@ export function SelectionPanel({
         <button
           onClick={onClear}
           style={{
+            // 340px sidebar context — 36×36 keeps the header tidy while still tappable.
             background: 'none', border: 'none', cursor: 'pointer',
-            color: '#9fa8da', fontSize: '18px', lineHeight: 1, padding: 0,
+            color: '#9fa8da', fontSize: '20px', lineHeight: 1,
+            minWidth: '36px', minHeight: '36px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 0,
+            touchAction: 'manipulation',
           }}
           title="Clear selection"
+          aria-label="Clear selection"
         >
           ×
         </button>
@@ -282,10 +288,11 @@ export function SelectionPanel({
             onChange={e => setNote(e.target.value)}
             rows={2}
             placeholder="Add a note…"
+            // fontSize: 16px blocks iOS Safari focus-zoom on textareas.
             style={{
               width: '100%',
-              fontSize: '13px',
-              padding: '6px 8px',
+              fontSize: '16px',
+              padding: '8px 10px',
               border: `1px solid ${dk ? '#444' : '#c5cae9'}`,
               borderRadius: '4px',
               resize: 'vertical',
@@ -294,6 +301,7 @@ export function SelectionPanel({
               background: dk ? '#1e1e2e' : '#fff',
               color: dk ? '#e0e0e0' : undefined,
             }}
+            data-testid="selection-note"
           />
         </div>
 
@@ -310,7 +318,7 @@ export function SelectionPanel({
               disabled={saving || saved}
               style={{
                 flex: 1,
-                padding: '8px',
+                padding: '10px',
                 borderRadius: '5px',
                 border: 'none',
                 background: saved ? '#e8f5e9' : '#1a237e',
@@ -318,20 +326,25 @@ export function SelectionPanel({
                 fontSize: '13px',
                 fontWeight: 600,
                 cursor: saving || saved ? 'default' : 'pointer',
+                minHeight: '40px',
+                touchAction: 'manipulation',
               }}
+              data-testid="selection-save"
             >
               {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
             </button>
             <button
               onClick={onClear}
               style={{
-                padding: '8px 14px',
+                padding: '10px 14px',
                 borderRadius: '5px',
                 border: `1px solid ${dk ? '#444' : '#c5cae9'}`,
                 background: dk ? '#1e1e2e' : '#fff',
                 color: dk ? '#aaa' : '#555',
                 fontSize: '13px',
                 cursor: 'pointer',
+                minHeight: '40px',
+                touchAction: 'manipulation',
               }}
             >
               Clear
@@ -342,13 +355,15 @@ export function SelectionPanel({
             <button
               onClick={() => handleDelete(alreadySaved.selection_id)}
               style={{
-                padding: '8px 14px',
+                padding: '10px 14px',
                 borderRadius: '5px',
                 border: '1px solid #ffcdd2',
                 background: '#ffebee',
                 color: '#d32f2f',
                 fontSize: '13px',
                 cursor: 'pointer',
+                minHeight: '40px',
+                touchAction: 'manipulation',
               }}
             >
               Remove
@@ -357,13 +372,15 @@ export function SelectionPanel({
               onClick={onClear}
               style={{
                 flex: 1,
-                padding: '8px',
+                padding: '10px',
                 borderRadius: '5px',
                 border: `1px solid ${dk ? '#444' : '#c5cae9'}`,
                 background: dk ? '#1e1e2e' : '#fff',
                 color: dk ? '#aaa' : '#555',
                 fontSize: '13px',
                 cursor: 'pointer',
+                minHeight: '40px',
+                touchAction: 'manipulation',
               }}
             >
               Clear selection
@@ -485,7 +502,7 @@ function SavedSelectionRow({
 function llmBtnStyle(color: string, disabled: boolean, dk = false): React.CSSProperties {
   return {
     width: '100%',
-    padding: '7px 12px',
+    padding: '10px 12px',
     borderRadius: '5px',
     border: `1px solid ${color}40`,
     background: disabled ? (dk ? '#2a2a2a' : '#f5f5f5') : `${color}10`,
@@ -494,6 +511,8 @@ function llmBtnStyle(color: string, disabled: boolean, dk = false): React.CSSPro
     fontWeight: 600,
     cursor: disabled ? 'wait' : 'pointer',
     textAlign: 'left',
+    minHeight: '40px',
+    touchAction: 'manipulation',
   };
 }
 

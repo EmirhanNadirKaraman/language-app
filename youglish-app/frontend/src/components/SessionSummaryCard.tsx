@@ -65,7 +65,7 @@ export function SessionSummaryCard({ summary, onNextItem, onPracticeAgain, onClo
                 <button
                     onClick={onNextItem}
                     style={{
-                        padding: '10px 20px',
+                        padding: '12px 20px',
                         borderRadius: '7px',
                         border: 'none',
                         background: '#f57f17',
@@ -74,15 +74,18 @@ export function SessionSummaryCard({ summary, onNextItem, onPracticeAgain, onClo
                         fontWeight: 700,
                         cursor: 'pointer',
                         textAlign: 'left',
+                        minHeight: '44px',
+                        touchAction: 'manipulation',
                     }}
+                    data-testid="summary-next-item"
                 >
                     See next recommended item →
                 </button>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     <button
                         onClick={onPracticeAgain}
                         style={{
-                            padding: '7px 14px',
+                            padding: '8px 14px',
                             borderRadius: '6px',
                             border: '1px solid #ffe082',
                             background: '#fff',
@@ -90,6 +93,8 @@ export function SessionSummaryCard({ summary, onNextItem, onPracticeAgain, onClo
                             fontSize: '13px',
                             fontWeight: 600,
                             cursor: 'pointer',
+                            minHeight: '36px',
+                            touchAction: 'manipulation',
                         }}
                     >
                         Practice again
@@ -97,7 +102,7 @@ export function SessionSummaryCard({ summary, onNextItem, onPracticeAgain, onClo
                     <button
                         onClick={onClose}
                         style={{
-                            padding: '7px 14px',
+                            padding: '8px 14px',
                             borderRadius: '6px',
                             border: '1px solid #e0e0e0',
                             background: '#fff',
@@ -105,6 +110,8 @@ export function SessionSummaryCard({ summary, onNextItem, onPracticeAgain, onClo
                             fontSize: '13px',
                             fontWeight: 600,
                             cursor: 'pointer',
+                            minHeight: '36px',
+                            touchAction: 'manipulation',
                         }}
                     >
                         Back to home

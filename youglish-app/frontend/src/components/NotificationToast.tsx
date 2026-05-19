@@ -95,7 +95,15 @@ function Toast({
                     lineHeight: 1,
                     padding: 0,
                     flexShrink: 0,
+                    minWidth: '44px',
+                    minHeight: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    touchAction: 'manipulation',
                 }}
+                aria-label="Dismiss notification"
+                data-testid="notification-dismiss"
             >
                 ×
             </button>

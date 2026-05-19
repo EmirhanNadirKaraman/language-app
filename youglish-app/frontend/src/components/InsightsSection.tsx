@@ -93,9 +93,11 @@ function InsightCardView({
                     background: '#f8f9ff',
                     border: '1px solid #e8eaf6',
                     borderRadius: '6px',
-                    padding: '9px 11px',
+                    padding: '10px 12px',
                     cursor: 'pointer',
                     marginBottom: '8px',
+                    minHeight: '44px',
+                    touchAction: 'manipulation',
                 }}
             >
                 <div style={{ fontSize: '17px', fontWeight: 700, color: '#111', marginBottom: '1px' }}>
@@ -115,7 +117,8 @@ function InsightCardView({
                             key={`${item.item_type}-${item.item_id}`}
                             onClick={() => onItemClick(item)}
                             style={{
-                                padding: '4px 10px',
+                                // ≥32px secondary chip — multiple per row, kept compact.
+                                padding: '6px 12px',
                                 borderRadius: '12px',
                                 border: '1px solid #e0e0e0',
                                 background: '#f5f5f5',
@@ -123,6 +126,8 @@ function InsightCardView({
                                 fontWeight: 500,
                                 color: '#444',
                                 cursor: 'pointer',
+                                minHeight: '32px',
+                                touchAction: 'manipulation',
                             }}
                         >
                             {item.display_text}

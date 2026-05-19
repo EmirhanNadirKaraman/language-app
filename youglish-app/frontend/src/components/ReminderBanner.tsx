@@ -30,16 +30,19 @@ export function ReminderBanner({ summary, onDismiss, onOpenRecs }: Props) {
             <button
                 onClick={onOpenRecs}
                 style={{
-                    padding: '4px 12px',
+                    padding: '8px 14px',
                     borderRadius: '5px',
                     border: '1px solid #f57c00',
                     background: 'none',
                     color: '#e65100',
-                    fontSize: '12px',
+                    fontSize: '13px',
                     fontWeight: 600,
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
+                    minHeight: '36px',
+                    touchAction: 'manipulation',
                 }}
+                data-testid="reminder-banner-open"
             >
                 For You →
             </button>
@@ -49,12 +52,19 @@ export function ReminderBanner({ summary, onDismiss, onOpenRecs }: Props) {
                     background: 'none',
                     border: 'none',
                     color: '#aaa',
-                    fontSize: '16px',
+                    fontSize: '18px',
                     cursor: 'pointer',
                     lineHeight: 1,
                     padding: 0,
+                    minWidth: '44px',
+                    minHeight: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    touchAction: 'manipulation',
                 }}
                 aria-label="Dismiss"
+                data-testid="reminder-banner-dismiss"
             >
                 ×
             </button>

@@ -85,11 +85,14 @@ function TagInput({
                                 type="button"
                                 onClick={() => active ? removeTag(p) : addTag(p)}
                                 style={{
-                                    padding: '3px 10px', fontSize: '12px', borderRadius: '12px',
+                                    // Preset chips: compact but ≥32px tall for tap.
+                                    minHeight: '32px',
+                                    padding: '6px 12px', fontSize: '13px', borderRadius: '12px',
                                     border: '1px solid ' + (active ? (darkMode ? '#7986cb' : '#1a237e') : (darkMode ? '#444' : '#ddd')),
                                     background: active ? (darkMode ? '#283593' : '#e8eaf6') : (darkMode ? '#2d2d2d' : '#fff'),
                                     color: active ? (darkMode ? '#c5cae9' : '#1a237e') : (darkMode ? '#aaa' : '#666'),
                                     cursor: 'pointer', fontWeight: active ? 600 : 400,
+                                    touchAction: 'manipulation',
                                 }}
                             >
                                 {active ? '✓ ' : ''}{p}
@@ -126,6 +129,7 @@ function TagInput({
                         </span>
                     ))}
                     <input
+                        data-testid="tag-input-field"
                         ref={inputRef}
                         type="text"
                         value={inputText}
@@ -134,7 +138,8 @@ function TagInput({
                         onKeyDown={handleKeyDown}
                         onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                         onFocus={() => setShowSuggestions(true)}
-                        style={{ border: 'none', outline: 'none', flex: 1, minWidth: '100px', fontSize: '13px', background: 'transparent', color: darkMode ? '#e0e0e0' : 'inherit' }}
+                        // fontSize: 16px blocks iOS Safari focus-zoom.
+                        style={{ border: 'none', outline: 'none', flex: 1, minWidth: '100px', fontSize: '16px', background: 'transparent', color: darkMode ? '#e0e0e0' : 'inherit' }}
                     />
                 </div>
 
@@ -261,15 +266,49 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
 
     const field: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' };
     const label: React.CSSProperties = { fontSize: '13px', fontWeight: 600, color: darkMode ? '#ccc' : '#444' };
-    const input: React.CSSProperties = { padding: '6px 10px', border: `1px solid ${darkMode ? '#555' : '#ccc'}`, borderRadius: '5px', fontSize: '14px', background: darkMode ? '#2d2d2d' : '#fff', color: darkMode ? '#e0e0e0' : 'inherit' };
+    // fontSize: 16px blocks iOS Safari focus-zoom. Applied to all number/text
+    // inputs in this panel via the `input` helper. minHeight: 44 for tap.
+    const input: React.CSSProperties = {
+        padding: '8px 10px',
+        border: `1px solid ${darkMode ? '#555' : '#ccc'}`,
+        borderRadius: '5px',
+        fontSize: '16px',
+        minHeight: '44px',
+        background: darkMode ? '#2d2d2d' : '#fff',
+        color: darkMode ? '#e0e0e0' : 'inherit',
+        boxSizing: 'border-box',
+    };
     const sectionHeader: React.CSSProperties = { fontSize: '12px', fontWeight: 700, color: darkMode ? '#888' : '#888', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 12px' };
     const checkboxLabel: React.CSSProperties = { fontSize: '13px', color: darkMode ? '#ccc' : '#444', cursor: 'pointer' };
 
     return (
-        <div style={{ border: `1px solid ${darkMode ? '#333' : '#e8eaf6'}`, borderRadius: '8px', padding: '20px 24px', background: darkMode ? '#1e1e1e' : '#fafafa', marginBottom: '16px' }}>
+        <div
+            data-testid="settings-panel"
+            style={{
+                border: `1px solid ${darkMode ? '#333' : '#e8eaf6'}`,
+                borderRadius: '8px',
+                // Fluid side padding so 320–375px viewports keep more content room.
+                padding: 'clamp(14px, 4vw, 24px)',
+                background: darkMode ? '#1e1e1e' : '#fafafa',
+                marginBottom: '16px',
+            }}
+        >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <h2 style={{ margin: 0, fontSize: '16px', color: darkMode ? '#7986cb' : '#1a237e' }}>Preferences</h2>
-                <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: darkMode ? '#aaa' : '#888' }} aria-label="Close settings">×</button>
+                <button
+                    data-testid="settings-close"
+                    onClick={onClose}
+                    style={{
+                        // 44×44 finger-tappable close.
+                        minWidth: '44px', minHeight: '44px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'none', border: 'none', fontSize: '20px',
+                        cursor: 'pointer', color: darkMode ? '#aaa' : '#888',
+                        padding: 0,
+                        touchAction: 'manipulation',
+                    }}
+                    aria-label="Close settings"
+                >×</button>
             </div>
 
             {/* Recommendations */}
@@ -311,13 +350,17 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
             <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                 <div style={field}>
                     <label style={label}>Passive reps for "known"</label>
-                    <input style={{ ...input, width: '80px' }} type="number" min={1} max={20}
+                    <input
+                        data-testid="settings-passive-reps"
+                        style={{ ...input, width: '88px' }} type="number" min={1} max={20}
                         value={passiveReps}
                         onChange={e => setPassiveReps(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))} />
                 </div>
                 <div style={field}>
                     <label style={label}>Active reps for "known"</label>
-                    <input style={{ ...input, width: '80px' }} type="number" min={1} max={20}
+                    <input
+                        data-testid="settings-active-reps"
+                        style={{ ...input, width: '88px' }} type="number" min={1} max={20}
                         value={activeReps}
                         onChange={e => setActiveReps(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))} />
                 </div>
@@ -335,7 +378,8 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                 ].map(({ label: lbl, value, onChange }) => (
                     <div key={lbl} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                         <input type="color" value={value} onChange={e => onChange(e.target.value)}
-                            style={{ width: '44px', height: '36px', border: `1px solid ${darkMode ? '#555' : '#ccc'}`, borderRadius: '4px', cursor: 'pointer', padding: '2px' }} />
+                            // 44×44 — color pickers need a finger-target too.
+                            style={{ width: '44px', height: '44px', border: `1px solid ${darkMode ? '#555' : '#ccc'}`, borderRadius: '4px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }} />
                         <span style={{ fontSize: '12px', color: darkMode ? '#aaa' : '#555', fontWeight: 600 }}>{lbl}</span>
                         <span style={{ fontSize: '11px', color: value, fontWeight: 700 }}>Aa</span>
                     </div>

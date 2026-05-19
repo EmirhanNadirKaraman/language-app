@@ -121,7 +121,7 @@ export function PlaylistPanel({ token, language, onLanguageChange, onWatch, onCl
         <div style={{
             border: '1px solid #e8eaf6',
             borderRadius: '8px',
-            padding: '16px 20px',
+            padding: 'clamp(14px, 4vw, 20px)',
             background: '#fafafa',
             marginBottom: '16px',
         }}>
@@ -131,7 +131,12 @@ export function PlaylistPanel({ token, language, onLanguageChange, onWatch, onCl
                     {view === 'result' && (
                         <button
                             onClick={() => setView('build')}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1a237e', fontSize: '13px', fontWeight: 600, padding: 0 }}
+                            style={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                color: '#1a237e', fontSize: '14px', fontWeight: 600,
+                                padding: '8px 4px', minHeight: '36px',
+                                touchAction: 'manipulation',
+                            }}
                         >
                             ← Back
                         </button>
@@ -142,8 +147,16 @@ export function PlaylistPanel({ token, language, onLanguageChange, onWatch, onCl
                 </div>
                 <button
                     onClick={onClose}
-                    style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#888' }}
+                    style={{
+                        background: 'none', border: 'none', fontSize: '20px',
+                        cursor: 'pointer', color: '#888',
+                        minWidth: '44px', minHeight: '44px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: 0,
+                        touchAction: 'manipulation',
+                    }}
                     aria-label="Close"
+                    data-testid="playlist-close"
                 >
                     ×
                 </button>
@@ -212,11 +225,14 @@ function BuildView({
     generating, error, onGenerate,
 }: BuildViewProps) {
     const inputStyle: React.CSSProperties = {
-        padding: '6px 10px',
+        // fontSize: 16px blocks iOS Safari focus-zoom; 44px = touch target.
+        padding: '8px 10px',
         border: '1px solid #ccc',
         borderRadius: '5px',
-        fontSize: '13px',
+        fontSize: '16px',
         background: '#fff',
+        minHeight: '44px',
+        boxSizing: 'border-box',
     };
 
     // Autocomplete suggestions for word input
@@ -297,7 +313,8 @@ function BuildView({
                     onClick={onLoadRecommended}
                     disabled={!language || loadingRecs}
                     style={{
-                        padding: '6px 14px',
+                        // ≥36px secondary action — sits beside the language select.
+                        padding: '8px 14px',
                         borderRadius: '5px',
                         border: '1px solid #c5cae9',
                         background: '#fff',
@@ -306,6 +323,8 @@ function BuildView({
                         fontWeight: 600,
                         cursor: !language || loadingRecs ? 'not-allowed' : 'pointer',
                         opacity: !language || loadingRecs ? 0.5 : 1,
+                        minHeight: '36px',
+                        touchAction: 'manipulation',
                     }}
                 >
                     {loadingRecs ? 'Loading…' : 'Add recommended words'}
@@ -330,17 +349,21 @@ function BuildView({
                         onClick={() => { onAddWord(); setShowDropdown(false); }}
                         disabled={!addInput.trim() || !language || addLoading}
                         style={{
-                            padding: '6px 14px',
+                            padding: '10px 18px',
                             borderRadius: '5px',
                             border: 'none',
                             background: '#1a237e',
                             color: '#fff',
-                            fontSize: '13px',
+                            fontSize: '14px',
                             fontWeight: 600,
                             cursor: !addInput.trim() || !language || addLoading ? 'not-allowed' : 'pointer',
                             opacity: !addInput.trim() || !language || addLoading ? 0.5 : 1,
                             flexShrink: 0,
+                            minHeight: '44px',
+                            minWidth: '64px',
+                            touchAction: 'manipulation',
                         }}
+                        data-testid="playlist-add"
                     >
                         {addLoading ? '…' : 'Add'}
                     </button>
@@ -449,7 +472,7 @@ function BuildView({
                     onClick={onGenerate}
                     disabled={!language || targets.length === 0 || generating}
                     style={{
-                        padding: '9px 24px',
+                        padding: '12px 24px',
                         background: '#1a237e',
                         color: '#fff',
                         border: 'none',
@@ -458,7 +481,10 @@ function BuildView({
                         fontWeight: 600,
                         cursor: !language || targets.length === 0 || generating ? 'not-allowed' : 'pointer',
                         opacity: !language || targets.length === 0 || generating ? 0.5 : 1,
+                        minHeight: '44px',
+                        touchAction: 'manipulation',
                     }}
+                    data-testid="playlist-generate"
                 >
                     {generating ? 'Generating…' : 'Generate playlist'}
                 </button>
@@ -608,14 +634,17 @@ function PlaylistVideoCard({
                     <button
                         onClick={() => onWatch(result)}
                         style={{
-                            padding: '5px 14px',
+                            // ≥36px tappable in playlist video row.
+                            padding: '8px 16px',
                             background: '#1a237e',
                             color: '#fff',
                             border: 'none',
                             borderRadius: '5px',
-                            fontSize: '12px',
+                            fontSize: '13px',
                             fontWeight: 600,
                             cursor: 'pointer',
+                            minHeight: '36px',
+                            touchAction: 'manipulation',
                         }}
                     >
                         Watch

@@ -60,14 +60,18 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                     background: 'none',
                     border: 'none',
                     color: '#1a237e',
-                    fontSize: '13px',
+                    fontSize: '14px',
                     fontWeight: 600,
                     cursor: 'pointer',
-                    padding: '0 0 12px',
+                    padding: '8px 4px',
+                    marginBottom: '6px',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '4px',
+                    minHeight: '36px',
+                    touchAction: 'manipulation',
                 }}
+                data-testid="prep-back"
             >
                 ← Back
             </button>
@@ -184,7 +188,7 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                                 onClick={handleGenerate}
                                 disabled={generating}
                                 style={{
-                                    padding: '7px 16px',
+                                    padding: '10px 18px',
                                     borderRadius: '6px',
                                     border: '1px dashed #c5cae9',
                                     background: '#fff',
@@ -194,6 +198,8 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                                     cursor: generating ? 'not-allowed' : 'pointer',
                                     opacity: generating ? 0.6 : 1,
                                     marginBottom: '12px',
+                                    minHeight: '36px',
+                                    touchAction: 'manipulation',
                                 }}
                             >
                                 {generating ? 'Generating…' : 'Generate examples'}
@@ -243,7 +249,7 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                     <button
                         onClick={() => onStartPractice(item.item_id, item.item_type, language)}
                         style={{
-                            padding: '10px 20px',
+                            padding: '12px 22px',
                             borderRadius: '7px',
                             border: 'none',
                             background: '#f57f17',
@@ -252,7 +258,10 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                             fontWeight: 700,
                             cursor: 'pointer',
                             alignSelf: 'flex-start',
+                            minHeight: '44px',
+                            touchAction: 'manipulation',
                         }}
+                        data-testid="prep-start-practice"
                     >
                         Start Guided Practice →
                     </button>
@@ -294,17 +303,20 @@ function LinkedGrammarRules({
                         <button
                             onClick={() => onToggle(rule.slug)}
                             style={{
-                                padding: '5px 12px',
+                                // ≥36px chip — single-button row, room to be tall.
+                                padding: '8px 14px',
                                 borderRadius: '14px',
                                 border: '1px solid #c8e6c9',
                                 background: openSlug === rule.slug ? '#e8f5e9' : '#f9fbe7',
                                 color: '#1b5e20',
-                                fontSize: '12px',
+                                fontSize: '13px',
                                 fontWeight: 600,
                                 cursor: 'pointer',
                                 display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: '5px',
+                                minHeight: '36px',
+                                touchAction: 'manipulation',
                             }}
                         >
                             <span>⊕</span>

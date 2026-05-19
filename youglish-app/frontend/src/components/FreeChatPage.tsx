@@ -46,11 +46,19 @@ export function FreeChatPage({ result, token, onClose }: Props) {
                         background: 'none',
                         border: 'none',
                         color: '#fff',
-                        fontSize: '20px',
+                        fontSize: '22px',
                         cursor: 'pointer',
                         lineHeight: 1,
-                        padding: '0 2px',
+                        padding: 0,
+                        minWidth: '44px',
+                        minHeight: '44px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        touchAction: 'manipulation',
                     }}
+                    aria-label="Close free chat"
+                    data-testid="free-chat-close"
                 >
                     ×
                 </button>

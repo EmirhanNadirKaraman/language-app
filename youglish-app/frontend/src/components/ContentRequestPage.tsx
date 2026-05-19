@@ -72,28 +72,52 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
         : 'YouTube video ID — 11 characters, e.g. dQw4w9WgXcQ';
 
     return (
-        <div style={{ background: bg, color: text, borderRadius: '10px', padding: '24px', maxWidth: '640px', margin: '0 auto' }}>
+        <div style={{
+            background: bg, color: text, borderRadius: '10px',
+            // #27f: fluid side padding so 320–375px viewports keep more room.
+            padding: 'clamp(16px, 4vw, 24px)',
+            maxWidth: '640px', margin: '0 auto',
+            // Long error messages / channel IDs must wrap inside the container.
+            overflowWrap: 'anywhere',
+            wordBreak: 'break-word',
+        }}>
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <h2 style={{ margin: 0, fontSize: '18px', color: '#1a237e' }}>Request Content</h2>
-                <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: muted }}>×</button>
+                <button
+                    data-testid="content-request-close"
+                    onClick={onClose}
+                    style={{
+                        // 44×44 finger-tappable close.
+                        minWidth: '44px', minHeight: '44px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: 'none', border: 'none', fontSize: '20px',
+                        cursor: 'pointer', color: muted,
+                        padding: 0,
+                        touchAction: 'manipulation',
+                    }}
+                    aria-label="Close"
+                >×</button>
             </div>
 
             {/* Form */}
             <form onSubmit={handleSubmit}>
                 {/* Type toggle */}
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
                     {(['channel', 'video'] as const).map(t => (
                         <button
                             key={t}
                             type="button"
                             onClick={() => { setRequestType(t); setContentId(''); setSubmitted(false); setSubmitError(null); }}
                             style={{
-                                padding: '7px 20px', borderRadius: '6px', fontSize: '13px', fontWeight: 600,
+                                // ≥36px tappable secondary action.
+                                minHeight: '36px',
+                                padding: '8px 20px', borderRadius: '6px', fontSize: '14px', fontWeight: 600,
                                 cursor: 'pointer', border: '1px solid #c5cae9',
                                 background: requestType === t ? tabActiveBg : (darkMode ? '#2a2a2a' : '#fff'),
                                 color: requestType === t ? tabActiveColor : muted,
+                                touchAction: 'manipulation',
                             }}
                         >
                             {t === 'channel' ? 'Channel' : 'Video'}
@@ -107,13 +131,17 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
                         {requestType === 'channel' ? 'Channel ID' : 'Video ID'}
                     </label>
                     <input
+                        data-testid="content-request-input"
                         value={contentId}
                         onChange={e => { setContentId(e.target.value); setSubmitted(false); setSubmitError(null); }}
                         placeholder={requestType === 'channel' ? 'UCxxxxxxxxxxxxxxxxxxxxxxxx' : 'dQw4w9WgXcQ'}
+                        // fontSize: 16px blocks iOS Safari focus-zoom. minHeight 44 for tap.
                         style={{
-                            width: '100%', padding: '8px 10px', boxSizing: 'border-box',
+                            width: '100%', padding: '10px 12px', boxSizing: 'border-box',
                             border: `1px solid ${inputBorder}`, borderRadius: '6px',
-                            fontSize: '14px', fontFamily: 'monospace',
+                            fontSize: '16px',
+                            minHeight: '44px',
+                            fontFamily: 'monospace',
                             background: inputBg, color: text,
                         }}
                         autoComplete="off"
@@ -123,7 +151,7 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
                 </div>
 
                 {submitError && (
-                    <p style={{ margin: '10px 0', fontSize: '13px', color: '#c62828' }}>{submitError}</p>
+                    <p style={{ margin: '10px 0', fontSize: '13px', color: '#c62828', overflowWrap: 'anywhere' }}>{submitError}</p>
                 )}
                 {submitted && (
                     <p style={{ margin: '10px 0', fontSize: '13px', color: '#2e7d32' }}>
@@ -132,13 +160,18 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
                 )}
 
                 <button
+                    data-testid="content-request-submit"
                     type="submit"
                     disabled={submitting || !contentId.trim()}
                     style={{
-                        marginTop: '12px', padding: '9px 24px', borderRadius: '6px',
+                        marginTop: '12px',
+                        minHeight: '44px',
+                        padding: '10px 24px', borderRadius: '6px',
                         border: 'none', background: '#1a237e', color: '#fff',
-                        fontSize: '14px', fontWeight: 600, cursor: submitting || !contentId.trim() ? 'not-allowed' : 'pointer',
+                        fontSize: '14px', fontWeight: 600,
+                        cursor: submitting || !contentId.trim() ? 'not-allowed' : 'pointer',
                         opacity: submitting || !contentId.trim() ? 0.6 : 1,
+                        touchAction: 'manipulation',
                     }}
                 >
                     {submitting ? 'Submitting…' : 'Submit Request'}
@@ -179,7 +212,7 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
                                 gap: '12px', flexWrap: 'wrap',
                             }}
                         >
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: '1 1 200px' }}>
                                 <span style={{ fontSize: '12px', color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                     {r.request_type}
                                 </span>
@@ -187,7 +220,7 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
                                     {r.content_id}
                                 </span>
                                 {r.error && (
-                                    <span style={{ fontSize: '12px', color: '#c62828' }}>{r.error}</span>
+                                    <span style={{ fontSize: '12px', color: '#c62828', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{r.error}</span>
                                 )}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>

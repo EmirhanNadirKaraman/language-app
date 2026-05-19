@@ -51,7 +51,10 @@ def _coerce_settings(value) -> dict:
 
     try:
         return dict(value)
-    except Exception:
+    except (TypeError, ValueError):
+        # dict(value) raises TypeError for non-iterable inputs and ValueError
+        # for malformed key/value pairs. Anything else is a real bug — let it
+        # propagate so we hear about it.
         return {}
 
 

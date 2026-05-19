@@ -100,10 +100,16 @@ export function SelectionReviewPanel({
         <button
           onClick={onClose}
           style={{
+            // 340px sidebar — 36×36 close keeps header compact while tappable.
             background: 'none', border: 'none', cursor: 'pointer',
-            color: '#9fa8da', fontSize: '18px', lineHeight: 1, padding: 0,
+            color: '#9fa8da', fontSize: '20px', lineHeight: 1,
+            minWidth: '36px', minHeight: '36px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 0,
+            touchAction: 'manipulation',
           }}
           title="Close"
+          aria-label="Close"
         >
           ×
         </button>
@@ -309,14 +315,17 @@ function SelectionCard({
 
 function reviewBtnStyle(color: string, bg: string, disabled: boolean): React.CSSProperties {
   return {
+    // ≥36px tappable in 340px sidebar — three-up row, tight but fingerable.
     flex: 1,
-    padding: '6px 4px',
+    padding: '8px 4px',
     borderRadius: '5px',
     border: `1px solid ${color}30`,
     background: disabled ? '#f5f5f5' : bg,
     color: disabled ? '#aaa' : color,
-    fontSize: '12px',
+    fontSize: '13px',
     fontWeight: 600,
     cursor: disabled ? 'default' : 'pointer',
+    minHeight: '36px',
+    touchAction: 'manipulation',
   };
 }

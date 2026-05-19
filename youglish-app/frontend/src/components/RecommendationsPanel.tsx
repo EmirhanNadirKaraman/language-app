@@ -74,7 +74,7 @@ export function RecommendationsPanel({
         <div style={{
             border: '1px solid #e8eaf6',
             borderRadius: '8px',
-            padding: '16px 20px',
+            padding: 'clamp(14px, 4vw, 20px)',
             background: '#fafafa',
             marginBottom: '16px',
         }}>
@@ -83,8 +83,16 @@ export function RecommendationsPanel({
                 <h2 style={{ margin: 0, fontSize: '16px', color: '#1a237e' }}>For You</h2>
                 <button
                     onClick={onClose}
-                    style={{ background: 'none', border: 'none', fontSize: '18px', cursor: 'pointer', color: '#888' }}
+                    style={{
+                        background: 'none', border: 'none', fontSize: '20px',
+                        cursor: 'pointer', color: '#888',
+                        minWidth: '44px', minHeight: '44px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        padding: 0,
+                        touchAction: 'manipulation',
+                    }}
                     aria-label="Close"
+                    data-testid="recs-close"
                 >
                     ×
                 </button>
@@ -95,14 +103,18 @@ export function RecommendationsPanel({
                 <select
                     value={language}
                     onChange={e => onLanguageChange(e.target.value)}
+                    // fontSize: 16px blocks iOS Safari focus-zoom on <select>.
                     style={{
-                        padding: '5px 10px',
+                        padding: '8px 10px',
                         border: '1px solid #ccc',
                         borderRadius: '5px',
-                        fontSize: '13px',
+                        fontSize: '16px',
                         background: '#fff',
                         cursor: 'pointer',
+                        minHeight: '44px',
+                        boxSizing: 'border-box',
                     }}
+                    data-testid="recs-language"
                 >
                     <option value="">Select language…</option>
                     {LANGUAGES.map(l => (
@@ -114,7 +126,7 @@ export function RecommendationsPanel({
                     onClick={refresh}
                     disabled={loading || !language}
                     style={{
-                        padding: '5px 14px',
+                        padding: '8px 14px',
                         border: '1px solid #c5cae9',
                         borderRadius: '5px',
                         background: '#fff',
@@ -123,6 +135,8 @@ export function RecommendationsPanel({
                         fontWeight: 600,
                         cursor: loading || !language ? 'not-allowed' : 'pointer',
                         opacity: loading || !language ? 0.5 : 1,
+                        minHeight: '36px',
+                        touchAction: 'manipulation',
                     }}
                 >
                     {loading ? 'Loading…' : 'Refresh'}
@@ -325,10 +339,12 @@ function ReadingUnitsDueCard({
                 <button
                     onClick={onOpenBooks}
                     style={{
-                        fontSize: '11px', fontWeight: 600,
+                        fontSize: '12px', fontWeight: 600,
                         color: '#e65100', background: 'none',
                         border: '1px solid #f57c00', borderRadius: '4px',
-                        padding: '3px 8px', cursor: 'pointer',
+                        padding: '6px 12px', cursor: 'pointer',
+                        minHeight: '36px',
+                        touchAction: 'manipulation',
                     }}
                 >
                     Open Books →

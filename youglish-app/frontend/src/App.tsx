@@ -72,12 +72,15 @@ function Layout() {
   const ctx: AppCtx = { token, prefs, savePreferences, channelAction, genreAction, recLanguage, setRecLanguage };
 
   const nl = ({ isActive }: { isActive: boolean }) => ({
-    padding: '6px 14px', borderRadius: '6px',
+    // Mobile: 36px min height keeps the top-nav row chunky enough to tap on iOS.
+    padding: '8px 14px', borderRadius: '6px',
     border: `1px solid ${darkMode ? '#444' : '#c5cae9'}`,
     background: isActive ? (darkMode ? '#1a237e' : '#e8eaf6') : (darkMode ? '#2a2a2a' : '#fff'),
     color: isActive ? (darkMode ? '#fff' : '#1a237e') : (darkMode ? '#aaa' : '#1a237e'),
     fontSize: '13px', fontWeight: 600 as const, cursor: 'pointer', textDecoration: 'none',
-    display: 'inline-block',
+    display: 'inline-flex', alignItems: 'center',
+    minHeight: '36px',
+    touchAction: 'manipulation' as const,
   });
 
   const nlReview = ({ isActive }: { isActive: boolean }) => ({
@@ -228,10 +231,10 @@ function HomePage() {
           />
           {token && !showChat && (
             <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
-              <button onClick={() => setShowChat('free')} style={{ padding: '8px 20px', borderRadius: '6px', border: '1px solid #c5cae9', background: '#fff', color: '#1a237e', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+              <button onClick={() => setShowChat('free')} style={{ padding: '10px 20px', borderRadius: '6px', border: '1px solid #c5cae9', background: '#fff', color: '#1a237e', fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px', touchAction: 'manipulation' }} data-testid="home-free-chat">
                 Free Chat
               </button>
-              <button onClick={() => setShowChat('guided')} style={{ padding: '8px 20px', borderRadius: '6px', border: '1px solid #ffe082', background: '#fff', color: '#e65100', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+              <button onClick={() => setShowChat('guided')} style={{ padding: '10px 20px', borderRadius: '6px', border: '1px solid #ffe082', background: '#fff', color: '#e65100', fontSize: '14px', fontWeight: 600, cursor: 'pointer', minHeight: '44px', touchAction: 'manipulation' }} data-testid="home-guided-practice">
                 Guided Practice
               </button>
             </div>

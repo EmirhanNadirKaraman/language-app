@@ -156,7 +156,10 @@ UPDATE user_word_knowledge uwk SET
 4. Add `subtitle-scraper/add_channel.py` CLI or wire it into the existing `content-requests` flow.
 **Blocks:** any "manage channels via UI" feature, multi-machine deploys.
 
-### 8. 🟠 Per-block LLM repair swallows all exceptions
+### 8. ✅ books.py LLM repair exception specificity — RESOLVED 2026-05-19
+`routers/books.py:359` (batch repair loop) now catches `(anthropic.APIError, asyncpg.PostgresError)` as the expected failure mode (logged at WARNING). A second narrower `except Exception:` block remains as a defensive top-level guard so a bug in `repair_block_by_id` doesn't lose all already-repaired blocks in the batch — that one is logged via `logger.exception()` to capture the full trace.
+
+### 8b. (was original problem statement)
 **File:** `youglish-app/backend/routers/books.py:352–354`
 **Problem:** `except Exception` catches logic bugs alongside transient LLM errors. Counts them all as "errors" but doesn't surface anything actionable.
 **Fix:** Catch specific exceptions (`anthropic.APIError`, `anthropic.RateLimitError`, `asyncpg.PostgresError`). Re-raise on logic errors. Keep retry/skip for the LLM/network class.
@@ -197,7 +200,10 @@ New `frontend/src/api/_http.ts` exports a shared `assertOk(res)` that on 401 cle
 **Problem:** `print()` everywhere, no log levels, no structured output, hard to ship to a log aggregator.
 **Fix:** Switch to `logging.getLogger(__name__)`. Configure a root logger in each entrypoint. Keep `print()` only for genuinely user-facing CLI output.
 
-### 16. 🟡 Broad `except Exception:` in lifespan seeding
+### 16. ✅ Lifespan broad excepts — RESOLVED 2026-05-19
+`main.py` lifespan's three seed paths (phrase, grammar, content-request resume) now narrow to known types first (`asyncpg.PostgresError`, `FileNotFoundError`, `ImportError`, `OSError` as appropriate per site) and log them as a WARNING with `exc_info=True`. A defensive `except Exception:` remains as a final guard per site — intentionally broad because **startup must NEVER crash on a seed failure** — but now logged via `logger.exception()` so the full trace lands in production logs. Module-level `logger = logging.getLogger(__name__)` added; the per-site `import logging` repeats are gone.
+
+### 16b. (was original problem statement)
 **File:** `youglish-app/backend/main.py:39, 50, 64`
 **Problem:** Phrase seed / grammar seed / pending-requests resume each `except Exception` and log-and-continue. Intentional ("non-fatal seeding"), but failure modes are invisible in production until someone reads logs.
 **Fix:** Keep the broad catch but emit a structured warning (and ideally a notification or metric). Tighten to specific exceptions where the cause is known.
@@ -245,7 +251,10 @@ New `components/ErrorBoundary.tsx`. Wraps `<Outlet />` in `App.tsx` (navbar + La
 **Problem:** A render error in any deep component white-screens the whole app.
 **Fix:** Wrap `<Outlet />` (or each route element) in an `ErrorBoundary` that shows a fallback + reload button + sends to backend logging endpoint.
 
-### 23. 🟡 Settings exception handling too broad
+### 23. ✅ settings_service exception specificity — RESOLVED 2026-05-19
+`services/settings_service.py:_coerce_settings` (fallback `dict(value)` for unknown DB return types) now catches only `(TypeError, ValueError)` — the actual exceptions `dict()` raises for non-iterable / malformed inputs. Anything else (e.g. real DB or system-level error) bubbles up so it's diagnosable.
+
+### 23b. (was original problem statement)
 **File:** `youglish-app/backend/services/settings_service.py:49–54`
 **Problem:** Bare `except Exception` after `JSONDecodeError`. Hides DB errors, permission errors, type errors.
 **Fix:** Catch only `json.JSONDecodeError` and `asyncpg.PostgresError`. Let everything else propagate.
@@ -305,6 +314,102 @@ Daily review + chat surfaces are now mobile-safe. Critical iOS guards in place.
   - **End Session / Need-a-hint buttons** in GuidedChat: `minHeight: 36px` (secondary actions, kept smaller than 44 to not visually dominate the target/hint row but still tappable). Font bumped from 11px to 13px.
   - **HintPanel inline link button**: `minHeight: 32px`, font 13px.
   - **Behaviour unchanged**: passive reveal/self-grade, active produce + I-don't-know, hint level state machine, summary card, language switch.
+
+### 27d. ✅ BookReaderPage mobile — RESOLVED 2026-05-19
+PDF/book reading surface now usable on phone.
+  - **Content area** switches from horizontal flex (`1 1 55%` + `0 0 42%`) to vertical column on mobile via `useViewport()`. Right-side panels (Scan image, SelectionPanel, SelectionReviewPanel) and the Edit-mode annotation+image split all stack below the reader instead of fighting for ≤375px of width. Each stacked panel gets `maxHeight: 50vh` + `overflowY: auto` so the reader stays the primary content.
+  - **Page input** (page-number entry) bumped from `fontSize: 13px` to `fontSize: 16px` — iOS Safari focus-zoom blocker. Also gained `minHeight: 44px`.
+  - **Page nav arrows** (◀ / ▶ via `navBtnStyle`): now 44×44 with `touchAction: 'manipulation'` and font 14→16px.
+  - **Top-bar chrome buttons** (`topBtnStyle` — Saved, Edit, Dark/Light, Scan): bumped to `minHeight: 36px`, padding `5px 12px` → `7px 12px`, font 12→13px. Top bar still flex-wraps as before.
+  - **Back button**: `minHeight: 44px`.
+  - **Mode toggle** (Page / Sentence): `minHeight: 36px`, padding bumped, font 12→13px.
+  - **Reader padding**: fixed `24px` → `clamp(12px, 4vw, 24px)` so 320px viewports keep more content.
+  - **Top-bar side padding**: fixed `16px` → `clamp(10px, 3vw, 16px)`.
+  - **Behaviour preserved**: token selection / Page-vs-Sentence mode / scan image overlay / Edit annotation split / SelectionPanel / SelectionReviewPanel / page navigation — all unchanged.
+
+### 27f. ✅ ContentRequestPage + SettingsPanel mobile — RESOLVED 2026-05-19
+Last non-reader mobile surfaces are now phone-safe.
+
+**ContentRequestPage:**
+  - Container padding fixed `24px` → `clamp(16px, 4vw, 24px)`. Container gains `overflowWrap: anywhere` so long channel IDs / errors wrap inside the 640px max-width.
+  - Content-ID input: `fontSize 14px → 16px` (iOS focus-zoom guard), `minHeight: 44px`, padding bumped to `10px 12px`.
+  - Channel/Video toggle row: `flexWrap: wrap` added. Each button `minHeight: 36px`, padding `7px 20px → 8px 20px`, font 13→14px, `touchAction: manipulation`.
+  - Submit button: `minHeight: 44px`, font 14px (unchanged), padding 9→10px vertical.
+  - Close `×`: 44×44 flex-centered, `aria-label="Close"`.
+  - Request-list row content column: `flex: '1 1 200px'` so type + ID + error wrap to a new line on narrow phones instead of overflowing the status pill.
+
+**SettingsPanel:**
+  - Container padding fixed `20px 24px` → `clamp(14px, 4vw, 24px)`.
+  - Shared `input` style helper (used by both reps number inputs): `fontSize 14px → 16px` (iOS guard), `minHeight: 44px`, padding bumped.
+  - TagInput text field: `fontSize 13px → 16px` (iOS guard).
+  - TagInput preset chip buttons: `minHeight: 32px`, padding `3px 10px → 6px 12px`, font 12→13px.
+  - Color picker inputs: height `36px → 44px` (44×44).
+  - Close `×`: 44×44 flex-centered.
+
+**Behaviour preserved**: submit flow, debounced auto-save, tag add/remove, dark mode toggle, language/genre/channel preferences, color updates.
+
+### 27g. ✅ Global mobile touch-target + input audit — RESOLVED 2026-05-19
+Closing pass over every interactive surface that #27a–f didn't touch.
+
+**Inputs/selects/textareas bumped to fontSize: 16px (iOS focus-zoom guard):**
+  - `LoginForm.tsx`: email + password inputs (13 → 16px, +44px minHeight)
+  - `PlaylistPanel.tsx`: BuildView shared `inputStyle` (13 → 16px, +44px minHeight; covers language select, word search, max-videos number input)
+  - `BookLibraryPage.tsx`: title input + language select (13 → 16px, +44px minHeight)
+  - `RecommendationsPanel.tsx`: language select (13 → 16px, +44px minHeight)
+  - `SelectionPanel.tsx`: note textarea (13 → 16px)
+
+**Primary CTAs bumped to minHeight: 44px:**
+  - `App.tsx` HomePage: Free Chat / Guided Practice buttons
+  - `LoginForm.tsx`: Sign-in / Create submit
+  - `PlaylistPanel.tsx`: Generate playlist, Add word
+  - `BookLibraryPage.tsx`: Upload
+  - `PrepView.tsx`: Start Guided Practice
+  - `SessionSummaryCard.tsx`: See next recommended item
+
+**Close × buttons bumped to 44×44:**
+  - `LoginForm.tsx` cancel
+  - `PlaylistPanel.tsx`
+  - `BookLibraryPage.tsx`
+  - `RecommendationsPanel.tsx`
+  - `ReminderBanner.tsx` dismiss
+  - `NotificationToast.tsx` dismiss
+  - `FreeChatPage.tsx`
+
+**Sidebar close × kept at 36×36 (documented):**
+  - `SelectionPanel.tsx` / `SelectionReviewPanel.tsx` — fixed-width 340px sidebars, 44 would crowd header pill + count badge.
+  - `GrammarRulePanel.tsx` — inline expansion panel.
+
+**Secondary actions bumped to minHeight: 36px:**
+  - `App.tsx` Layout: NavLink chips (top-nav row across every page)
+  - `LoginForm.tsx` Sign-in toggle button (outlineBtn)
+  - `ReminderBanner.tsx`: "For You →"
+  - `RecommendationsPanel.tsx`: Refresh button, Reading Units "Open Books" link
+  - `RecommendationCards.tsx`: ActionButton (Watch/Practice/Search/Dismiss/Mark Learning)
+  - `BookLibraryPage.tsx`: Read / Delete / Confirm / Cancel
+  - `PlaylistPanel.tsx`: Back, Add recommended words, Watch (in video card)
+  - `PrepView.tsx`: Back, Generate examples, linked grammar rule chips
+  - `SessionSummaryCard.tsx`: Practice again, Back to home
+  - `SelectionPanel.tsx`: LLM Translate/Explain (40px in sidebar), Save/Clear (40px in sidebar)
+  - `SelectionReviewPanel.tsx`: review chip buttons (Got it / Not quite / ★)
+  - `GrammarRulePanel.tsx`: Learn more / Add to study
+  - `InsightsSection.tsx`: secondary chip buttons (≥32px)
+
+**Container padding made fluid where wide-margin panels were on small screens:**
+  - `PlaylistPanel.tsx`: `16px 20px` → `clamp(14px, 4vw, 20px)`
+  - `RecommendationsPanel.tsx`: `16px 20px` → `clamp(14px, 4vw, 20px)`
+
+**Components intentionally left unchanged:**
+  - `ChatWindow.tsx`, `TargetCard.tsx`, `TurnFeedbackChip.tsx`, `ReadingStatsPanel.tsx`, `icons.tsx`: display-only, no interactive surfaces.
+  - `FollowedChannelsSection.tsx`: relays into `VideoRecommendationCard` (already in `RecommendationCards.tsx`).
+  - `ResultCard.tsx`: dead code (no importers — verified via grep). Flagged for removal in a future cleanup pass.
+  - `RecommendationCards.tsx` `PrefButton` (Follow/Like/Dislike chips on video cards): kept at ~22px because they render three-up across an already dense 220-280px card. They're discoverability hints; primary watch CTA covers the load-bearing tap.
+  - `BookLibraryPage.tsx` Sort chips (`Newest / A→Z / …`): kept at ~22px to avoid pushing the sort row to multiple lines on mobile. They're tertiary controls; users can still tap them, just precisely.
+
+**Other guards added:**
+  - All bumped controls have `touchAction: 'manipulation'` to skip iOS Safari's 300ms double-tap-zoom delay.
+  - `LoginForm.tsx`: signed-in header row gained `flexWrap: 'wrap'` so long email addresses don't push "Sign out" off-screen.
+  - `BookLibraryPage.tsx` Actions column: `flexWrap: 'wrap'` so Confirm/Cancel can drop below the row label on narrow phones.
+  - `SessionSummaryCard.tsx` secondary CTA row: `flexWrap: 'wrap'`.
 
 ### 27. 🟢 Mobile responsiveness (remaining stages)
 **Memory note:** explicitly deferred until end-to-end loop works. Don't start until #1–#10 are done.

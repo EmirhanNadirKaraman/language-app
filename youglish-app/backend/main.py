@@ -1,10 +1,15 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+import asyncpg
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from .database import create_pool, close_pool, get_pool
+
+logger = logging.getLogger(__name__)
 from .routers.analytics import router as analytics_router
 from .routers.books import router as books_router
 from .routers.reading import router as reading_router
@@ -31,16 +36,23 @@ async def lifespan(app: FastAPI):
 
     # Seed phrase_table from the verb dict already loaded by matcher_service.
     # ON CONFLICT DO NOTHING makes this safe on every restart.
+    #
+    # Known failure modes: DB errors (asyncpg.PostgresError), missing data file
+    # (FileNotFoundError when matcher_service can't find data/final_result.txt),
+    # or import failure if phrase_finder dependencies aren't installed.
+    # The outer broad catch is intentional — startup must NEVER crash on a seed
+    # failure; the manual POST /api/v1/phrases/seed endpoint can recover later.
     try:
         from .services import matcher_service, phrase_service
         pool = get_pool()
         await phrase_service.seed_from_blueprint_map(
             pool, matcher_service.get_blueprint_map(), language="de"
         )
+    except (asyncpg.PostgresError, FileNotFoundError, ImportError) as exc:
+        logger.warning("Phrase table seed failed at startup (known mode): %s", exc, exc_info=True)
     except Exception:
-        # Seed failure is non-fatal — app still starts; seed manually via POST /api/v1/phrases/seed
-        import logging
-        logging.getLogger(__name__).warning("Phrase table seed failed at startup", exc_info=True)
+        # Defensive: unknown failure mode. Log full trace; app still starts.
+        logger.exception("Phrase table seed failed at startup (unexpected error)")
 
     # Seed grammar_rule_table with the curated German rule set.
     # ON CONFLICT (slug, language) DO NOTHING makes this idempotent.
@@ -48,11 +60,15 @@ async def lifespan(app: FastAPI):
         from .services import grammar_service
         pool = get_pool()
         await grammar_service.seed_rules(pool, language="de")
+    except asyncpg.PostgresError as exc:
+        logger.warning("Grammar rule seed failed at startup (DB error): %s", exc, exc_info=True)
     except Exception:
-        import logging
-        logging.getLogger(__name__).warning("Grammar rule seed failed at startup", exc_info=True)
+        logger.exception("Grammar rule seed failed at startup (unexpected error)")
 
     # Resume any pending content requests left over from a previous run.
+    # Failure modes: DB unavailable (asyncpg.PostgresError) or subprocess can't
+    # be spawned (OSError — bad scraper path, missing python). Broad catch
+    # remains as a final safety net so a pending-request scan can't crash startup.
     try:
         from .routers.content_requests import _spawn_pipeline
         pool = get_pool()
@@ -62,9 +78,10 @@ async def lifespan(app: FastAPI):
             )
         if count:
             await _spawn_pipeline()
+    except (asyncpg.PostgresError, OSError) as exc:
+        logger.warning("Failed to resume pending content requests (known mode): %s", exc, exc_info=True)
     except Exception:
-        import logging
-        logging.getLogger(__name__).warning("Failed to resume pending content requests", exc_info=True)
+        logger.exception("Failed to resume pending content requests (unexpected error)")
 
     yield
     await close_pool()

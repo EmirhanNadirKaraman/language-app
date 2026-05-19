@@ -84,14 +84,22 @@ export function GrammarRulePanel({ token, rule, language, onClose }: Props) {
                 <button
                     onClick={onClose}
                     style={{
+                        // Inline-panel close — 36×36 keeps the green header tight.
                         background: 'none',
                         border: 'none',
                         color: '#666',
-                        fontSize: '16px',
+                        fontSize: '18px',
                         cursor: 'pointer',
                         lineHeight: 1,
-                        padding: '0 2px',
+                        padding: 0,
+                        minWidth: '36px',
+                        minHeight: '36px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        touchAction: 'manipulation',
                     }}
+                    aria-label="Close rule"
                 >
                     ×
                 </button>
@@ -146,15 +154,17 @@ export function GrammarRulePanel({ token, rule, language, onClose }: Props) {
                             onClick={handleLearnMore}
                             disabled={loading}
                             style={{
-                                padding: '5px 12px',
+                                padding: '8px 14px',
                                 borderRadius: '5px',
                                 border: '1px dashed #a5d6a7',
                                 background: '#fff',
                                 color: '#2e7d32',
-                                fontSize: '12px',
+                                fontSize: '13px',
                                 fontWeight: 600,
                                 cursor: loading ? 'not-allowed' : 'pointer',
                                 opacity: loading ? 0.6 : 1,
+                                minHeight: '36px',
+                                touchAction: 'manipulation',
                             }}
                         >
                             {loading ? 'Loading…' : 'Learn more →'}
@@ -170,15 +180,17 @@ export function GrammarRulePanel({ token, rule, language, onClose }: Props) {
                             onClick={handleAddToStudy}
                             disabled={adding}
                             style={{
-                                padding: '5px 12px',
+                                padding: '8px 14px',
                                 borderRadius: '5px',
                                 border: '1px solid #a5d6a7',
                                 background: adding ? '#f1f8e9' : '#e8f5e9',
                                 color: '#1b5e20',
-                                fontSize: '12px',
+                                fontSize: '13px',
                                 fontWeight: 600,
                                 cursor: adding ? 'not-allowed' : 'pointer',
                                 opacity: adding ? 0.6 : 1,
+                                minHeight: '36px',
+                                touchAction: 'manipulation',
                             }}
                         >
                             {adding ? 'Adding…' : 'Add to study'}

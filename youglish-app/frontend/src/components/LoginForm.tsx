@@ -26,9 +26,9 @@ export function LoginForm({ token, onLogin, onLogout }: Props) {
     // Signed in — show email + sign out
     if (token) {
         return (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px', flexWrap: 'wrap' }}>
                 <span style={{ color: '#555' }}>{getStoredEmail() ?? 'Signed in'}</span>
-                <button onClick={handleLogout} style={ghostBtn}>Sign out</button>
+                <button onClick={handleLogout} style={ghostBtn} data-testid="login-signout">Sign out</button>
             </div>
         );
     }
@@ -36,7 +36,7 @@ export function LoginForm({ token, onLogin, onLogout }: Props) {
     // Signed out — show button or inline form
     if (mode === 'closed') {
         return (
-            <button onClick={() => setMode('login')} style={outlineBtn}>Sign in</button>
+            <button onClick={() => setMode('login')} style={outlineBtn} data-testid="login-signin-toggle">Sign in</button>
         );
     }
 
@@ -65,23 +65,27 @@ export function LoginForm({ token, onLogin, onLogout }: Props) {
     return (
         <form onSubmit={handleSubmit} style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             {/* Mode toggle */}
-            <span style={{ fontSize: '12px', color: '#888' }}>
+            <span style={{ fontSize: '12px', color: '#888', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
                 <button type="button" onClick={() => { setMode('login'); setError(null); }}
-                    style={{ ...ghostBtn, fontWeight: mode === 'login' ? 700 : 400 }}>Login</button>
+                    style={{ ...modeToggleBtn, fontWeight: mode === 'login' ? 700 : 400 }}>Login</button>
                 {' / '}
                 <button type="button" onClick={() => { setMode('register'); setError(null); }}
-                    style={{ ...ghostBtn, fontWeight: mode === 'register' ? 700 : 400 }}>Register</button>
+                    style={{ ...modeToggleBtn, fontWeight: mode === 'register' ? 700 : 400 }}>Register</button>
             </span>
 
+            {/* fontSize: 16px blocks iOS Safari focus-zoom. */}
             <input type="email" placeholder="Email" value={email}
-                onChange={e => setEmail(e.target.value)} required style={inputStyle} />
+                onChange={e => setEmail(e.target.value)} required style={inputStyle}
+                data-testid="login-email" />
             <input type="password" placeholder="Password" value={password}
-                onChange={e => setPassword(e.target.value)} required style={inputStyle} />
+                onChange={e => setPassword(e.target.value)} required style={inputStyle}
+                data-testid="login-password" />
 
-            <button type="submit" disabled={loading} style={primaryBtn}>
+            <button type="submit" disabled={loading} style={primaryBtn} data-testid="login-submit">
                 {loading ? '…' : mode === 'register' ? 'Create' : 'Sign in'}
             </button>
-            <button type="button" onClick={() => { setMode('closed'); setError(null); }} style={ghostBtn}>
+            <button type="button" onClick={() => { setMode('closed'); setError(null); }} style={closeBtn}
+                aria-label="Cancel" data-testid="login-cancel">
                 ✕
             </button>
 
@@ -91,21 +95,42 @@ export function LoginForm({ token, onLogin, onLogout }: Props) {
 }
 
 const inputStyle: React.CSSProperties = {
-    fontSize: '13px', padding: '4px 8px',
+    // fontSize: 16px blocks iOS Safari focus-zoom; minHeight 44px = touch target.
+    fontSize: '16px', padding: '8px 10px',
     border: '1px solid #ccc', borderRadius: '4px',
-    width: '140px',
+    width: '160px', minHeight: '44px', boxSizing: 'border-box',
 };
 const ghostBtn: React.CSSProperties = {
+    // Header signed-in "Sign out" — secondary chip, 32px touchable.
     background: 'none', border: 'none', cursor: 'pointer',
-    fontSize: '12px', color: '#666', padding: 0,
+    fontSize: '13px', color: '#666',
+    padding: '6px 10px', minHeight: '32px',
+    touchAction: 'manipulation',
+};
+const modeToggleBtn: React.CSSProperties = {
+    // Login/Register text toggles inside the inline form — small text-action.
+    background: 'none', border: 'none', cursor: 'pointer',
+    fontSize: '13px', color: '#666',
+    padding: '6px 4px', minHeight: '32px',
+    touchAction: 'manipulation',
 };
 const outlineBtn: React.CSSProperties = {
-    fontSize: '13px', padding: '4px 12px',
+    fontSize: '14px', padding: '8px 14px',
     border: '1px solid #1a3a6c', borderRadius: '4px',
     background: 'none', color: '#1a3a6c', cursor: 'pointer',
+    minHeight: '36px', touchAction: 'manipulation',
 };
 const primaryBtn: React.CSSProperties = {
-    fontSize: '13px', padding: '4px 12px',
+    fontSize: '14px', padding: '8px 14px',
     background: '#1a3a6c', color: '#fff',
     border: 'none', borderRadius: '4px', cursor: 'pointer',
+    minHeight: '44px', touchAction: 'manipulation',
+};
+const closeBtn: React.CSSProperties = {
+    background: 'none', border: 'none', cursor: 'pointer',
+    fontSize: '14px', color: '#666',
+    minWidth: '44px', minHeight: '44px',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: 0,
+    touchAction: 'manipulation',
 };

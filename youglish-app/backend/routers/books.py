@@ -21,6 +21,8 @@ import json
 import logging
 from pathlib import Path
 
+import anthropic
+import asyncpg
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
@@ -356,8 +358,17 @@ async def batch_llm_repair(
         try:
             await book_llm_service.repair_block_by_id(pool, block["block_id"], doc_id)
             repaired += 1
-        except Exception as exc:
+        except (anthropic.APIError, asyncpg.PostgresError) as exc:
+            # Known failure modes: Anthropic outage / rate-limit / model error,
+            # or a DB error during the per-block UPDATE. Log and continue —
+            # one bad block must not lose progress made on the others in the batch.
             logger.warning("LLM repair failed for block %s: %s", block["block_id"], exc)
+            errors += 1
+        except Exception:
+            # Defensive top-level catch — a bug in repair_block_by_id should not
+            # halt the whole batch and lose already-repaired blocks. Logged at
+            # exception level so the full trace is captured.
+            logger.exception("LLM repair: unexpected error for block %s", block["block_id"])
             errors += 1
 
     return {"repaired": repaired, "errors": errors, "total_candidates": len(candidates)}
