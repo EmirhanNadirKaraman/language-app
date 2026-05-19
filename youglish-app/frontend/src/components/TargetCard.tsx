@@ -8,17 +8,17 @@ export function TargetCard({ result }: Props) {
     return (
         <div style={{
             padding: '8px 16px',
-            background: '#e8eaf6',
-            borderBottom: '1px solid #c5cae9',
+            background: 'var(--color-primary-soft)',
+            borderBottom: '1px solid var(--color-border-accent)',
             fontSize: '13px',
             display: 'flex',
             gap: '6px',
             alignItems: 'baseline',
             flexWrap: 'wrap',
         }}>
-            <span style={{ color: '#5c6bc0', fontWeight: 600, flexShrink: 0 }}>Practicing with:</span>
-            <span style={{ color: '#1a237e', fontStyle: 'italic' }}>{result.content}</span>
-            <span style={{ color: '#9e9e9e', flexShrink: 0 }}>({result.language})</span>
+            <span style={{ color: 'var(--color-primary-on-soft)', fontWeight: 600, flexShrink: 0 }}>Practicing with:</span>
+            <span style={{ color: 'var(--color-primary-on-soft)', fontStyle: 'italic' }}>{result.content}</span>
+            <span style={{ color: 'var(--color-text-subtle)', flexShrink: 0 }}>({result.language})</span>
         </div>
     );
 }

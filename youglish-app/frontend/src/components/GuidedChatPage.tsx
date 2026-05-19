@@ -41,10 +41,10 @@ export function GuidedChatPage({ result, token, targetItemId, targetItemType, on
             flexDirection: 'column',
             height: 'min(520px, 72vh)',
             marginTop: '16px',
-            border: '1px solid #ffe082',
+            border: '1px solid var(--color-warning-border)',
             borderRadius: '8px',
             overflow: 'hidden',
-            background: '#fff',
+            background: 'var(--color-surface)',
         }}>
             {/* Header */}
             <div style={{
@@ -80,19 +80,19 @@ export function GuidedChatPage({ result, token, targetItemId, targetItemType, on
             {!summary && (
                 <div style={{
                     padding: '8px 16px',
-                    background: '#fff8e1',
-                    borderBottom: hintLevel > 0 ? 'none' : '1px solid #ffe082',
+                    background: 'var(--color-warning-bg)',
+                    borderBottom: hintLevel > 0 ? 'none' : '1px solid var(--color-warning-border)',
                     flexShrink: 0,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '10px',
                     flexWrap: 'wrap',
                 }}>
-                    <span style={{ fontSize: '12px', color: '#795548' }}>Target:</span>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>Target:</span>
                     <span style={{
                         fontWeight: 700,
                         fontSize: '15px',
-                        color: '#e65100',
+                        color: 'var(--color-warning)',
                         letterSpacing: '0.5px',
                     }}>
                         {session?.target_word ?? '…'}
@@ -103,8 +103,8 @@ export function GuidedChatPage({ result, token, targetItemId, targetItemType, on
                     {targetAchieved && (
                         <span style={{
                             fontSize: '12px',
-                            background: '#e8f5e9',
-                            color: '#2e7d32',
+                            background: 'var(--color-success-bg)',
+                            color: 'var(--color-success)',
                             borderRadius: '10px',
                             padding: '2px 10px',
                             fontWeight: 600,
@@ -125,12 +125,12 @@ export function GuidedChatPage({ result, token, targetItemId, targetItemType, on
                                 marginLeft: 'auto',
                                 minHeight: '36px',
                                 background: 'none',
-                                border: '1px solid #aaa',
+                                border: '1px solid var(--color-border)',
                                 borderRadius: '10px',
                                 padding: '6px 14px',
                                 fontSize: '13px',
                                 fontWeight: 600,
-                                color: '#555',
+                                color: 'var(--color-text-muted)',
                                 cursor: completing || sending ? 'not-allowed' : 'pointer',
                                 opacity: completing || sending ? 0.5 : 1,
                                 flexShrink: 0,
@@ -185,7 +185,7 @@ export function GuidedChatPage({ result, token, targetItemId, targetItemType, on
                 <>
                     <ChatWindow messages={messages} />
                     {error && (
-                        <p style={{ margin: '0 16px 6px', fontSize: '13px', color: '#c62828' }}>
+                        <p style={{ margin: '0 16px 6px', fontSize: '13px', color: 'var(--color-danger)' }}>
                             {error}
                         </p>
                     )}
@@ -210,12 +210,12 @@ function HintButton({ hintLevel, onAdvance }: { hintLevel: 0 | 1 | 2 | 3; onAdva
                 marginLeft: 'auto',
                 minHeight: '36px',
                 background: 'none',
-                border: '1px solid #ffb74d',
+                border: '1px solid var(--color-warning)',
                 borderRadius: '10px',
                 padding: '6px 14px',
                 fontSize: '13px',
                 fontWeight: 600,
-                color: '#e65100',
+                color: 'var(--color-warning)',
                 cursor: 'pointer',
                 flexShrink: 0,
                 touchAction: 'manipulation',
@@ -235,8 +235,8 @@ function HintPanel({
 }) {
     return (
         <div style={{
-            background: '#fff8e1',
-            borderBottom: '1px solid #ffe082',
+            background: 'var(--color-warning-bg)',
+            borderBottom: '1px solid var(--color-warning-border)',
             padding: '8px 16px',
             flexShrink: 0,
             display: 'flex',
@@ -269,7 +269,7 @@ function HintPanel({
                             minHeight: '32px',
                             padding: '4px 0',
                             fontSize: '13px',
-                            color: '#bf360c',
+                            color: 'var(--color-warning)',
                             cursor: 'pointer',
                             fontWeight: 600,
                             textDecoration: 'underline',
@@ -293,8 +293,8 @@ function HintRow({ icon, label, text, italic = false }: {
     return (
         <div style={{ display: 'flex', gap: '6px', fontSize: '12px', alignItems: 'baseline' }}>
             <span>{icon}</span>
-            <span style={{ color: '#795548', fontWeight: 600, flexShrink: 0 }}>{label}:</span>
-            <span style={{ color: '#4e342e', fontStyle: italic ? 'italic' : 'normal' }}>{text}</span>
+            <span style={{ color: 'var(--color-text-muted)', fontWeight: 600, flexShrink: 0 }}>{label}:</span>
+            <span style={{ color: 'var(--color-text)', fontStyle: italic ? 'italic' : 'normal' }}>{text}</span>
         </div>
     );
 }
@@ -333,20 +333,20 @@ function ProgressPill({ label, dots, dueText }: {
 }) {
     return (
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}>
-            <span style={{ color: '#795548' }}>{label}</span>
+            <span style={{ color: 'var(--color-text-muted)' }}>{label}</span>
             <span style={{ letterSpacing: '1px' }}>
                 {Array.from({ length: dots.filled }, (_, i) => (
-                    <span key={`f${i}`} style={{ color: '#f57f17' }}>●</span>
+                    <span key={`f${i}`} style={{ color: 'var(--color-warning)' }}>●</span>
                 ))}
                 {Array.from({ length: dots.empty }, (_, i) => (
-                    <span key={`e${i}`} style={{ color: '#ffe082' }}>●</span>
+                    <span key={`e${i}`} style={{ color: 'var(--color-warning-border)' }}>●</span>
                 ))}
             </span>
             {dueText && (
                 <span style={{
                     fontSize: '10px',
-                    color: '#e65100',
-                    background: '#fff3e0',
+                    color: 'var(--color-warning)',
+                    background: 'var(--color-warning-bg)',
                     borderRadius: '6px',
                     padding: '1px 5px',
                 }}>

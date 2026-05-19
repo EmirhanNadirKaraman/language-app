@@ -53,9 +53,14 @@ describe('TranscriptPanel', () => {
 
     it('applies active highlight style to the active sentence', () => {
         render(<TranscriptPanel {...DEFAULT_PROPS} activeSentenceIdx={1} />);
-        // The second sentence block should have the active background
-        const activeBlock = screen.getByText('How').closest('div[style]');
-        expect(activeBlock).toHaveStyle({ borderLeft: '3px solid #3f51b5' });
+        // The second sentence block should have the active border. Since #20
+        // colours come from CSS variables now, jsdom returns the literal
+        // `var(--color-primary)` reference. `toHaveStyle` computes shorthand
+        // colours and fails on unresolved vars — assert the inline style
+        // property directly instead.
+        const activeBlock = screen.getByText('How').closest('div[style]') as HTMLElement;
+        expect(activeBlock.style.borderLeft).toContain('var(--color-primary)');
+        expect(activeBlock.style.background).toContain('var(--color-primary-soft)');
     });
 
     it('calls onSentenceClick when clicking the sentence background (not a word)', () => {

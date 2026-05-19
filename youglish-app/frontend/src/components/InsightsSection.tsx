@@ -15,7 +15,7 @@ export function InsightsSection({ token, language, onItemClick }: Props) {
     return (
         <div style={{ marginBottom: '16px' }}>
             <p style={{
-                fontSize: '11px', fontWeight: 700, color: '#888',
+                fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)',
                 textTransform: 'uppercase', letterSpacing: '0.06em',
                 margin: '0 0 10px',
             }}>
@@ -23,13 +23,13 @@ export function InsightsSection({ token, language, onItemClick }: Props) {
             </p>
 
             {loading && (
-                <p style={{ fontSize: '13px', color: '#aaa', padding: '4px 0' }}>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-subtle)', padding: '4px 0' }}>
                     Loading insights…
                 </p>
             )}
 
             {!loading && !error && !hasAnyItems && (
-                <p style={{ fontSize: '13px', color: '#aaa', padding: '4px 0' }}>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-subtle)', padding: '4px 0' }}>
                     Start practising to see personalised insights here.
                 </p>
             )}
@@ -62,6 +62,8 @@ function InsightCardView({
     const [primary, ...others] = card.items;
 
     const isMistake = card.card_type === 'recent_mistakes';
+    // Border and accent are semantic (mistake = danger, freq = info) so they
+    // stay fixed across themes for instant recognition.
     const borderColor = isMistake ? '#fce4ec' : '#e3f2fd';
     const accentColor = isMistake ? '#c62828' : '#1565c0';
 
@@ -70,7 +72,7 @@ function InsightCardView({
             border: `1px solid ${borderColor}`,
             borderRadius: '8px',
             padding: '14px 16px',
-            background: '#fff',
+            background: 'var(--color-surface)',
             minWidth: '200px',
             maxWidth: '280px',
             flexShrink: 0,
@@ -79,7 +81,7 @@ function InsightCardView({
             <div style={{ fontSize: '12px', fontWeight: 700, color: accentColor, marginBottom: '2px' }}>
                 {card.title}
             </div>
-            <div style={{ fontSize: '11px', color: '#888', marginBottom: '10px', lineHeight: 1.4 }}>
+            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '10px', lineHeight: 1.4 }}>
                 {card.explanation}
             </div>
 
@@ -90,8 +92,8 @@ function InsightCardView({
                     display: 'block',
                     width: '100%',
                     textAlign: 'left',
-                    background: '#f8f9ff',
-                    border: '1px solid #e8eaf6',
+                    background: 'var(--color-surface-sunken)',
+                    border: '1px solid var(--color-border-accent)',
                     borderRadius: '6px',
                     padding: '10px 12px',
                     cursor: 'pointer',
@@ -100,11 +102,11 @@ function InsightCardView({
                     touchAction: 'manipulation',
                 }}
             >
-                <div style={{ fontSize: '17px', fontWeight: 700, color: '#111', marginBottom: '1px' }}>
+                <div style={{ fontSize: '17px', fontWeight: 700, color: 'var(--color-text)', marginBottom: '1px' }}>
                     {primary.display_text}
                 </div>
                 {primary.secondary_text && (
-                    <div style={{ fontSize: '11px', color: '#888' }}>{primary.secondary_text}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{primary.secondary_text}</div>
                 )}
                 <SignalRow item={primary} />
             </button>
@@ -120,11 +122,11 @@ function InsightCardView({
                                 // ≥32px secondary chip — multiple per row, kept compact.
                                 padding: '6px 12px',
                                 borderRadius: '12px',
-                                border: '1px solid #e0e0e0',
-                                background: '#f5f5f5',
+                                border: '1px solid var(--color-border)',
+                                background: 'var(--color-surface-muted)',
                                 fontSize: '13px',
                                 fontWeight: 500,
-                                color: '#444',
+                                color: 'var(--color-text)',
                                 cursor: 'pointer',
                                 minHeight: '32px',
                                 touchAction: 'manipulation',

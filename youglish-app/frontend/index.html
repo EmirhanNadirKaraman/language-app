@@ -6,7 +6,20 @@
     <!-- viewport-fit=cover lets a future iOS Capacitor wrap paint behind the
          notch / home-indicator (consumed by env(safe-area-inset-*) in CSS). -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <title>frontend</title>
+
+    <!-- PWA shell -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#1a237e" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="YouGlish" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- iOS home-screen icon. 180×180 covers all modern iPhones; iOS scales
+         down for older models. PNG includes ~10% safe-zone padding around the
+         glyph so rounded-corner masking doesn't clip the shape. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <title>YouGlish — Language Learning</title>
   </head>
   <body>
     <div id="root"></div>

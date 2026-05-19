@@ -41,16 +41,16 @@ export function FollowedChannelsSection({
     return (
         <>
             <p style={{
-                fontSize: '11px', fontWeight: 700, color: '#888',
+                fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)',
                 textTransform: 'uppercase', letterSpacing: '0.06em',
                 margin: '16px 0 8px',
             }}>
                 Followed Channels
             </p>
             {loading ? (
-                <p style={{ fontSize: '13px', color: '#aaa', padding: '8px 0' }}>Loading…</p>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-subtle)', padding: '8px 0' }}>Loading…</p>
             ) : videos.length === 0 ? (
-                <p style={{ fontSize: '13px', color: '#aaa', padding: '8px 0' }}>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-subtle)', padding: '8px 0' }}>
                     No videos found from followed channels in this language.
                 </p>
             ) : (

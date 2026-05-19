@@ -53,28 +53,28 @@ export function GrammarRulePanel({ token, rule, language, onClose }: Props) {
 
     return (
         <div style={{
-            border: '1px solid #c8e6c9',
+            border: '1px solid var(--color-success-border)',
             borderRadius: '6px',
             overflow: 'hidden',
             marginTop: '6px',
         }}>
-            {/* Header */}
+            {/* Header — semantic green for "grammar rule" identity, kept across themes. */}
             <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '8px 12px',
-                background: '#f1f8e9',
+                background: 'var(--color-success-bg)',
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: '#1b5e20' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-success)' }}>
                         {rule.title}
                     </span>
                     <span style={{
                         fontSize: '10px',
                         fontWeight: 600,
-                        color: '#388e3c',
-                        background: '#c8e6c9',
+                        color: 'var(--color-success)',
+                        background: 'var(--color-success-border)',
                         padding: '1px 6px',
                         borderRadius: '8px',
                     }}>
@@ -87,7 +87,7 @@ export function GrammarRulePanel({ token, rule, language, onClose }: Props) {
                         // Inline-panel close — 36×36 keeps the green header tight.
                         background: 'none',
                         border: 'none',
-                        color: '#666',
+                        color: 'var(--color-text-muted)',
                         fontSize: '18px',
                         cursor: 'pointer',
                         lineHeight: 1,
@@ -106,14 +106,14 @@ export function GrammarRulePanel({ token, rule, language, onClose }: Props) {
             </div>
 
             {/* Body */}
-            <div style={{ padding: '10px 12px', background: '#fff' }}>
+            <div style={{ padding: '10px 12px', background: 'var(--color-surface)' }}>
                 {/* Pattern hint */}
                 {rule.pattern_hint && (
                     <div style={{
                         fontFamily: 'monospace',
                         fontSize: '12px',
-                        color: '#1565c0',
-                        background: '#e3f2fd',
+                        color: 'var(--color-primary-on-soft)',
+                        background: 'var(--color-primary-soft)',
                         padding: '4px 8px',
                         borderRadius: '4px',
                         marginBottom: '8px',
@@ -127,7 +127,7 @@ export function GrammarRulePanel({ token, rule, language, onClose }: Props) {
                 <p style={{
                     fontSize: '13px',
                     lineHeight: 1.6,
-                    color: '#333',
+                    color: 'var(--color-text)',
                     margin: '0 0 10px',
                 }}>
                     {rule.short_explanation}
@@ -138,8 +138,8 @@ export function GrammarRulePanel({ token, rule, language, onClose }: Props) {
                     <div style={{
                         fontSize: '13px',
                         lineHeight: 1.6,
-                        color: '#333',
-                        borderTop: '1px solid #e8f5e9',
+                        color: 'var(--color-text)',
+                        borderTop: '1px solid var(--color-success-border)',
                         paddingTop: '10px',
                         whiteSpace: 'pre-wrap',
                     }}>
@@ -156,9 +156,9 @@ export function GrammarRulePanel({ token, rule, language, onClose }: Props) {
                             style={{
                                 padding: '8px 14px',
                                 borderRadius: '5px',
-                                border: '1px dashed #a5d6a7',
-                                background: '#fff',
-                                color: '#2e7d32',
+                                border: '1px dashed var(--color-success-border)',
+                                background: 'var(--color-surface)',
+                                color: 'var(--color-success)',
                                 fontSize: '13px',
                                 fontWeight: 600,
                                 cursor: loading ? 'not-allowed' : 'pointer',
@@ -172,7 +172,7 @@ export function GrammarRulePanel({ token, rule, language, onClose }: Props) {
                     )}
 
                     {added ? (
-                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#388e3c' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-success)' }}>
                             Added to study ✓
                         </span>
                     ) : (
@@ -182,9 +182,9 @@ export function GrammarRulePanel({ token, rule, language, onClose }: Props) {
                             style={{
                                 padding: '8px 14px',
                                 borderRadius: '5px',
-                                border: '1px solid #a5d6a7',
-                                background: adding ? '#f1f8e9' : '#e8f5e9',
-                                color: '#1b5e20',
+                                border: '1px solid var(--color-success-border)',
+                                background: 'var(--color-success-bg)',
+                                color: 'var(--color-success)',
                                 fontSize: '13px',
                                 fontWeight: 600,
                                 cursor: adding ? 'not-allowed' : 'pointer',

@@ -50,9 +50,12 @@ function Layout() {
   const darkMode = prefs.dark_mode;
   const { isMobile } = useViewport();
 
+  // Apply theme via the [data-theme] attribute on <html>. CSS variables in
+  // index.css flip when this changes, so component inline styles using
+  // `var(--color-*)` auto-update without React re-renders. (#20)
   useEffect(() => {
-    document.body.style.background = darkMode ? '#121212' : '';
-    return () => { document.body.style.background = ''; };
+    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+    return () => { delete document.documentElement.dataset.theme; };
   }, [darkMode]);
 
   // Centralised auth-expiry handler: api/_http.ts dispatches AUTH_EXPIRED_EVENT
@@ -74,9 +77,9 @@ function Layout() {
   const nl = ({ isActive }: { isActive: boolean }) => ({
     // Mobile: 36px min height keeps the top-nav row chunky enough to tap on iOS.
     padding: '8px 14px', borderRadius: '6px',
-    border: `1px solid ${darkMode ? '#444' : '#c5cae9'}`,
-    background: isActive ? (darkMode ? '#1a237e' : '#e8eaf6') : (darkMode ? '#2a2a2a' : '#fff'),
-    color: isActive ? (darkMode ? '#fff' : '#1a237e') : (darkMode ? '#aaa' : '#1a237e'),
+    border: '1px solid var(--color-border-accent)',
+    background: isActive ? 'var(--color-primary-soft)' : 'var(--color-surface)',
+    color: isActive ? 'var(--color-primary-on-soft)' : 'var(--color-primary-on-soft)',
     fontSize: '13px', fontWeight: 600 as const, cursor: 'pointer', textDecoration: 'none',
     display: 'inline-flex', alignItems: 'center',
     minHeight: '36px',
@@ -85,14 +88,14 @@ function Layout() {
 
   const nlReview = ({ isActive }: { isActive: boolean }) => ({
     ...nl({ isActive }),
-    border: `1px solid ${darkMode ? '#388e3c' : '#c8e6c9'}`,
-    color: darkMode ? '#66bb6a' : '#2e7d32',
-    background: isActive ? (darkMode ? '#1b5e20' : '#e8f5e9') : (darkMode ? '#2a2a2a' : '#fff'),
+    border: '1px solid var(--color-success-border)',
+    color: 'var(--color-success)',
+    background: isActive ? 'var(--color-success-bg)' : 'var(--color-surface)',
   });
 
   return (
     <>
-      <NotificationContainer notifications={notifications} onDismiss={dismissNotification} darkMode={darkMode} />
+      <NotificationContainer notifications={notifications} onDismiss={dismissNotification} />
       <div style={{
         maxWidth: '900px',
         margin: '0 auto',
@@ -105,9 +108,9 @@ function Layout() {
           ? 'calc(12px + var(--safe-top))'
           : 'calc(24px + var(--safe-top))',
         fontFamily: 'sans-serif',
-        background: darkMode ? '#121212' : undefined,
+        background: 'var(--color-bg)',
         minHeight: '100vh',
-        color: darkMode ? '#e0e0e0' : undefined,
+        color: 'var(--color-text)',
       }}>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
@@ -320,7 +323,6 @@ function BooksPage() {
         token={token}
         doc={activeBook}
         onClose={() => setActiveBook(null)}
-        darkMode={prefs.dark_mode}
         autoMarkKnown={prefs.auto_mark_known}
       />
     );
@@ -330,7 +332,6 @@ function BooksPage() {
       token={token}
       onOpen={setActiveBook}
       onClose={() => navigate('/')}
-      darkMode={prefs.dark_mode}
     />
   );
 }
@@ -350,10 +351,10 @@ function ReviewPage() {
 }
 
 function AddContentPage() {
-  const { token, prefs } = useAppCtx();
+  const { token } = useAppCtx();
   const navigate = useNavigate();
   if (!token) return <Navigate to="/" />;
-  return <ContentRequestPage token={token} onClose={() => navigate('/')} darkMode={prefs.dark_mode} />;
+  return <ContentRequestPage token={token} onClose={() => navigate('/')} />;
 }
 
 function SettingsPage() {

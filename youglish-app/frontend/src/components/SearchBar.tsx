@@ -95,11 +95,11 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
             gap: '6px',
             alignItems: 'center',
             padding: '6px 36px 6px 8px',
-            border: '1px solid #ccc',
+            border: '1px solid var(--color-input-border)',
             borderRadius: '4px',
             minHeight: '42px',
             cursor: 'text',
-            background: '#fff',
+            background: 'var(--color-input-bg)',
             boxSizing: 'border-box',
             width: '100%',
           }}
@@ -110,18 +110,19 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                background: '#e3f2fd',
-                border: '1px solid #90caf9',
+                background: 'var(--color-primary-soft)',
+                border: '1px solid var(--color-border-accent)',
                 borderRadius: '4px',
                 padding: '2px 6px',
                 fontSize: '14px',
+                color: 'var(--color-primary-on-soft)',
                 gap: '4px',
               }}
             >
               {term}
               <button
                 onClick={(e) => { e.stopPropagation(); onRemoveTerm(i); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: '14px', color: '#555', lineHeight: 1, touchAction: 'manipulation' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: '14px', color: 'var(--color-text-muted)', lineHeight: 1, touchAction: 'manipulation' }}
               >
                 ×
               </button>
@@ -144,13 +145,13 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
               fontSize: '16px',
               padding: '2px 4px',
               background: 'transparent',
-              color: '#000',
+              color: 'var(--color-text)',
             }}
           />
         </div>
 
         {loading && (
-          <span style={{ position: 'absolute', right: '10px', top: '13px', fontSize: '12px', color: '#888' }}>
+          <span style={{ position: 'absolute', right: '10px', top: '13px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
             ⏳
           </span>
         )}
@@ -161,8 +162,8 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
             top: '100%',
             left: 0,
             right: 0,
-            background: '#fff',
-            border: '1px solid #ccc',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-input-border)',
             borderTop: 'none',
             borderRadius: '0 0 4px 4px',
             margin: 0,
@@ -171,7 +172,7 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
             zIndex: 100,
             maxHeight: '200px',
             overflowY: 'auto',
-            boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+            boxShadow: 'var(--shadow-card)',
           }}>
             {suggestions.map((s, i) => (
               <li
@@ -182,7 +183,8 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
                   padding: '12px',
                   cursor: 'pointer',
                   fontSize: '15px',
-                  background: i === activeIdx ? '#e3f2fd' : '#fff',
+                  background: i === activeIdx ? 'var(--color-primary-soft)' : 'var(--color-surface)',
+                  color: 'var(--color-text)',
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -191,9 +193,9 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
                 <span>{s.word}</span>
                 <span style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                   {s.type === 'phrase' && s.word.includes(' ') && (
-                    <span style={{ fontSize: '10px', background: '#fff3e0', color: '#e65100', borderRadius: '3px', padding: '1px 4px' }}>phrase</span>
+                    <span style={{ fontSize: '10px', background: 'var(--color-warning-bg)', color: 'var(--color-warning)', borderRadius: '3px', padding: '1px 4px' }}>phrase</span>
                   )}
-                  <span style={{ fontSize: '11px', color: '#999' }}>{Math.round(s.score * 100)}%</span>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-subtle)' }}>{Math.round(s.score * 100)}%</span>
                 </span>
               </li>
             ))}

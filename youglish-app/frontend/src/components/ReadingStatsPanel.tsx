@@ -16,7 +16,7 @@ export function ReadingStatsPanel({ videoId, token, refreshKey = 0, wordColors }
     if (!token) {
         return (
             <div style={containerStyle}>
-                <span style={{ color: '#aaa', fontSize: '12px' }}>
+                <span style={{ color: 'var(--color-text-subtle)', fontSize: '12px' }}>
                     Sign in to see word coverage for this video.
                 </span>
             </div>
@@ -26,7 +26,7 @@ export function ReadingStatsPanel({ videoId, token, refreshKey = 0, wordColors }
     if (!stats) {
         return (
             <div style={containerStyle}>
-                <span style={{ color: '#bbb', fontSize: '12px' }}>Loading coverage…</span>
+                <span style={{ color: 'var(--color-text-subtle)', fontSize: '12px' }}>Loading coverage…</span>
             </div>
         );
     }
@@ -34,18 +34,18 @@ export function ReadingStatsPanel({ videoId, token, refreshKey = 0, wordColors }
     return (
         <div style={containerStyle}>
             {/* Stacked bar */}
-            <div style={{ display: 'flex', height: '7px', borderRadius: '4px', overflow: 'hidden', background: '#e8e8e8', marginBottom: '7px' }}>
+            <div style={{ display: 'flex', height: '7px', borderRadius: '4px', overflow: 'hidden', background: 'var(--color-border)', marginBottom: '7px' }}>
                 <div style={{ width: `${stats.known_pct}%`, background: colors.known.color as string, transition: 'width 0.4s' }} />
                 <div style={{ width: `${stats.learning_pct}%`, background: colors.learning.color as string, transition: 'width 0.4s' }} />
                 <div style={{ width: `${stats.unknown_pct}%`, background: colors.unknown.color as string, transition: 'width 0.4s' }} />
             </div>
 
             {/* Legend row */}
-            <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', fontSize: '12px', color: '#555' }}>
+            <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap', fontSize: '12px', color: 'var(--color-text-muted)' }}>
                 <Chip color={colors.known.color as string}    label="Known"    count={stats.known}    pct={stats.known_pct} />
                 <Chip color={colors.learning.color as string} label="Learning" count={stats.learning} pct={stats.learning_pct} />
                 <Chip color={colors.unknown.color as string}  label="Unknown"  count={stats.unknown}  pct={stats.unknown_pct} />
-                <span style={{ marginLeft: 'auto', color: '#999' }}>
+                <span style={{ marginLeft: 'auto', color: 'var(--color-text-subtle)' }}>
                     {stats.total_lemmas} unique lemmas
                 </span>
             </div>
@@ -57,17 +57,17 @@ function Chip({ color, label, count, pct }: { color: string; label: string; coun
     return (
         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span style={{ width: 9, height: 9, borderRadius: 2, background: color, display: 'inline-block' }} />
-            <span style={{ color: '#444' }}>{label}:</span>
+            <span style={{ color: 'var(--color-text)' }}>{label}:</span>
             <strong>{count}</strong>
-            <span style={{ color: '#999' }}>({pct}%)</span>
+            <span style={{ color: 'var(--color-text-subtle)' }}>({pct}%)</span>
         </span>
     );
 }
 
 const containerStyle: React.CSSProperties = {
     padding: '10px 16px',
-    borderTop: '1px solid #ebebeb',
-    background: '#fafafa',
+    borderTop: '1px solid var(--color-border-subtle)',
+    background: 'var(--color-surface-muted)',
     minHeight: '42px',
     display: 'flex',
     flexDirection: 'column',

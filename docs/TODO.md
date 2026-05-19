@@ -32,11 +32,12 @@ Original problem statement preserved below for context:
 **Fix (data):** `srs_cards` rows and the `/srs/due` payload need a `prompt_text` (English gloss) field — currently the schema only carries `display_text` (German). Add via `word_table.gloss_en` or a per-item LLM-cache translation lookup.
 **Blocks:** literally everything downstream of "user learns a word." Today the entire SRS UI is a self-grading checkbox.
 
-### 0b. 🔴 No active SRS card creation path before production happens
-**Files:** `progression_service.py:_RULES` (line 119 + line 101)
-**Problem:** `transcript_clicked` and `status_marked_learning` both fire `passive_srs="create"` — only the passive card is created. Active cards only come into existence when an event already includes a successful production outcome (`guided_counted`, `status_marked_known`, `free_chat_used_correctly`, `active_review_correct`). Users who mark words as "learning" and never open guided chat have **zero** scheduled active practice. The active track is unreachable through the normal exposure loop.
-**Fix:** add `active_srs="create"` to `status_marked_learning` so that marking a word as learning schedules both directions. Set the active card's first due_date a few days out (longer than passive's 1 day, since the user isn't ready to produce yet).
-**Blocks:** any meaningful active-direction SRS metrics. Without this, "active_level" only ever rises from the one-shot events that already advance the card.
+### 0b. ✅ Active SRS card creation on status_marked_learning — RESOLVED 2026-05-19
+`_RULES["status_marked_learning"]` ships with both `passive_srs="create"` and `active_srs="create"`. Marking a word "learning" now schedules BOTH directions. The active card is created at `interval_days=1.0, reps=0` (same defaults as the passive card — the design note about "a few days out" was dropped; `_update_srs` schedules at NOW() and the SRS due-feed handles ordering by `due_date` not by passive-vs-active class). Active production credit is gated: `active_delta=0`, `times_used_correctly_delta=0` — creating a card is exposure, not evidence. Re-marking is idempotent (`INSERT … ON CONFLICT (user_id, item_id, item_type, direction) DO NOTHING`). Regression-guarded in `test_progression.py`:
+  - `test_status_marked_learning_creates_active_card`
+  - `test_status_marked_learning_does_not_increment_active_level`
+  - `test_status_marked_learning_does_not_increment_times_used_correctly`
+  - `test_status_marked_learning_does_not_duplicate_cards`
 
 ### 1. ✅ Dead `srs_service.py` endpoints — RESOLVED 2026-05-19
 File `services/srs_service.py` deleted along with the three legacy router endpoints (`POST /check-answer`, `/magic-sentences`, `/cloze-questions`) and the six Pydantic models that only those endpoints used (`CheckAnswerRequest`, `MagicSentencesRequest`, `SentenceResult`, `MagicSentencesResponse`, `ClozeQuestionsRequest`, `ClozeQuestionResult`). Pre-deletion grep across backend + frontend confirmed zero call sites. The `/api/v1/srs/*` namespace now only exposes the real endpoints (`/due`, `/review/{card_id}`).
@@ -232,11 +233,112 @@ New `frontend/src/api/_http.ts` exports a shared `assertOk(res)` that on 401 cle
 **Fix:** Add `extract_phrases(doc, language)` dispatcher. Even no-op stubs for other languages would let the pipeline run cleanly.
 **Blocks:** opening the app to a second language.
 
-### 20. 🟡 Dark mode without a theme system
-**Files:** ~35 frontend components with inline `dk ? '#xxx' : '#yyy'` ternaries
-**Problem:** Adding a colour means editing dozens of components. No consistency. Recent commits keep fixing dark-mode bugs one component at a time.
-**Fix:** CSS custom properties (`--bg`, `--fg`, `--border`, `--accent`) set on `<html data-theme="dark|light">`. Components reference `var(--bg)` etc. inline. One-time refactor; pays off forever.
-**Blocks:** sane mobile work (which would otherwise hit theme-and-responsive-at-the-same-time pain).
+### 20. ✅ Dark mode theme system — RESOLVED 2026-05-19
+**What landed**
+
+CSS variable tokens declared in `src/index.css` on `:root` (light) with a `[data-theme="dark"]` block that overrides them. `App.tsx` Layout writes `document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'` on every prefs change. `SettingsPanel`'s dark-mode toggle also writes the attribute immediately (no 600ms save round-trip wait).
+
+**Token set (in `index.css`):**
+```
+--color-bg / -surface / -surface-muted / -surface-sunken / -input-bg
+--color-text / -text-strong / -text-muted / -text-subtle
+--color-border / -border-accent / -border-subtle / -input-border
+--color-primary / -primary-text / -primary-soft / -primary-on-soft
+--color-success / -success-bg / -success-border
+--color-warning / -warning-bg / -warning-border
+--color-danger / -danger-bg / -danger-border
+--shadow-card
+```
+
+Word-status colors (known/learning/unknown) stay user-configurable via `prefs.*_word_color` — explicitly out of the theme system.
+
+**Component refactor (88 of the 104 audit-counted ternaries removed; 5 remain, all driving the `data-theme` attribute itself).**
+
+| Component | Before → After |
+|---|---|
+| `NotificationToast.tsx` | dropped `darkMode` prop; all 4 ternaries → `var(--color-*)` |
+| `ContentRequestPage.tsx` | dropped `darkMode` prop; all 10 ternaries → vars |
+| `BookLibraryPage.tsx` | dropped `darkMode` prop; converted local `th` theme object to var(--...) strings |
+| `BookReaderPage.tsx` | dropped `darkMode` prop; kept local `dk` state for the in-reader Dark/Light toggle; wrapped reader with `<div data-theme={dk ? 'dark' : 'light'}>` so the toggle creates a SCOPED override without touching the rest of the app. All inner ternaries → vars. `navBtnStyle` and `topBtnStyle` helpers no longer take `dk`. |
+| `SelectionPanel.tsx` | dropped `dk` prop (forwarded from BookReaderPage); all 20 ternaries → vars. `llmBtnStyle` helper no longer takes `dk`. |
+| `SelectionReviewPanel.tsx` | dropped `dk` prop; all 6 ternaries → vars |
+| `SettingsPanel.tsx` | kept `darkMode` LOCAL STATE (drives the checkbox + auto-save), but converted all 27 styling ternaries to vars. Toggle handler now sets `document.documentElement.dataset.theme` immediately so the UI flips without waiting for the save round-trip. Inline `:hover` background flips on suggestion list dropped (not worth porting; can return as a real `:hover` CSS rule later). |
+| `App.tsx` | Layout effect: `document.body.style.background` → `document.documentElement.dataset.theme`. NavLink chip + nlReview styles → vars. Main container background/color → vars. HomePage Free Chat / Guided Practice buttons untouched (already light-mode-only; no dark variants). |
+
+**Files NOT touched** (intentionally — no `darkMode` usage):
+all other components (`PlayerView`, `SearchBar`, `RecommendationsPanel`, `RecommendationCards`, `InsightsSection`, `PrepView`, `GuidedChatPage`, `MessageInput`, `GrammarRulePanel`, `ReminderBanner`, `FreeChatPage`, `ChatWindow`, `TargetCard`, `TurnFeedbackChip`, `LoginForm`, `SearchBar`, `ResultCard`, `ReadingStatsPanel`, `WordStatusPicker`, `TranscriptPanel`, `SubtitleDisplay`, `PlayerControls`, `YoutubeEmbed`, `SessionSummaryCard`, `ErrorBoundary`, `FollowedChannelsSection`, `PlaylistPanel`, `SRSReviewPage`, `BookReaderPage` sub-components). These were already light-only (no dark variants existed) — converting them to use theme vars would CHANGE behavior in dark mode (currently they stay light-on-light). Future work: audit each, opt-in to var(--color-*) where dark mode should apply.
+
+**Behaviour preserved:**
+  - Settings dark-mode toggle still persists via 600ms debounced save.
+  - BookReaderPage's local Dark/Light button still works as a per-reader override.
+  - Word-status colors still come from `prefs.*_word_color` and are user-customisable.
+  - Status pill semantic colors (pending/done/failed in ContentRequestPage, success/warning/danger badges, mistake/recent/freq insight tags) stay fixed across themes.
+  - No new theme settings model — `users.settings.dark_mode` JSONB still the single source.
+
+**Tests added** (`src/test/theme.test.tsx`, 4 tests):
+1. NotificationToast dismiss button uses `var(--color-text-muted)`.
+2. ContentRequestPage container uses `var(--color-surface)` + `var(--color-text)`.
+3. ContentRequestPage input uses `var(--color-input-bg)` + `var(--color-input-border)`.
+4. SettingsPanel dark-mode toggle flips `document.documentElement.dataset.theme` between `'light'` and `'dark'` (no 600ms wait).
+
+**Validation:** `npx tsc --noEmit` clean. `npx vitest run` → 90/90. `npm run build` clean (414.80 kB JS / 115.97 kB gz, CSS grew 2 kB → 4 kB from the new variable declarations).
+
+**Future work** (out of this scope):
+- ~~Convert components currently not touched (light-only across the board) to use the variable set so dark mode is consistent everywhere.~~ **RESOLVED 2026-05-19 in #20b below.**
+- Add proper `:hover` / `:focus-visible` styling via CSS classes — inline styles can't express pseudo-classes, which is why some hover behaviour was dropped in this pass.
+- Consider syncing `--color-primary` etc. with `prefs.*_word_color` so users can theme their accent palette too.
+
+### 20b. ✅ Dark-mode coverage for remaining light-only components — RESOLVED 2026-05-19
+Follow-up pass to #20a. Converts the 22 components called out as still light-only so dark mode is now visually complete across the entire app.
+
+**Components converted to var(--color-*) tokens** (containers, text, borders, inputs, hover/active states):
+  - `App.tsx` Layout — main bg/text (already done in #20a; double-checked).
+  - `PlayerView.tsx` — outer panel, view-toggle tab bar.
+  - `PlayerControls.tsx` — bottom bar + 5 nav buttons (input-border + surface tokens).
+  - `SubtitleDisplay.tsx` — single `color: '#1a3a6c'` text → `var(--color-text-strong)`.
+  - `TranscriptPanel.tsx` — sentence rows + active sentence highlight + "Loading transcript…" placeholder.
+  - `WordStatusPicker.tsx` — picker chrome bg/border/text. Status pills (`#e53935` Unknown / `#fb8c00` Learning / `#43a047` Known) intentionally kept fixed — semantic colors.
+  - `SearchBar.tsx` — input chip area, suggestions dropdown, phrase badge.
+  - `LoginForm.tsx` — inputs, ghost/outline/primary buttons, close ✕.
+  - `ReminderBanner.tsx` — banner bg/border/text use warning tokens.
+  - `FreeChatPage.tsx` — outer panel + header bg now uses var(--color-primary) for a real surface in both modes.
+  - `ChatWindow.tsx` — user-bubble + assistant-bubble surfaces.
+  - `TargetCard.tsx` — header strip uses var(--color-primary-soft).
+  - `MessageInput.tsx` — textarea + send button bg/border/text.
+  - `RecommendationsPanel.tsx` — container + controls + ReadingUnitsDueCard.
+  - `RecommendationCards.tsx` — Item/Video/Sentence card surfaces, secondary text, PrefButton non-active state.
+  - `FollowedChannelsSection.tsx` — section header + empty state.
+  - `ReadingStatsPanel.tsx` — container + legend chip colors.
+  - `InsightsSection.tsx` — primary item button surface, secondary chip surface. Card border + accent kept fixed (semantic: mistake = pink, freq = blue).
+  - `PrepView.tsx` — item header chip, grammar-explanation accordion, examples surface, templates surface, linked-grammar-rule chips.
+  - `GuidedChatPage.tsx` — outer panel, header (kept semantic warning/success colors for the target-progress state), hint panel, End Session secondary button.
+  - `SessionSummaryCard.tsx` — corrective-note highlight strip, feedback row label/text. `TargetBadge` and `QualityPill` semantic palettes kept fixed.
+  - `ErrorBoundary.tsx` — fallback panel bg/border/text + Reload button.
+  - `PlaylistPanel.tsx` — outer container, BuildView input style, suggestion dropdown, target chips, Generate button, ResultView coverage bar + PlaylistVideoCard surface + Watch button.
+  - `SRSReviewPage.tsx` — outer container, language `<select>`, Reload button, progress bar, feedback panel (success/warning surface + Continue button uses `var(--color-primary)`), review card surface, passive/active buttons (use semantic danger/success/primary tokens with surface fallbacks for the disabled state), Skip link.
+
+**Intentionally left unchanged** (semantic colors that must stay recognisable across themes):
+  - **Status pills** in `ContentRequestPage.STATUS_STYLES`, `WordStatusPicker` STATUSES, `SessionSummaryCard.TargetBadge` / `QualityPill`, `SelectionReviewPanel` Mastered/Due badges, `RecommendationCards.REASON_STYLES` and reason-tag variants, `InsightsSection` mistake-vs-freq border + accent. These all rely on color to convey meaning quickly (red = bad, green = good, blue = info, orange = warning).
+  - **Word-status colors** (known/learning/unknown) — user-configurable via `prefs.*_word_color`. Out of theme system by design.
+  - **PrefButton activeColor** (Follow/Like/Dislike on video cards) — passed in by parent at the call site to encode the action's meaning (`#1a237e` follow / `#2e7d32` like / `#c62828` dislike).
+  - **YouTube thumbnail backdrops** — `background: '#000'` kept literal so the lazy-loading poster fades in on the same surface in both themes.
+  - **LLM-result tints** in `SelectionPanel.llmBtnStyle` — passed-in accent (`#1565c0` translate / `#2e7d32` explain) is the function signature; the wrapping bg now uses `var(--color-surface-muted)` for the disabled state.
+  - **SubtitleDisplay highlight `<mark>` background `#fff176`** — search-term highlight; light yellow works on both light and dark text and is recognisable as a highlight.
+  - **`ResultCard.tsx`** — dead code (no importers, confirmed in #27g audit). Not converted.
+
+**Tests added** (`src/test/theme.test.tsx`, 4 new tests on top of the existing 4 from #20a):
+1. `PlayerControls` button uses `var(--color-surface)` + `var(--color-input-border)`.
+2. `LoginForm` primary submit uses `var(--color-primary)` + `var(--color-primary-text)`.
+3. `MessageInput` textarea uses `var(--color-input-bg)` + `var(--color-text)`.
+4. `ReminderBanner` background uses `var(--color-warning-bg)`.
+
+Existing `TranscriptPanel.test.tsx` updated: `borderLeft` assertion now matches the `var(--color-primary)` literal (jsdom can't compute CSS vars; `toHaveStyle` shorthand resolution fails, so we use `style.borderLeft` + `toContain` directly).
+
+**Validation:** `npx tsc --noEmit` clean. `npx vitest run` → 94/94 (was 90; +4 new). `npm run build` clean (421 kB JS / 116 kB gz, +6 kB from the larger inline-style strings — `var(--color-*)` is longer than `'#ffffff'`).
+
+**Visual caveats:**
+- The `:hover` flip on `SearchBar`'s suggestion list and `SettingsPanel`'s TagInput dropdown still doesn't dark-mode-correctly — both used inline `onMouseEnter`/`onMouseLeave` handlers that referenced `darkMode`. Those were already dropped in #20a; not regressed here. Re-introducing via real CSS `:hover` rules is a future task.
+- The `ChatWindow` user bubble was previously `#1a237e` (bright purple-blue) on light mode; in dark mode it now reads from `var(--color-primary)` which resolves to `#7986cb` (a lighter purple). This is intentional — pure `#1a237e` is unreadable as a bubble background on a dark surface. Side effect: the bubble is slightly lighter on a light background than before. If this looks off, change `--color-primary` in the light declaration block.
 
 ### 21. 🟡 No memoization / re-render hotspots
 **Files:** `usePlayerSentences.ts`, `RecommendationCards.tsx`, `BookReaderPage.tsx`, `SearchBar.tsx`
@@ -410,6 +512,55 @@ Closing pass over every interactive surface that #27a–f didn't touch.
   - `LoginForm.tsx`: signed-in header row gained `flexWrap: 'wrap'` so long email addresses don't push "Sign out" off-screen.
   - `BookLibraryPage.tsx` Actions column: `flexWrap: 'wrap'` so Confirm/Cancel can drop below the row label on narrow phones.
   - `SessionSummaryCard.tsx` secondary CTA row: `flexWrap: 'wrap'`.
+
+### 27h. ✅ PWA shell (manifest + service worker + offline page) — RESOLVED 2026-05-19
+First half of iOS "Add to Home Screen" / Capacitor prep (Path A in #34).
+
+**Files added:**
+  - `frontend/public/manifest.webmanifest` — `name`, `short_name: "YouGlish"`, `start_url: /`, `scope: /`, `display: standalone`, `orientation: portrait`, `theme_color: #1a237e`, `background_color: #ffffff`. Icon list references only `/favicon.svg` (the one icon asset that exists). 192×192 / 512×512 / apple-touch-icon are intentionally not referenced — see TODO below.
+  - `frontend/public/sw.js` — conservative shell SW. Strategy: precache shell (`/`, `/index.html`, `/manifest.webmanifest`, `/favicon.svg`, `/offline.html`) on install; navigation = network-first → cached shell → offline.html; `/assets/*` = cache-first (Vite filenames are content-hashed so collisions are impossible); `/api/*`, cross-origin, and non-GET = bypassed (lets SSE notifications work, lets POSTs hit network). `skipWaiting` + `clients.claim` so updates roll out fast. `CACHE_VERSION = 'v1'` constant for future invalidation.
+  - `frontend/public/offline.html` — minimal standalone page, theme-coloured, 44×44 Retry button.
+
+**Files modified:**
+  - `frontend/index.html` — added `<link rel="manifest">`, `<meta name="theme-color">`, `mobile-web-app-capable` / `apple-mobile-web-app-capable` / `apple-mobile-web-app-title="YouGlish"` / `apple-mobile-web-app-status-bar-style="default"`. Title bumped from `frontend` → `YouGlish — Language Learning`. Inline comment documents the missing apple-touch-icon. `viewport-fit=cover` from #27a preserved.
+  - `frontend/src/main.tsx` — production-only registration. Guarded by `import.meta.env.PROD && 'serviceWorker' in navigator`. Registers on `window.load` to avoid blocking first paint. Failure logged via `console.warn`, never throws.
+
+**Dev vs prod:** The SW only registers on production bundles, so `npm run dev` is unaffected — Vite's HMR keeps working without a SW intercepting navigations. To test the SW locally: `npm run build && npm run preview`.
+
+**Icons:** ✅ **RESOLVED 2026-05-19** in #27i below. 192×192 + 512×512 PWA icons and 180×180 apple-touch-icon now present.
+
+**Constraints honoured:**
+  - No backend changes.
+  - No dark-mode refactor.
+  - No Capacitor work.
+  - `/api/*` and SSE never cached.
+  - No missing icon files referenced.
+
+### 27i. ✅ PNG icon set for PWA — RESOLVED 2026-05-19
+Closes the PWA stage: Lighthouse PWA audit's "no maskable/png icon" warning is gone, iOS home-screen icon is real (no longer a page screenshot).
+
+**Source asset:** `frontend/public/favicon.svg` — the existing 48×46 stylized purple/blue lightning bolt. Aspect 48:46 ≈ 1.043, close to square; the SVG content already centers the glyph in its viewBox.
+
+**Pipeline (single bash sequence, no committed scripts):**
+1. `rsvg-convert -w 820 public/favicon.svg -o /tmp/fav-large.png` → renders the SVG at 820×786 PNG preserving aspect.
+2. `sips -p 1024 1024 --padColor FFFFFF /tmp/fav-large.png` → pads to 1024×1024 with solid white background and ~10% safe-zone padding around the glyph (102px horizontal, 119px vertical of white margin around the source render).
+3. `sips -z 512 512 / 192 192 / 180 180` → three copies resampled to the target sizes.
+
+**Files added (all binaries, in `frontend/public/`):**
+  - `icons/icon-192.png` — 192×192, 16 KB
+  - `icons/icon-512.png` — 512×512, 93 KB
+  - `apple-touch-icon.png` — 180×180, 14 KB
+
+**Files modified:**
+  - `frontend/public/manifest.webmanifest` — `icons[]` now lists the 192 + 512 PNGs first (both `purpose: "any"`) with the SVG kept as a fallback for browsers that prefer vector icons.
+  - `frontend/index.html` — added `<link rel="apple-touch-icon" href="/apple-touch-icon.png" />` and removed the inline comment that warned of the missing asset.
+
+**Maskable note:** The icons are NOT marked `purpose: "any maskable"`. The safe zone is ~10% per side which is enough for iOS rounded-corner masking but is below the Android adaptive-icon minimum (18% per side / inner 80% diameter circle). The glyph is also a non-symmetric blob, so adaptive cropping would mangle it. To add maskable support later: regenerate with `sips -p 1280 1280` (≈20% padding on a 1024 source) and add a separate `maskable` icon entry.
+
+**Visual caveats:**
+  - Solid white background — looks crisp on light home-screen wallpapers, neutral on dark ones. Not branded.
+  - On iOS dark mode the icon still uses the white background (iOS doesn't honour `prefers-color-scheme` for home-screen icons).
+  - Glyph is the same purple/blue gradient as the in-app favicon — visually consistent with the loaded app.
 
 ### 27. 🟢 Mobile responsiveness (remaining stages)
 **Memory note:** explicitly deferred until end-to-end loop works. Don't start until #1–#10 are done.

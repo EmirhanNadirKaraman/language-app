@@ -119,10 +119,10 @@ export function PlaylistPanel({ token, language, onLanguageChange, onWatch, onCl
 
     return (
         <div style={{
-            border: '1px solid #e8eaf6',
+            border: '1px solid var(--color-border-accent)',
             borderRadius: '8px',
             padding: 'clamp(14px, 4vw, 20px)',
-            background: '#fafafa',
+            background: 'var(--color-surface-muted)',
             marginBottom: '16px',
         }}>
             {/* Header */}
@@ -133,7 +133,7 @@ export function PlaylistPanel({ token, language, onLanguageChange, onWatch, onCl
                             onClick={() => setView('build')}
                             style={{
                                 background: 'none', border: 'none', cursor: 'pointer',
-                                color: '#1a237e', fontSize: '14px', fontWeight: 600,
+                                color: 'var(--color-primary-on-soft)', fontSize: '14px', fontWeight: 600,
                                 padding: '8px 4px', minHeight: '36px',
                                 touchAction: 'manipulation',
                             }}
@@ -141,7 +141,7 @@ export function PlaylistPanel({ token, language, onLanguageChange, onWatch, onCl
                             ← Back
                         </button>
                     )}
-                    <h2 style={{ margin: 0, fontSize: '16px', color: '#1a237e' }}>
+                    <h2 style={{ margin: 0, fontSize: '16px', color: 'var(--color-text-strong)' }}>
                         {view === 'build' ? 'Build Playlist' : 'Playlist'}
                     </h2>
                 </div>
@@ -149,7 +149,7 @@ export function PlaylistPanel({ token, language, onLanguageChange, onWatch, onCl
                     onClick={onClose}
                     style={{
                         background: 'none', border: 'none', fontSize: '20px',
-                        cursor: 'pointer', color: '#888',
+                        cursor: 'pointer', color: 'var(--color-text-muted)',
                         minWidth: '44px', minHeight: '44px',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         padding: 0,
@@ -227,10 +227,11 @@ function BuildView({
     const inputStyle: React.CSSProperties = {
         // fontSize: 16px blocks iOS Safari focus-zoom; 44px = touch target.
         padding: '8px 10px',
-        border: '1px solid #ccc',
+        border: '1px solid var(--color-input-border)',
         borderRadius: '5px',
         fontSize: '16px',
-        background: '#fff',
+        background: 'var(--color-input-bg)',
+        color: 'var(--color-text)',
         minHeight: '44px',
         boxSizing: 'border-box',
     };
@@ -316,9 +317,9 @@ function BuildView({
                         // ≥36px secondary action — sits beside the language select.
                         padding: '8px 14px',
                         borderRadius: '5px',
-                        border: '1px solid #c5cae9',
-                        background: '#fff',
-                        color: '#1a237e',
+                        border: '1px solid var(--color-border-accent)',
+                        background: 'var(--color-surface)',
+                        color: 'var(--color-primary-on-soft)',
                         fontSize: '13px',
                         fontWeight: 600,
                         cursor: !language || loadingRecs ? 'not-allowed' : 'pointer',
@@ -352,8 +353,8 @@ function BuildView({
                             padding: '10px 18px',
                             borderRadius: '5px',
                             border: 'none',
-                            background: '#1a237e',
-                            color: '#fff',
+                            background: 'var(--color-primary)',
+                            color: 'var(--color-primary-text)',
                             fontSize: '14px',
                             fontWeight: 600,
                             cursor: !addInput.trim() || !language || addLoading ? 'not-allowed' : 'pointer',
@@ -369,16 +370,16 @@ function BuildView({
                     </button>
                 </div>
                 {addError && (
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#c62828' }}>{addError}</p>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--color-danger)' }}>{addError}</p>
                 )}
 
                 {showDropdown && suggestions.length > 0 && (
                     <ul style={{
                         position: 'absolute', top: '100%', left: 0, right: '62px',
-                        background: '#fff', border: '1px solid #ccc', borderTop: 'none',
+                        background: 'var(--color-surface)', border: '1px solid var(--color-input-border)', borderTop: 'none',
                         borderRadius: '0 0 5px 5px', margin: 0, padding: 0, listStyle: 'none',
                         zIndex: 200, maxHeight: '180px', overflowY: 'auto',
-                        boxShadow: '0 4px 10px rgba(0,0,0,0.1)',
+                        boxShadow: 'var(--shadow-card)',
                     }}>
                         {suggestions.map((s, i) => (
                             <li key={s.word}
@@ -386,16 +387,17 @@ function BuildView({
                                 onMouseEnter={() => setActiveIdx(i)}
                                 style={{
                                     padding: '9px 12px', cursor: 'pointer', fontSize: '14px',
-                                    background: i === activeIdx ? '#e8eaf6' : '#fff',
+                                    background: i === activeIdx ? 'var(--color-primary-soft)' : 'var(--color-surface)',
+                                    color: 'var(--color-text)',
                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                 }}
                             >
                                 <span>{s.word}</span>
                                 <span style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                                     {s.type === 'phrase' && (
-                                        <span style={{ fontSize: '10px', background: '#fff3e0', color: '#e65100', borderRadius: '3px', padding: '1px 4px' }}>phrase</span>
+                                        <span style={{ fontSize: '10px', background: 'var(--color-warning-bg)', color: 'var(--color-warning)', borderRadius: '3px', padding: '1px 4px' }}>phrase</span>
                                     )}
-                                    <span style={{ fontSize: '11px', color: '#bbb' }}>{Math.round(s.score * 100)}%</span>
+                                    <span style={{ fontSize: '11px', color: 'var(--color-text-subtle)' }}>{Math.round(s.score * 100)}%</span>
                                 </span>
                             </li>
                         ))}
@@ -406,7 +408,7 @@ function BuildView({
             {/* Target chips */}
             {targets.length > 0 && (
                 <div>
-                    <p style={{ margin: '0 0 6px', fontSize: '11px', fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <p style={{ margin: '0 0 6px', fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         Targets ({targets.length})
                     </p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -418,10 +420,10 @@ function BuildView({
                                     alignItems: 'center',
                                     gap: '4px',
                                     padding: '3px 8px 3px 10px',
-                                    background: '#e8eaf6',
+                                    background: 'var(--color-primary-soft)',
                                     borderRadius: '12px',
                                     fontSize: '13px',
-                                    color: '#1a237e',
+                                    color: 'var(--color-primary-on-soft)',
                                     fontWeight: 500,
                                 }}
                             >
@@ -432,7 +434,7 @@ function BuildView({
                                         background: 'none',
                                         border: 'none',
                                         cursor: 'pointer',
-                                        color: '#7986cb',
+                                        color: 'var(--color-primary-on-soft)',
                                         fontSize: '14px',
                                         lineHeight: 1,
                                         padding: '0 2px',
@@ -449,7 +451,7 @@ function BuildView({
 
             {/* Max videos */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <label style={{ fontSize: '13px', color: '#444', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                <label style={{ fontSize: '13px', color: 'var(--color-text)', fontWeight: 600, whiteSpace: 'nowrap' }}>
                     Max videos
                 </label>
                 <input
@@ -463,7 +465,7 @@ function BuildView({
             </div>
 
             {error && (
-                <p style={{ margin: 0, fontSize: '13px', color: '#c62828' }}>{error}</p>
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-danger)' }}>{error}</p>
             )}
 
             {/* Generate */}
@@ -473,8 +475,8 @@ function BuildView({
                     disabled={!language || targets.length === 0 || generating}
                     style={{
                         padding: '12px 24px',
-                        background: '#1a237e',
-                        color: '#fff',
+                        background: 'var(--color-primary)',
+                        color: 'var(--color-primary-text)',
                         border: 'none',
                         borderRadius: '6px',
                         fontSize: '14px',
@@ -489,10 +491,10 @@ function BuildView({
                     {generating ? 'Generating…' : 'Generate playlist'}
                 </button>
                 {!language && (
-                    <span style={{ marginLeft: '10px', fontSize: '12px', color: '#aaa' }}>Select a language first</span>
+                    <span style={{ marginLeft: '10px', fontSize: '12px', color: 'var(--color-text-subtle)' }}>Select a language first</span>
                 )}
                 {language && targets.length === 0 && (
-                    <span style={{ marginLeft: '10px', fontSize: '12px', color: '#aaa' }}>Add at least one word</span>
+                    <span style={{ marginLeft: '10px', fontSize: '12px', color: 'var(--color-text-subtle)' }}>Add at least one word</span>
                 )}
             </div>
         </div>
@@ -509,24 +511,24 @@ function ResultView({ result, onWatch }: { result: PlaylistResult; onWatch: (r: 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {/* Coverage summary */}
-            <div style={{ background: '#fff', border: '1px solid #e8eaf6', borderRadius: '6px', padding: '12px 14px' }}>
+            <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border-accent)', borderRadius: '6px', padding: '12px 14px' }}>
                 <div style={{ marginBottom: '6px' }}>
-                    <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: '#e8e8e8' }}>
-                        <div style={{ width: `${coverage.coverage_pct}%`, background: '#3f51b5', transition: 'width 0.4s' }} />
+                    <div style={{ display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'var(--color-border)' }}>
+                        <div style={{ width: `${coverage.coverage_pct}%`, background: 'var(--color-primary)', transition: 'width 0.4s' }} />
                     </div>
                 </div>
-                <div style={{ fontSize: '13px', color: '#444' }}>
+                <div style={{ fontSize: '13px', color: 'var(--color-text)' }}>
                     <strong>{coverage.covered_count} of {coverage.target_count}</strong> target words covered
-                    {' '}<span style={{ color: '#888' }}>({coverage.coverage_pct}%)</span>
+                    {' '}<span style={{ color: 'var(--color-text-muted)' }}>({coverage.coverage_pct}%)</span>
                     {' '}across <strong>{coverage.video_count}</strong> video{coverage.video_count !== 1 ? 's' : ''}
                 </div>
                 {coverage.uncovered_item_ids.length > 0 && (
-                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#888' }}>
+                    <p style={{ margin: '4px 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>
                         {coverage.uncovered_item_ids.length} word{coverage.uncovered_item_ids.length !== 1 ? 's' : ''} not found in any video
                     </p>
                 )}
                 {videos.length === 0 && (
-                    <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#aaa' }}>
+                    <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--color-text-subtle)' }}>
                         No videos found for these words. Try different targets or a different language.
                     </p>
                 )}
@@ -567,8 +569,8 @@ function PlaylistVideoCard({
         <div style={{
             display: 'flex',
             gap: '12px',
-            background: '#fff',
-            border: '1px solid #e8eaf6',
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border-accent)',
             borderRadius: '8px',
             overflow: 'hidden',
             alignItems: 'stretch',
@@ -580,15 +582,15 @@ function PlaylistVideoCard({
                 justifyContent: 'center',
                 width: '32px',
                 flexShrink: 0,
-                background: '#f5f6ff',
-                color: '#9fa8da',
+                background: 'var(--color-surface-sunken)',
+                color: 'var(--color-primary-on-soft)',
                 fontSize: '13px',
                 fontWeight: 700,
             }}>
                 {position}
             </div>
 
-            {/* Thumbnail */}
+            {/* Thumbnail — solid black so the YouTube poster fades in cleanly. */}
             <div style={{ position: 'relative', width: '120px', flexShrink: 0, background: '#000' }}>
                 <img
                     src={video.thumbnail_url}
@@ -609,7 +611,7 @@ function PlaylistVideoCard({
                 <div style={{
                     fontSize: '14px',
                     fontWeight: 600,
-                    color: '#222',
+                    color: 'var(--color-text)',
                     lineHeight: 1.3,
                     display: '-webkit-box',
                     WebkitLineClamp: 2,
@@ -621,8 +623,8 @@ function PlaylistVideoCard({
                 <span style={{
                     display: 'inline-block',
                     padding: '2px 8px',
-                    background: '#e8eaf6',
-                    color: '#3f51b5',
+                    background: 'var(--color-primary-soft)',
+                    color: 'var(--color-primary-on-soft)',
                     borderRadius: '10px',
                     fontSize: '11px',
                     fontWeight: 600,
@@ -636,8 +638,8 @@ function PlaylistVideoCard({
                         style={{
                             // ≥36px tappable in playlist video row.
                             padding: '8px 16px',
-                            background: '#1a237e',
-                            color: '#fff',
+                            background: 'var(--color-primary)',
+                            color: 'var(--color-primary-text)',
                             border: 'none',
                             borderRadius: '5px',
                             fontSize: '13px',

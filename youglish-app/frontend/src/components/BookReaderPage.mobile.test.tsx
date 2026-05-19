@@ -74,7 +74,6 @@ async function renderReader() {
             token="t"
             doc={DOC}
             onClose={() => {}}
-            darkMode={false}
             autoMarkKnown={false}
         />,
     );

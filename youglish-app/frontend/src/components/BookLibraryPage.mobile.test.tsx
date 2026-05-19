@@ -23,7 +23,7 @@ afterEach(() => {
 
 async function renderLib() {
     const utils = render(
-        <BookLibraryPage token="t" onOpen={() => {}} onClose={() => {}} darkMode={false} />,
+        <BookLibraryPage token="t" onOpen={() => {}} onClose={() => {}} />,
     );
     // Wait for listBooks() to resolve so the initial loading paint is finished.
     await waitFor(() => {

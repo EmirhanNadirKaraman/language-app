@@ -17,14 +17,14 @@ export function ReminderBanner({ summary, onDismiss, onOpenRecs }: Props) {
             display: 'flex',
             alignItems: 'center',
             gap: '10px',
-            background: '#fff8e1',
-            border: '1px solid #ffe082',
+            background: 'var(--color-warning-bg)',
+            border: '1px solid var(--color-warning-border)',
             borderRadius: '6px',
             padding: '8px 14px',
             marginBottom: '12px',
             flexWrap: 'wrap',
         }}>
-            <span style={{ flex: 1, fontSize: '13px', color: '#e65100', fontWeight: 600 }}>
+            <span style={{ flex: 1, fontSize: '13px', color: 'var(--color-warning)', fontWeight: 600 }}>
                 {text} — ready to practice?
             </span>
             <button
@@ -32,9 +32,9 @@ export function ReminderBanner({ summary, onDismiss, onOpenRecs }: Props) {
                 style={{
                     padding: '8px 14px',
                     borderRadius: '5px',
-                    border: '1px solid #f57c00',
+                    border: '1px solid var(--color-warning)',
                     background: 'none',
-                    color: '#e65100',
+                    color: 'var(--color-warning)',
                     fontSize: '13px',
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -51,7 +51,7 @@ export function ReminderBanner({ summary, onDismiss, onOpenRecs }: Props) {
                 style={{
                     background: 'none',
                     border: 'none',
-                    color: '#aaa',
+                    color: 'var(--color-text-subtle)',
                     fontSize: '18px',
                     cursor: 'pointer',
                     lineHeight: 1,

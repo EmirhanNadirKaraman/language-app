@@ -65,12 +65,12 @@ export function TranscriptPanel({
                                 minHeight: '44px',
                                 boxSizing: 'border-box',
                                 cursor: 'pointer',
-                                background: isActive ? '#e8eaf6' : 'transparent',
-                                borderLeft: isActive ? '3px solid #3f51b5' : '3px solid transparent',
+                                background: isActive ? 'var(--color-primary-soft)' : 'transparent',
+                                borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
                                 // Fluid sentence font: 14px on a 320px phone, 16px on desktop.
                                 fontSize: 'clamp(14px, 3.5vw, 16px)',
                                 lineHeight: 1.65,
-                                color: '#1a237e',
+                                color: 'var(--color-text-strong)',
                                 transition: 'background 0.15s',
                                 overflowWrap: 'anywhere',
                                 wordBreak: 'break-word',
@@ -81,7 +81,7 @@ export function TranscriptPanel({
                     );
                 })}
                 {sentences.length === 0 && (
-                    <p style={{ padding: '16px', color: '#aaa', fontSize: '13px', margin: 0 }}>
+                    <p style={{ padding: '16px', color: 'var(--color-text-subtle)', fontSize: '13px', margin: 0 }}>
                         Loading transcript…
                     </p>
                 )}

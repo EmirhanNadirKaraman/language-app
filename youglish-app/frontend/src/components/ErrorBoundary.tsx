@@ -46,18 +46,19 @@ export class ErrorBoundary extends Component<Props, State> {
                     margin: '32px auto',
                     maxWidth: '480px',
                     padding: '24px',
-                    border: '1px solid #e0e0e0',
+                    border: '1px solid var(--color-border)',
                     borderRadius: '8px',
-                    background: '#fff',
+                    background: 'var(--color-surface)',
+                    color: 'var(--color-text)',
                     textAlign: 'center',
                     fontFamily: 'sans-serif',
                 }}
             >
-                <div style={{ fontSize: '16px', fontWeight: 600, color: '#c62828', marginBottom: '8px' }}>
+                <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--color-danger)', marginBottom: '8px' }}>
                     Something went wrong.
                 </div>
                 {this.state.message && (
-                    <div style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '16px' }}>
                         {this.state.message}
                     </div>
                 )}
@@ -66,9 +67,9 @@ export class ErrorBoundary extends Component<Props, State> {
                     style={{
                         padding: '8px 20px',
                         borderRadius: '6px',
-                        border: '1px solid #c5cae9',
-                        background: '#e8eaf6',
-                        color: '#1a237e',
+                        border: '1px solid var(--color-border-accent)',
+                        background: 'var(--color-primary-soft)',
+                        color: 'var(--color-primary-on-soft)',
                         fontSize: '13px',
                         fontWeight: 600,
                         cursor: 'pointer',

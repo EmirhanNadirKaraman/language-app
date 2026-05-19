@@ -24,10 +24,10 @@ export function FreeChatPage({ result, token, onClose }: Props) {
             flexDirection: 'column',
             height: 'min(480px, 70vh)',
             marginTop: '16px',
-            border: '1px solid #c5cae9',
+            border: '1px solid var(--color-border-accent)',
             borderRadius: '8px',
             overflow: 'hidden',
-            background: '#fff',
+            background: 'var(--color-surface)',
         }}>
             {/* Header */}
             <div style={{
@@ -35,8 +35,8 @@ export function FreeChatPage({ result, token, onClose }: Props) {
                 justifyContent: 'space-between',
                 alignItems: 'center',
                 padding: '10px 16px',
-                background: '#1a237e',
-                color: '#fff',
+                background: 'var(--color-primary)',
+                color: 'var(--color-primary-text)',
                 flexShrink: 0,
             }}>
                 <span style={{ fontWeight: 600, fontSize: '15px' }}>Free Chat Practice</span>
@@ -45,7 +45,7 @@ export function FreeChatPage({ result, token, onClose }: Props) {
                     style={{
                         background: 'none',
                         border: 'none',
-                        color: '#fff',
+                        color: 'var(--color-primary-text)',
                         fontSize: '22px',
                         cursor: 'pointer',
                         lineHeight: 1,
@@ -72,7 +72,7 @@ export function FreeChatPage({ result, token, onClose }: Props) {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: error ? '#c62828' : '#999',
+                    color: error ? 'var(--color-danger)' : 'var(--color-text-subtle)',
                     fontSize: '14px',
                 }}>
                     {error ?? 'Starting session…'}
@@ -81,7 +81,7 @@ export function FreeChatPage({ result, token, onClose }: Props) {
                 <>
                     <ChatWindow messages={messages} />
                     {error && (
-                        <p style={{ margin: '0 16px 6px', fontSize: '13px', color: '#c62828' }}>
+                        <p style={{ margin: '0 16px 6px', fontSize: '13px', color: 'var(--color-danger)' }}>
                             {error}
                         </p>
                     )}

@@ -144,8 +144,8 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                     onClick={() => setRevealed(true)}
                     style={{
                         marginTop: '8px', padding: '10px 32px', borderRadius: '6px',
-                        border: '1px solid #c5cae9', background: '#e8eaf6',
-                        color: '#1a237e', fontSize: '14px', fontWeight: 600,
+                        border: '1px solid var(--color-border-accent)', background: 'var(--color-primary-soft)',
+                        color: 'var(--color-primary-on-soft)', fontSize: '14px', fontWeight: 600,
                         cursor: 'pointer',
                     }}
                 >
@@ -156,8 +156,8 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
         return (
             <>
                 <div style={{
-                    fontSize: '15px', color: '#1a237e', fontWeight: 600,
-                    background: '#f5f6ff', border: '1px solid #e8eaf6',
+                    fontSize: '15px', color: 'var(--color-text-strong)', fontWeight: 600,
+                    background: 'var(--color-surface-sunken)', border: '1px solid var(--color-border-accent)',
                     borderRadius: '6px', padding: '8px 16px',
                     maxWidth: '100%',
                     overflowWrap: 'anywhere',
@@ -177,9 +177,9 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                         style={{
                             flex: '1 1 140px', minHeight: '44px',
                             padding: '10px 8px', borderRadius: '6px',
-                            border: '1px solid #e5393520',
-                            background: submitting ? '#f5f5f5' : '#ffebee',
-                            color: submitting ? '#aaa' : '#c62828',
+                            border: '1px solid var(--color-danger-border)',
+                            background: submitting ? 'var(--color-surface-muted)' : 'var(--color-danger-bg)',
+                            color: submitting ? 'var(--color-text-subtle)' : 'var(--color-danger)',
                             fontSize: '14px', fontWeight: 600,
                             cursor: submitting ? 'default' : 'pointer',
                             touchAction: 'manipulation',
@@ -194,9 +194,9 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                         style={{
                             flex: '1 1 140px', minHeight: '44px',
                             padding: '10px 8px', borderRadius: '6px',
-                            border: '1px solid #2e7d3220',
-                            background: submitting ? '#f5f5f5' : '#e8f5e9',
-                            color: submitting ? '#aaa' : '#2e7d32',
+                            border: '1px solid var(--color-success-border)',
+                            background: submitting ? 'var(--color-surface-muted)' : 'var(--color-success-bg)',
+                            color: submitting ? 'var(--color-text-subtle)' : 'var(--color-success)',
                             fontSize: '14px', fontWeight: 600,
                             cursor: submitting ? 'default' : 'pointer',
                             touchAction: 'manipulation',
@@ -233,7 +233,9 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                         width: '100%', maxWidth: '340px',
                         minHeight: '44px',
                         padding: '10px 14px', borderRadius: '6px',
-                        border: '1px solid #c5cae9',
+                        border: '1px solid var(--color-border-accent)',
+                        background: 'var(--color-input-bg)',
+                        color: 'var(--color-text)',
                         fontSize: '16px',
                         textAlign: 'center',
                         boxSizing: 'border-box',
@@ -251,9 +253,9 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                         style={{
                             flex: '1 1 140px', minHeight: '44px',
                             padding: '10px 8px', borderRadius: '6px',
-                            border: '1px solid #e5393520',
-                            background: submitting ? '#f5f5f5' : '#ffebee',
-                            color: submitting ? '#aaa' : '#c62828',
+                            border: '1px solid var(--color-danger-border)',
+                            background: submitting ? 'var(--color-surface-muted)' : 'var(--color-danger-bg)',
+                            color: submitting ? 'var(--color-text-subtle)' : 'var(--color-danger)',
                             fontSize: '14px', fontWeight: 600,
                             cursor: submitting ? 'default' : 'pointer',
                             touchAction: 'manipulation',
@@ -268,9 +270,9 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                         style={{
                             flex: '1 1 140px', minHeight: '44px',
                             padding: '10px 8px', borderRadius: '6px',
-                            border: '1px solid #1a237e30',
-                            background: !canSubmit ? '#f5f5f5' : '#3949ab',
-                            color: !canSubmit ? '#aaa' : '#fff',
+                            border: '1px solid var(--color-primary)',
+                            background: !canSubmit ? 'var(--color-surface-muted)' : 'var(--color-primary)',
+                            color: !canSubmit ? 'var(--color-text-subtle)' : 'var(--color-primary-text)',
                             fontSize: '14px', fontWeight: 600,
                             cursor: !canSubmit ? 'default' : 'pointer',
                             touchAction: 'manipulation',
@@ -288,16 +290,16 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
 
     return (
         <div style={{
-            border: '1px solid #e8eaf6',
+            border: '1px solid var(--color-border-accent)',
             borderRadius: '8px',
             // Fluid side padding — tight on mobile, comfortable on desktop.
             padding: 'clamp(12px, 4vw, 20px)',
-            background: '#fafafa',
+            background: 'var(--color-surface-muted)',
             marginBottom: '16px',
         }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h2 style={{ margin: 0, fontSize: '16px', color: '#1a237e' }}>
+                <h2 style={{ margin: 0, fontSize: '16px', color: 'var(--color-text-strong)' }}>
                     Review{total > 0 && !done ? ` (${total - index} left)` : ''}
                 </h2>
                 <button
@@ -308,7 +310,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                         minWidth: '44px', minHeight: '44px',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         background: 'none', border: 'none',
-                        fontSize: '20px', cursor: 'pointer', color: '#888',
+                        fontSize: '20px', cursor: 'pointer', color: 'var(--color-text-muted)',
                         padding: 0,
                         touchAction: 'manipulation',
                     }}
@@ -325,10 +327,10 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                     onChange={e => onLanguageChange(e.target.value)}
                     style={{
                         // 16px keeps iOS from zooming on focus; minHeight 44 for tap.
-                        padding: '6px 10px', border: '1px solid #ccc',
+                        padding: '6px 10px', border: '1px solid var(--color-input-border)',
                         borderRadius: '5px', fontSize: '16px',
                         minHeight: '44px',
-                        background: '#fff', cursor: 'pointer',
+                        background: 'var(--color-input-bg)', color: 'var(--color-text)', cursor: 'pointer',
                     }}
                 >
                     <option value="">Select language…</option>
@@ -341,9 +343,9 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                     disabled={loading || !language}
                     style={{
                         padding: '6px 14px', minHeight: '44px',
-                        border: '1px solid #c5cae9',
-                        borderRadius: '5px', background: '#fff',
-                        color: '#1a237e', fontSize: '14px', fontWeight: 600,
+                        border: '1px solid var(--color-border-accent)',
+                        borderRadius: '5px', background: 'var(--color-surface)',
+                        color: 'var(--color-primary-on-soft)', fontSize: '14px', fontWeight: 600,
                         cursor: loading || !language ? 'not-allowed' : 'pointer',
                         opacity: loading || !language ? 0.5 : 1,
                         touchAction: 'manipulation',
@@ -354,21 +356,21 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
             </div>
 
             {!language && (
-                <p style={{ fontSize: '13px', color: '#aaa' }}>Select a language above to start reviewing.</p>
+                <p style={{ fontSize: '13px', color: 'var(--color-text-subtle)' }}>Select a language above to start reviewing.</p>
             )}
 
             {error && (
-                <p style={{ fontSize: '13px', color: '#c62828', margin: '8px 0' }}>{error}</p>
+                <p style={{ fontSize: '13px', color: 'var(--color-danger)', margin: '8px 0' }}>{error}</p>
             )}
 
             {/* Empty state */}
             {language && !loading && done && reviewed === 0 && cards.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '32px 0' }}>
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>✓</div>
-                    <p style={{ fontSize: '15px', fontWeight: 600, color: '#388e3c', margin: '0 0 4px' }}>
+                    <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-success)', margin: '0 0 4px' }}>
                         Nothing due right now
                     </p>
-                    <p style={{ fontSize: '13px', color: '#aaa', margin: 0 }}>
+                    <p style={{ fontSize: '13px', color: 'var(--color-text-subtle)', margin: 0 }}>
                         Check back later or mark more words as "learning" to build your review queue.
                     </p>
                 </div>
@@ -378,18 +380,18 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
             {language && !loading && done && reviewed > 0 && (
                 <div style={{ textAlign: 'center', padding: '32px 0' }}>
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>✓</div>
-                    <p style={{ fontSize: '15px', fontWeight: 600, color: '#1a237e', margin: '0 0 4px' }}>
+                    <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--color-text-strong)', margin: '0 0 4px' }}>
                         Session complete!
                     </p>
-                    <p style={{ fontSize: '13px', color: '#666', margin: '0 0 16px' }}>
+                    <p style={{ fontSize: '13px', color: 'var(--color-text-muted)', margin: '0 0 16px' }}>
                         {reviewed} card{reviewed !== 1 ? 's' : ''} reviewed
                     </p>
                     <button
                         onClick={load}
                         style={{
                             padding: '8px 20px', borderRadius: '6px',
-                            border: '1px solid #c5cae9', background: '#fff',
-                            color: '#1a237e', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                            border: '1px solid var(--color-border-accent)', background: 'var(--color-surface)',
+                            color: 'var(--color-primary-on-soft)', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                         }}
                     >
                         Check for more
@@ -402,14 +404,14 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                 <>
                     {/* Progress bar */}
                     <div style={{ marginBottom: '16px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#aaa', marginBottom: '4px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--color-text-subtle)', marginBottom: '4px' }}>
                             <span>{index + 1} of {total}</span>
                             <span>{reviewed} reviewed this session</span>
                         </div>
-                        <div style={{ height: '4px', background: '#e8eaf6', borderRadius: '2px', overflow: 'hidden' }}>
+                        <div style={{ height: '4px', background: 'var(--color-border-accent)', borderRadius: '2px', overflow: 'hidden' }}>
                             <div style={{
                                 height: '100%', borderRadius: '2px',
-                                background: '#3949ab',
+                                background: 'var(--color-primary)',
                                 width: `${progress}%`,
                                 transition: 'width 0.3s ease',
                             }} />
@@ -419,8 +421,8 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                     {feedback ? (
                         /* ── Feedback panel ─────────────────────────────── */
                         <div style={{
-                            background: feedback.correct ? '#f1f8e9' : '#fff8e1',
-                            border: `1px solid ${feedback.correct ? '#a5d6a7' : '#ffe082'}`,
+                            background: feedback.correct ? 'var(--color-success-bg)' : 'var(--color-warning-bg)',
+                            border: `1px solid ${feedback.correct ? 'var(--color-success-border)' : 'var(--color-warning-border)'}`,
                             borderRadius: '8px',
                             padding: 'clamp(20px, 5vw, 28px) clamp(16px, 5vw, 24px)',
                             textAlign: 'center',
@@ -434,7 +436,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                             <div style={{
                                 fontSize: 'clamp(22px, 6vw, 28px)',
                                 fontWeight: 700,
-                                color: feedback.correct ? '#2e7d32' : '#e65100',
+                                color: feedback.correct ? 'var(--color-success)' : 'var(--color-warning)',
                             }}>
                                 {feedback.correct ? '✓ Correct' : '✗ Incorrect'}
                             </div>
@@ -444,9 +446,9 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                                 data-testid="srs-feedback-answer"
                                 style={{
                                     fontSize: '13px',
-                                    color: '#555',
-                                    background: '#fff',
-                                    border: '1px solid #e0e0e0',
+                                    color: 'var(--color-text)',
+                                    background: 'var(--color-surface)',
+                                    border: '1px solid var(--color-border)',
                                     borderRadius: '6px',
                                     padding: '8px 16px',
                                     maxWidth: '100%',
@@ -454,16 +456,16 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                                     wordBreak: 'break-word',
                                 }}
                             >
-                                <span style={{ color: '#999', marginRight: '6px' }}>
+                                <span style={{ color: 'var(--color-text-subtle)', marginRight: '6px' }}>
                                     {feedback.direction === 'active' ? 'Target:' : 'Means:'}
                                 </span>
-                                <span style={{ fontWeight: 700, color: '#1a237e' }}>{feedback.answerText}</span>
+                                <span style={{ fontWeight: 700, color: 'var(--color-text-strong)' }}>{feedback.answerText}</span>
                             </div>
 
                             {/* What the user typed (active cards only) */}
                             {feedback.direction === 'active' && feedback.submitted !== undefined && (
                                 <div style={{
-                                    fontSize: '12px', color: '#666',
+                                    fontSize: '12px', color: 'var(--color-text-muted)',
                                     maxWidth: '100%',
                                     overflowWrap: 'anywhere',
                                     wordBreak: 'break-word',
@@ -475,7 +477,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                             {/* Optional LLM verdict */}
                             {feedback.message && (
                                 <div style={{
-                                    fontSize: '12px', color: '#555',
+                                    fontSize: '12px', color: 'var(--color-text)',
                                     maxWidth: '420px',
                                     overflowWrap: 'anywhere',
                                     wordBreak: 'break-word',
@@ -492,8 +494,8 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                                     minHeight: '44px',
                                     borderRadius: '6px',
                                     border: 'none',
-                                    background: '#3949ab',
-                                    color: '#fff',
+                                    background: 'var(--color-primary)',
+                                    color: 'var(--color-primary-text)',
                                     fontSize: '14px',
                                     fontWeight: 600,
                                     cursor: 'pointer',
@@ -506,8 +508,8 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                     ) : (
                         /* ── Review card ────────────────────────────────── */
                         <div style={{
-                            background: '#fff',
-                            border: '1px solid #e8eaf6',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border-accent)',
                             borderRadius: '8px',
                             padding: 'clamp(20px, 5vw, 28px) clamp(16px, 5vw, 24px)',
                             textAlign: 'center',
@@ -518,7 +520,8 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                             justifyContent: 'center',
                             gap: '16px',
                         }}>
-                            {/* Direction badge */}
+                            {/* Direction badge — semantic info/warning palette,
+                                kept fixed so passive/active stays recognisable. */}
                             <span style={{
                                 fontSize: '10px', fontWeight: 700,
                                 textTransform: 'uppercase', letterSpacing: '0.08em',
@@ -535,7 +538,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                                 Fluid font: 24px on phone, 32px on desktop. */}
                             <div style={{
                                 fontSize: 'clamp(24px, 7vw, 32px)',
-                                fontWeight: 700, color: '#1a237e', lineHeight: 1.2,
+                                fontWeight: 700, color: 'var(--color-text-strong)', lineHeight: 1.2,
                                 maxWidth: '100%',
                                 overflowWrap: 'anywhere',
                                 wordBreak: 'break-word',
@@ -544,14 +547,14 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                             </div>
 
                             {/* Instruction */}
-                            <p style={{ margin: 0, fontSize: '13px', color: '#888' }}>
+                            <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>
                                 {current.direction === 'passive'
                                     ? 'Do you recognise and understand this?'
                                     : 'Type the German for this item.'}
                             </p>
 
                             {/* Level indicators */}
-                            <div style={{ display: 'flex', gap: '14px', fontSize: '11px', color: '#bbb', flexWrap: 'wrap', justifyContent: 'center' }}>
+                            <div style={{ display: 'flex', gap: '14px', fontSize: '11px', color: 'var(--color-text-subtle)', flexWrap: 'wrap', justifyContent: 'center' }}>
                                 <span>passive {current.passive_level}</span>
                                 <span>active {current.active_level}</span>
                                 <span>rep {current.repetitions}</span>
@@ -570,7 +573,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                             <button
                                 onClick={advance}
                                 style={{
-                                    background: 'none', border: 'none', color: '#bbb',
+                                    background: 'none', border: 'none', color: 'var(--color-text-subtle)',
                                     fontSize: '12px', cursor: 'pointer',
                                 }}
                             >

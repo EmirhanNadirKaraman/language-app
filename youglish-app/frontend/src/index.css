@@ -187,6 +187,97 @@ textarea {
     --safe-top:    env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
 
+    /* --------------------------------------------------------------------
+       Theme tokens (#20). Components consume these via inline `var(--...)`
+       so they auto-flip with `[data-theme="dark"]` below. The user's saved
+       `dark_mode` preference (settings JSONB) drives the data-theme attribute
+       on <html> via App.tsx Layout. No prefers-color-scheme — the user's
+       explicit choice wins.
+
+       Semantic groups:
+         --color-bg / -surface / -surface-muted / -surface-sunken / -input-bg
+         --color-text / -text-strong / -text-muted / -text-subtle
+         --color-border / -border-accent / -border-subtle / -input-border
+         --color-primary / -primary-text / -primary-soft / -primary-on-soft
+         --color-success / -success-bg / -success-border
+         --color-warning / -warning-bg / -warning-border
+         --color-danger / -danger-bg / -danger-border
+         --shadow-card
+
+       Word-status colors (known / learning / unknown) stay user-configurable
+       via `prefs.*_word_color` — see config/wordColors.ts. They are NOT in
+       this token set.
+    -------------------------------------------------------------------- */
+    --color-bg:              #fafafa;
+    --color-surface:         #ffffff;
+    --color-surface-muted:   #fafafa;
+    --color-surface-sunken:  #f8f9ff;
+    --color-input-bg:        #ffffff;
+
+    --color-text:            #222222;
+    --color-text-strong:     #1a237e;
+    --color-text-muted:      #666666;
+    --color-text-subtle:     #999999;
+
+    --color-border:          #e0e0e0;
+    --color-border-accent:   #c5cae9;
+    --color-border-subtle:   #f0f0f0;
+    --color-input-border:    #cccccc;
+
+    --color-primary:         #1a237e;
+    --color-primary-text:    #ffffff;
+    --color-primary-soft:    #e8eaf6;
+    --color-primary-on-soft: #1a237e;
+
+    --color-success:         #2e7d32;
+    --color-success-bg:      #e8f5e9;
+    --color-success-border:  #c8e6c9;
+    --color-warning:         #e65100;
+    --color-warning-bg:      #fff8e1;
+    --color-warning-border:  #ffe082;
+    --color-danger:          #c62828;
+    --color-danger-bg:       #ffebee;
+    --color-danger-border:   #ffcdd2;
+
+    --shadow-card:           0 4px 16px rgba(0, 0, 0, 0.10);
+}
+
+[data-theme="dark"] {
+    --color-bg:              #121212;
+    --color-surface:         #1e1e2e;
+    --color-surface-muted:   #2a2a3e;
+    --color-surface-sunken:  #1a1a2e;
+    --color-input-bg:        #2d2d2d;
+
+    --color-text:            #e0e0e0;
+    --color-text-strong:     #c5cae9;
+    --color-text-muted:      #aaaaaa;
+    --color-text-subtle:     #777777;
+
+    --color-border:          #333333;
+    --color-border-accent:   #444444;
+    --color-border-subtle:   #2a2a2a;
+    --color-input-border:    #555555;
+
+    --color-primary:         #7986cb;
+    --color-primary-text:    #ffffff;
+    --color-primary-soft:    #283593;
+    --color-primary-on-soft: #c5cae9;
+
+    --color-success:         #66bb6a;
+    --color-success-bg:      #1b3a1f;
+    --color-success-border:  #388e3c;
+    --color-warning:         #ffa726;
+    --color-warning-bg:      #3a2a0a;
+    --color-warning-border:  #f57c00;
+    --color-danger:          #ef5350;
+    --color-danger-bg:       #3a1b1b;
+    --color-danger-border:   #c62828;
+
+    --shadow-card:           0 4px 16px rgba(0, 0, 0, 0.40);
+
+    color-scheme: dark;
+
     font: 18px/145% var(--sans);
     letter-spacing: 0.18px;
     color-scheme: light dark;
@@ -244,6 +335,22 @@ input,
 textarea,
 select {
     color-scheme: light;
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+    color-scheme: dark;
+    background: var(--color-input-bg);
+    color: var(--color-text);
+    border-color: var(--color-input-border);
+}
+
+/* Smooth body background flip on theme toggle. */
+body {
+    background: var(--color-bg);
+    color: var(--color-text);
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 html,

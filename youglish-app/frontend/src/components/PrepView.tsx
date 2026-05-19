@@ -77,13 +77,13 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
             </button>
 
             {loading && (
-                <p style={{ fontSize: '14px', color: '#aaa', padding: '24px 0', textAlign: 'center' }}>
+                <p style={{ fontSize: '14px', color: 'var(--color-text-subtle)', padding: '24px 0', textAlign: 'center' }}>
                     Loading prep info…
                 </p>
             )}
 
             {error && (
-                <p style={{ fontSize: '13px', color: '#c62828' }}>{error}</p>
+                <p style={{ fontSize: '13px', color: 'var(--color-danger)' }}>{error}</p>
             )}
 
             {!loading && prep && (
@@ -91,17 +91,17 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                     {/* Item header */}
                     <div style={{ marginBottom: '16px' }}>
                         <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '26px', fontWeight: 700, color: '#111' }}>
+                            <span style={{ fontSize: '26px', fontWeight: 700, color: 'var(--color-text)' }}>
                                 {prep.display_text}
                             </span>
                             <span style={{
-                                fontSize: '11px', fontWeight: 600, color: '#888',
-                                background: '#f5f5f5', padding: '2px 7px', borderRadius: '4px',
+                                fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)',
+                                background: 'var(--color-surface-muted)', padding: '2px 7px', borderRadius: '4px',
                             }}>
                                 {itemTypeLabel}
                             </span>
                         </div>
-                        <div style={{ fontSize: '15px', color: '#555', marginTop: '4px' }}>
+                        <div style={{ fontSize: '15px', color: 'var(--color-text-muted)', marginTop: '4px' }}>
                             {prep.translation}
                         </div>
                         {prep.grammar_structure && (
@@ -110,8 +110,8 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                                 marginTop: '6px',
                                 fontSize: '12px',
                                 fontWeight: 600,
-                                color: '#1565c0',
-                                background: '#e3f2fd',
+                                color: 'var(--color-primary-on-soft)',
+                                background: 'var(--color-primary-soft)',
                                 padding: '3px 10px',
                                 borderRadius: '12px',
                             }}>
@@ -122,7 +122,7 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
 
                     {/* Grammar explanation (expand/collapse) */}
                     <div style={{
-                        border: '1px solid #e8eaf6',
+                        border: '1px solid var(--color-border-accent)',
                         borderRadius: '6px',
                         overflow: 'hidden',
                         marginBottom: '16px',
@@ -135,12 +135,12 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                                 alignItems: 'center',
                                 width: '100%',
                                 padding: '9px 12px',
-                                background: '#f8f9ff',
+                                background: 'var(--color-surface-sunken)',
                                 border: 'none',
                                 cursor: 'pointer',
                                 fontSize: '12px',
                                 fontWeight: 600,
-                                color: '#1a237e',
+                                color: 'var(--color-primary-on-soft)',
                             }}
                         >
                             <span>Grammar explanation</span>
@@ -151,8 +151,8 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                                 padding: '10px 12px',
                                 fontSize: '13px',
                                 lineHeight: 1.6,
-                                color: '#333',
-                                background: '#fff',
+                                color: 'var(--color-text)',
+                                background: 'var(--color-surface)',
                             }}>
                                 {prep.grammar_explanation}
                             </div>
@@ -162,7 +162,7 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                     {/* Examples section */}
                     <div style={{ marginBottom: '20px' }}>
                         <div style={{
-                            fontSize: '11px', fontWeight: 700, color: '#888',
+                            fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)',
                             textTransform: 'uppercase', letterSpacing: '0.06em',
                             marginBottom: '8px',
                         }}>
@@ -173,12 +173,12 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                             <div style={{
                                 fontSize: '14px',
                                 fontStyle: 'italic',
-                                color: '#222',
+                                color: 'var(--color-text)',
                                 lineHeight: 1.5,
                                 padding: '8px 12px',
-                                background: '#f8f9ff',
+                                background: 'var(--color-surface-sunken)',
                                 borderRadius: '6px',
-                                borderLeft: '3px solid #c5cae9',
+                                borderLeft: '3px solid var(--color-border-accent)',
                                 marginBottom: '12px',
                             }}>
                                 {example}
@@ -190,9 +190,9 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                                 style={{
                                     padding: '10px 18px',
                                     borderRadius: '6px',
-                                    border: '1px dashed #c5cae9',
-                                    background: '#fff',
-                                    color: '#1a237e',
+                                    border: '1px dashed var(--color-border-accent)',
+                                    background: 'var(--color-surface)',
+                                    color: 'var(--color-primary-on-soft)',
                                     fontSize: '13px',
                                     fontWeight: 600,
                                     cursor: generating ? 'not-allowed' : 'pointer',
@@ -209,7 +209,7 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                         {templates.length > 0 && (
                             <>
                                 <div style={{
-                                    fontSize: '11px', fontWeight: 700, color: '#888',
+                                    fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)',
                                     textTransform: 'uppercase', letterSpacing: '0.06em',
                                     marginBottom: '6px',
                                 }}>
@@ -219,11 +219,11 @@ export function PrepView({ token, item, language, onClose, onStartPractice }: Pr
                                     {templates.map((t, i) => (
                                         <div key={i} style={{
                                             fontSize: '13px',
-                                            color: '#333',
+                                            color: 'var(--color-text)',
                                             padding: '7px 11px',
-                                            background: '#fff8e1',
+                                            background: 'var(--color-warning-bg)',
                                             borderRadius: '6px',
-                                            borderLeft: '3px solid #ffe082',
+                                            borderLeft: '3px solid var(--color-warning-border)',
                                             lineHeight: 1.4,
                                         }}>
                                             {t}
@@ -291,7 +291,7 @@ function LinkedGrammarRules({
     return (
         <div style={{ marginBottom: '20px' }}>
             <div style={{
-                fontSize: '11px', fontWeight: 700, color: '#888',
+                fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)',
                 textTransform: 'uppercase', letterSpacing: '0.06em',
                 marginBottom: '8px',
             }}>
@@ -306,9 +306,9 @@ function LinkedGrammarRules({
                                 // ≥36px chip — single-button row, room to be tall.
                                 padding: '8px 14px',
                                 borderRadius: '14px',
-                                border: '1px solid #c8e6c9',
-                                background: openSlug === rule.slug ? '#e8f5e9' : '#f9fbe7',
-                                color: '#1b5e20',
+                                border: '1px solid var(--color-success-border)',
+                                background: openSlug === rule.slug ? 'var(--color-success-bg)' : 'var(--color-surface)',
+                                color: 'var(--color-success)',
                                 fontSize: '13px',
                                 fontWeight: 600,
                                 cursor: 'pointer',
@@ -325,7 +325,7 @@ function LinkedGrammarRules({
                                 <span style={{
                                     fontFamily: 'monospace',
                                     fontWeight: 400,
-                                    color: '#388e3c',
+                                    color: 'var(--color-success)',
                                     fontSize: '11px',
                                     marginLeft: '2px',
                                 }}>

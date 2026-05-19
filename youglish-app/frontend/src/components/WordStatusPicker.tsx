@@ -25,26 +25,26 @@ export function WordStatusPicker({ word, lookup, loading, saving, onSelect, onDi
             alignItems: 'center',
             gap: '10px',
             padding: '9px clamp(10px, 3vw, 16px)',
-            borderTop: '1px solid #e8eaf6',
-            background: '#f5f6ff',
+            borderTop: '1px solid var(--color-border-accent)',
+            background: 'var(--color-surface-sunken)',
             flexWrap: 'wrap',
         }}>
-            <span style={{ fontWeight: 700, color: '#1a237e', fontSize: '15px', flexShrink: 0 }}>
+            <span style={{ fontWeight: 700, color: 'var(--color-text-strong)', fontSize: '15px', flexShrink: 0 }}>
                 {word}
             </span>
 
             {loading && (
-                <span style={{ color: '#aaa', fontSize: '13px' }}>Looking up…</span>
+                <span style={{ color: 'var(--color-text-subtle)', fontSize: '13px' }}>Looking up…</span>
             )}
 
             {!loading && !lookup && (
-                <span style={{ color: '#aaa', fontSize: '13px' }}>Not in vocabulary</span>
+                <span style={{ color: 'var(--color-text-subtle)', fontSize: '13px' }}>Not in vocabulary</span>
             )}
 
             {!loading && lookup && (
                 <>
                     {lookup.lemma.toLowerCase() !== word.toLowerCase() && (
-                        <span style={{ color: '#888', fontSize: '12px' }}>({lookup.lemma})</span>
+                        <span style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>({lookup.lemma})</span>
                     )}
                     {/* Status row wraps on narrow phones so all 3 buttons stay
                         tappable instead of overflowing horizontally. */}
@@ -64,7 +64,7 @@ export function WordStatusPicker({ word, lookup, loading, saving, onSelect, onDi
                                         padding: '7px 14px',
                                         borderRadius: '12px',
                                         border: `1px solid ${s.color}`,
-                                        background: active ? s.bg : '#fff',
+                                        background: active ? s.bg : 'var(--color-surface)',
                                         color: s.color,
                                         fontSize: '13px',
                                         fontWeight: active ? 700 : 400,
@@ -94,7 +94,7 @@ export function WordStatusPicker({ word, lookup, loading, saving, onSelect, onDi
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
-                    color: '#aaa',
+                    color: 'var(--color-text-subtle)',
                     fontSize: '20px',
                     lineHeight: 1,
                     padding: 0,
@@ -151,7 +151,7 @@ function ProgressSection({ passiveLevel, activeLevel, passiveDue, activeDue, isK
     return (
         <div style={{
             width: '100%',
-            borderTop: '1px solid #e8eaf6',
+            borderTop: '1px solid var(--color-border-accent)',
             marginTop: '6px',
             paddingTop: '6px',
             display: 'flex',
@@ -171,13 +171,13 @@ function ProgressRow({ label, dots, dueText }: {
 }) {
     return (
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
-            <span style={{ color: '#757575', width: '72px', flexShrink: 0 }}>{label}</span>
+            <span style={{ color: 'var(--color-text-muted)', width: '72px', flexShrink: 0 }}>{label}</span>
             <Dots filled={dots.filled} empty={dots.empty} />
             {dueText && (
                 <span style={{
                     fontSize: '11px',
-                    color: '#e65100',
-                    background: '#fff3e0',
+                    color: 'var(--color-warning)',
+                    background: 'var(--color-warning-bg)',
                     borderRadius: '8px',
                     padding: '1px 7px',
                     flexShrink: 0,

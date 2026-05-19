@@ -28,7 +28,6 @@ interface Props {
   onSaved: (sel: ReadingSelection) => void;
   onDeleted: (selectionId: string) => void;
   onClear: () => void;
-  dk?: boolean;
 }
 
 // ── Surface text construction ─────────────────────────────────────────────────
@@ -54,7 +53,6 @@ export function SelectionPanel({
   onSaved,
   onDeleted,
   onClear,
-  dk = false,
 }: Props) {
   const [translation, setTranslation] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<string | null>(null);
@@ -154,9 +152,9 @@ export function SelectionPanel({
   return (
     <div style={{
       flex: '0 0 340px',
-      borderLeft: `1px solid ${dk ? '#333' : '#e8eaf6'}`,
+      borderLeft: '1px solid var(--color-border)',
       overflowY: 'auto',
-      background: dk ? '#1a1a2e' : '#f8f9ff',
+      background: 'var(--color-surface-sunken)',
       display: 'flex',
       flexDirection: 'column',
     }}>
@@ -165,11 +163,11 @@ export function SelectionPanel({
         display: 'flex',
         alignItems: 'center',
         padding: '10px 14px',
-        borderBottom: `1px solid ${dk ? '#333' : '#e8eaf6'}`,
-        background: dk ? '#2a2a4e' : '#e8eaf6',
+        borderBottom: '1px solid var(--color-border)',
+        background: 'var(--color-primary-soft)',
         flexShrink: 0,
       }}>
-        <span style={{ fontWeight: 700, fontSize: '13px', color: dk ? '#9fa8da' : '#1a237e', flex: 1 }}>
+        <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-primary-on-soft)', flex: 1 }}>
           Selection
         </span>
         <span style={{ fontSize: '11px', color: '#7986cb', marginRight: '10px' }}>
@@ -180,7 +178,7 @@ export function SelectionPanel({
           style={{
             // 340px sidebar context — 36×36 keeps the header tidy while still tappable.
             background: 'none', border: 'none', cursor: 'pointer',
-            color: '#9fa8da', fontSize: '20px', lineHeight: 1,
+            color: 'var(--color-primary-on-soft)', fontSize: '20px', lineHeight: 1,
             minWidth: '36px', minHeight: '36px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             padding: 0,
@@ -201,7 +199,7 @@ export function SelectionPanel({
           <div style={{
             fontSize: '22px',
             fontWeight: 700,
-            color: dk ? '#9fa8da' : '#1a237e',
+            color: 'var(--color-primary-on-soft)',
             lineHeight: 1.3,
             wordBreak: 'break-word',
           }}>
@@ -226,11 +224,11 @@ export function SelectionPanel({
         {sentenceText && (
           <div style={{
             fontSize: '12px',
-            color: dk ? '#aaa' : '#666',
+            color: 'var(--color-text-muted)',
             fontStyle: 'italic',
             lineHeight: 1.6,
-            background: dk ? '#1e1e2e' : '#fff',
-            border: `1px solid ${dk ? '#333' : '#e8eaf6'}`,
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border)',
             borderRadius: '5px',
             padding: '8px 10px',
           }}>
@@ -244,12 +242,12 @@ export function SelectionPanel({
             <button
               onClick={handleTranslate}
               disabled={translating || !sentenceText}
-              style={llmBtnStyle('#1565c0', translating, dk)}
+              style={llmBtnStyle('#1565c0', translating)}
             >
               {translating ? 'Translating…' : 'Translate sentence'}
             </button>
           ) : (
-            <div style={llmResultStyle(dk ? '#0d253f' : '#e3f2fd', dk ? '#90caf9' : '#0d47a1')}>
+            <div style={llmResultStyle('var(--color-primary-soft)', 'var(--color-primary-on-soft)')}>
               <div style={{ fontSize: '10px', color: '#42a5f5', marginBottom: '4px', fontStyle: 'normal', fontWeight: 600 }}>
                 Translation
               </div>
@@ -264,12 +262,12 @@ export function SelectionPanel({
             <button
               onClick={handleExplain}
               disabled={explaining || !sentenceText}
-              style={llmBtnStyle('#2e7d32', explaining, dk)}
+              style={llmBtnStyle('#2e7d32', explaining)}
             >
               {explaining ? 'Explaining…' : 'Explain in context'}
             </button>
           ) : (
-            <div style={llmResultStyle(dk ? '#0d2a12' : '#e8f5e9', dk ? '#a5d6a7' : '#1b5e20')}>
+            <div style={llmResultStyle('var(--color-success-bg)', 'var(--color-success)')}>
               <div style={{ fontSize: '10px', color: '#66bb6a', marginBottom: '4px', fontStyle: 'normal', fontWeight: 600 }}>
                 Explanation
               </div>
@@ -280,7 +278,7 @@ export function SelectionPanel({
 
         {/* Note */}
         <div>
-          <label style={{ fontSize: '11px', color: dk ? '#aaa' : '#888', display: 'block', marginBottom: '4px' }}>
+          <label style={{ fontSize: '11px', color: 'var(--color-text-muted)', display: 'block', marginBottom: '4px' }}>
             Note (optional)
           </label>
           <textarea
@@ -293,13 +291,13 @@ export function SelectionPanel({
               width: '100%',
               fontSize: '16px',
               padding: '8px 10px',
-              border: `1px solid ${dk ? '#444' : '#c5cae9'}`,
+              border: '1px solid var(--color-border-accent)',
               borderRadius: '4px',
               resize: 'vertical',
               boxSizing: 'border-box',
               fontFamily: 'inherit',
-              background: dk ? '#1e1e2e' : '#fff',
-              color: dk ? '#e0e0e0' : undefined,
+              background: 'var(--color-input-bg)',
+              color: 'var(--color-text)',
             }}
             data-testid="selection-note"
           />
@@ -307,7 +305,7 @@ export function SelectionPanel({
 
         {/* Error */}
         {error && (
-          <p style={{ margin: 0, fontSize: '12px', color: '#d32f2f' }}>{error}</p>
+          <p style={{ margin: 0, fontSize: '12px', color: 'var(--color-danger)' }}>{error}</p>
         )}
 
         {/* Actions */}
@@ -321,8 +319,8 @@ export function SelectionPanel({
                 padding: '10px',
                 borderRadius: '5px',
                 border: 'none',
-                background: saved ? '#e8f5e9' : '#1a237e',
-                color: saved ? '#388e3c' : '#fff',
+                background: saved ? 'var(--color-success-bg)' : 'var(--color-primary)',
+                color: saved ? 'var(--color-success)' : 'var(--color-primary-text)',
                 fontSize: '13px',
                 fontWeight: 600,
                 cursor: saving || saved ? 'default' : 'pointer',
@@ -338,9 +336,9 @@ export function SelectionPanel({
               style={{
                 padding: '10px 14px',
                 borderRadius: '5px',
-                border: `1px solid ${dk ? '#444' : '#c5cae9'}`,
-                background: dk ? '#1e1e2e' : '#fff',
-                color: dk ? '#aaa' : '#555',
+                border: '1px solid var(--color-border-accent)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-text-muted)',
                 fontSize: '13px',
                 cursor: 'pointer',
                 minHeight: '40px',
@@ -357,9 +355,9 @@ export function SelectionPanel({
               style={{
                 padding: '10px 14px',
                 borderRadius: '5px',
-                border: '1px solid #ffcdd2',
-                background: '#ffebee',
-                color: '#d32f2f',
+                border: '1px solid var(--color-danger-border)',
+                background: 'var(--color-danger-bg)',
+                color: 'var(--color-danger)',
                 fontSize: '13px',
                 cursor: 'pointer',
                 minHeight: '40px',
@@ -374,9 +372,9 @@ export function SelectionPanel({
                 flex: 1,
                 padding: '10px',
                 borderRadius: '5px',
-                border: `1px solid ${dk ? '#444' : '#c5cae9'}`,
-                background: dk ? '#1e1e2e' : '#fff',
-                color: dk ? '#aaa' : '#555',
+                border: '1px solid var(--color-border-accent)',
+                background: 'var(--color-surface)',
+                color: 'var(--color-text-muted)',
                 fontSize: '13px',
                 cursor: 'pointer',
                 minHeight: '40px',
@@ -390,8 +388,8 @@ export function SelectionPanel({
 
         {/* Saved selections on this page — mini review */}
         {savedSelections.length > 0 && (
-          <div style={{ marginTop: '8px', borderTop: `1px solid ${dk ? '#333' : '#e8eaf6'}`, paddingTop: '10px' }}>
-            <div style={{ fontSize: '11px', color: dk ? '#aaa' : '#888', marginBottom: '8px' }}>
+          <div style={{ marginTop: '8px', borderTop: '1px solid var(--color-border)', paddingTop: '10px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '8px' }}>
               Saved on this page ({savedSelections.length})
             </div>
             {savedSelections.map(sel => (
@@ -400,7 +398,6 @@ export function SelectionPanel({
                 selection={sel}
                 blockTokenMap={blockTokenMap}
                 onDelete={() => handleDelete(sel.selection_id)}
-                dk={dk}
               />
             ))}
           </div>
@@ -416,12 +413,10 @@ function SavedSelectionRow({
   selection,
   blockTokenMap,
   onDelete,
-  dk = false,
 }: {
   selection: ReadingSelection;
   blockTokenMap: Map<number, Set<string>>;
   onDelete: () => void;
-  dk?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -433,8 +428,8 @@ function SavedSelectionRow({
 
   return (
     <div style={{
-      background: dk ? '#1e1e2e' : '#fff',
-      border: `1px solid ${dk ? '#333' : '#e8eaf6'}`,
+      background: 'var(--color-surface)',
+      border: '1px solid var(--color-border)',
       borderRadius: '5px',
       marginBottom: '6px',
       overflow: 'hidden',
@@ -451,14 +446,14 @@ function SavedSelectionRow({
       >
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <span style={{ fontSize: '13px', fontWeight: 600, color: dk ? '#9fa8da' : '#1a237e' }}>
+            <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-primary-on-soft)' }}>
               {selection.surface_text}
             </span>
             {isStale && (
               <span style={{
                 fontSize: '9px',
-                color: '#d32f2f',
-                background: '#ffebee',
+                color: 'var(--color-danger)',
+                background: 'var(--color-danger-bg)',
                 borderRadius: '4px',
                 padding: '2px 6px',
               }}>
@@ -471,22 +466,22 @@ function SavedSelectionRow({
           onClick={e => { e.stopPropagation(); onDelete(); }}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
-            color: '#ccc', fontSize: '14px', lineHeight: 1, padding: 0,
+            color: 'var(--color-text-subtle)', fontSize: '14px', lineHeight: 1, padding: 0,
           }}
           title="Delete"
         >
           ×
         </button>
-        <span style={{ fontSize: '11px', color: '#aaa' }}>{expanded ? '▲' : '▼'}</span>
+        <span style={{ fontSize: '11px', color: 'var(--color-text-subtle)' }}>{expanded ? '▲' : '▼'}</span>
       </div>
       {expanded && (
-        <div style={{ padding: '6px 10px 10px', borderTop: `1px solid ${dk ? '#333' : '#f0f0f0'}`, fontSize: '12px', color: dk ? '#aaa' : '#555' }}>
+        <div style={{ padding: '6px 10px 10px', borderTop: '1px solid var(--color-border-subtle)', fontSize: '12px', color: 'var(--color-text-muted)' }}>
           {selection.note && (
-            <div style={{ marginBottom: '6px', color: dk ? '#ccc' : '#333' }}>
+            <div style={{ marginBottom: '6px', color: 'var(--color-text)' }}>
               <em>{selection.note}</em>
             </div>
           )}
-          <div style={{ color: '#888', fontStyle: 'italic' }}>
+          <div style={{ color: 'var(--color-text-subtle)', fontStyle: 'italic' }}>
             {selection.sentence_text.length > 120
               ? selection.sentence_text.slice(0, 120) + '…'
               : selection.sentence_text}
@@ -499,14 +494,14 @@ function SavedSelectionRow({
 
 // ── Style helpers ─────────────────────────────────────────────────────────────
 
-function llmBtnStyle(color: string, disabled: boolean, dk = false): React.CSSProperties {
+function llmBtnStyle(color: string, disabled: boolean): React.CSSProperties {
   return {
     width: '100%',
     padding: '10px 12px',
     borderRadius: '5px',
     border: `1px solid ${color}40`,
-    background: disabled ? (dk ? '#2a2a2a' : '#f5f5f5') : `${color}10`,
-    color: disabled ? '#aaa' : color,
+    background: disabled ? 'var(--color-surface-muted)' : `${color}10`,
+    color: disabled ? 'var(--color-text-subtle)' : color,
     fontSize: '13px',
     fontWeight: 600,
     cursor: disabled ? 'wait' : 'pointer',

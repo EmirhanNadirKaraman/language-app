@@ -5,16 +5,17 @@ import type { ContentRequest } from '../api/contentRequests';
 interface Props {
     token: string;
     onClose: () => void;
-    darkMode?: boolean;
 }
 
+// Status pill colours are semantic — fixed regardless of theme so users can
+// recognise pending/done/failed at a glance. Stays out of the theme system.
 const STATUS_STYLES: Record<string, React.CSSProperties> = {
     pending: { background: '#fff8e1', color: '#e65100', border: '1px solid #ffe082' },
     done:    { background: '#e8f5e9', color: '#2e7d32', border: '1px solid #c8e6c9' },
     failed:  { background: '#ffebee', color: '#c62828', border: '1px solid #ffcdd2' },
 };
 
-export function ContentRequestPage({ token, onClose, darkMode = false }: Props) {
+export function ContentRequestPage({ token, onClose }: Props) {
     const [requestType, setRequestType] = useState<'channel' | 'video'>('channel');
     const [contentId, setContentId] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -58,22 +59,13 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
         }
     }
 
-    const bg    = darkMode ? '#1e1e1e' : '#fff';
-    const text  = darkMode ? '#e0e0e0' : '#222';
-    const muted = darkMode ? '#aaa'    : '#666';
-    const border = darkMode ? '#333'   : '#e0e0e0';
-    const inputBg = darkMode ? '#2a2a2a' : '#fff';
-    const inputBorder = darkMode ? '#444' : '#ccc';
-    const tabActiveBg = darkMode ? '#1a237e' : '#e8eaf6';
-    const tabActiveColor = darkMode ? '#fff' : '#1a237e';
-
     const hint = requestType === 'channel'
         ? 'YouTube channel ID — starts with UC, e.g. UCxxxxxxxxxxxxxxxxxxxxxxxx'
         : 'YouTube video ID — 11 characters, e.g. dQw4w9WgXcQ';
 
     return (
         <div style={{
-            background: bg, color: text, borderRadius: '10px',
+            background: 'var(--color-surface)', color: 'var(--color-text)', borderRadius: '10px',
             // #27f: fluid side padding so 320–375px viewports keep more room.
             padding: 'clamp(16px, 4vw, 24px)',
             maxWidth: '640px', margin: '0 auto',
@@ -84,7 +76,7 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
 
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <h2 style={{ margin: 0, fontSize: '18px', color: '#1a237e' }}>Request Content</h2>
+                <h2 style={{ margin: 0, fontSize: '18px', color: 'var(--color-text-strong)' }}>Request Content</h2>
                 <button
                     data-testid="content-request-close"
                     onClick={onClose}
@@ -93,7 +85,7 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
                         minWidth: '44px', minHeight: '44px',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         background: 'none', border: 'none', fontSize: '20px',
-                        cursor: 'pointer', color: muted,
+                        cursor: 'pointer', color: 'var(--color-text-muted)',
                         padding: 0,
                         touchAction: 'manipulation',
                     }}
@@ -114,9 +106,9 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
                                 // ≥36px tappable secondary action.
                                 minHeight: '36px',
                                 padding: '8px 20px', borderRadius: '6px', fontSize: '14px', fontWeight: 600,
-                                cursor: 'pointer', border: '1px solid #c5cae9',
-                                background: requestType === t ? tabActiveBg : (darkMode ? '#2a2a2a' : '#fff'),
-                                color: requestType === t ? tabActiveColor : muted,
+                                cursor: 'pointer', border: '1px solid var(--color-border-accent)',
+                                background: requestType === t ? 'var(--color-primary-soft)' : 'var(--color-surface)',
+                                color: requestType === t ? 'var(--color-primary-on-soft)' : 'var(--color-text-muted)',
                                 touchAction: 'manipulation',
                             }}
                         >
@@ -127,7 +119,7 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
 
                 {/* ID input */}
                 <div style={{ marginBottom: '8px' }}>
-                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: text }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '6px', color: 'var(--color-text)' }}>
                         {requestType === 'channel' ? 'Channel ID' : 'Video ID'}
                     </label>
                     <input
@@ -138,16 +130,16 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
                         // fontSize: 16px blocks iOS Safari focus-zoom. minHeight 44 for tap.
                         style={{
                             width: '100%', padding: '10px 12px', boxSizing: 'border-box',
-                            border: `1px solid ${inputBorder}`, borderRadius: '6px',
+                            border: '1px solid var(--color-input-border)', borderRadius: '6px',
                             fontSize: '16px',
                             minHeight: '44px',
                             fontFamily: 'monospace',
-                            background: inputBg, color: text,
+                            background: 'var(--color-input-bg)', color: 'var(--color-text)',
                         }}
                         autoComplete="off"
                         spellCheck={false}
                     />
-                    <p style={{ margin: '5px 0 0', fontSize: '12px', color: muted }}>{hint}</p>
+                    <p style={{ margin: '5px 0 0', fontSize: '12px', color: 'var(--color-text-muted)' }}>{hint}</p>
                 </div>
 
                 {submitError && (
@@ -181,23 +173,23 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
             {/* Existing requests */}
             <div style={{ marginTop: '32px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                    <h3 style={{ fontSize: '14px', fontWeight: 600, color: muted, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--color-text-muted)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                         Your Requests
                     </h3>
                     {requests.length > 5 && (
                         <button
                             onClick={() => setShowAll(v => !v)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: '#1a237e', fontWeight: 600, padding: 0 }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--color-primary-on-soft)', fontWeight: 600, padding: 0 }}
                         >
                             {showAll ? 'Show less' : `Show all (${requests.length})`}
                         </button>
                     )}
                 </div>
 
-                {loadError && <p style={{ color: '#c62828', fontSize: '13px' }}>{loadError}</p>}
+                {loadError && <p style={{ color: 'var(--color-danger)', fontSize: '13px' }}>{loadError}</p>}
 
                 {requests.length === 0 && !loadError && (
-                    <p style={{ color: muted, fontSize: '13px' }}>No requests yet.</p>
+                    <p style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>No requests yet.</p>
                 )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -207,20 +199,20 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
                             style={{
                                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                                 padding: '10px 14px', borderRadius: '8px',
-                                border: `1px solid ${border}`,
-                                background: darkMode ? '#2a2a2a' : '#fafafa',
+                                border: '1px solid var(--color-border)',
+                                background: 'var(--color-surface-muted)',
                                 gap: '12px', flexWrap: 'wrap',
                             }}
                         >
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0, flex: '1 1 200px' }}>
-                                <span style={{ fontSize: '12px', color: muted, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                     {r.request_type}
                                 </span>
-                                <span style={{ fontSize: '13px', fontFamily: 'monospace', color: text, wordBreak: 'break-all' }}>
+                                <span style={{ fontSize: '13px', fontFamily: 'monospace', color: 'var(--color-text)', wordBreak: 'break-all' }}>
                                     {r.content_id}
                                 </span>
                                 {r.error && (
-                                    <span style={{ fontSize: '12px', color: '#c62828', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{r.error}</span>
+                                    <span style={{ fontSize: '12px', color: 'var(--color-danger)', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{r.error}</span>
                                 )}
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>
@@ -231,7 +223,7 @@ export function ContentRequestPage({ token, onClose, darkMode = false }: Props) 
                                 }}>
                                     {r.status}
                                 </span>
-                                <span style={{ fontSize: '11px', color: muted }}>
+                                <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
                                     {new Date(r.created_at).toLocaleDateString()}
                                 </span>
                             </div>

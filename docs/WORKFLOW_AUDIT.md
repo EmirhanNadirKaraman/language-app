@@ -63,16 +63,18 @@ Each call is its own transaction.
 In `_maybe_promote` ([progression_service.py:217](../youglish-app/backend/services/progression_service.py)):
 ```
 if active_level >= active_threshold and status != 'known': → known
-elif passive_level >= passive_threshold and status == 'unknown': → learning
+elif passive_level >= passive_threshold and status == 'learning': → known   (Hole 9 fix)
+elif passive_level >= passive_threshold and status == 'unknown':  → learning
 ```
 
-With default `passive_threshold = 5` (line 60) and `transcript_clicked` adding 1 per click, a user must click the same word 5 times before it auto-promotes from unknown → learning. Reasonable.
+With default `passive_threshold = 5` (line 60) and `transcript_clicked` adding 1 per click, a user must click the same word 5 times before it auto-promotes from unknown → learning. The next passive event past threshold then promotes learning → known.
 
-🕳 **HOLE 9 (no path from `learning` → upper bound on passive).** Once status flips to `learning`, no further auto-promotion is possible without active events. A user could review the word correctly 100 times passively in SRS and the status would stay `learning` forever. The only paths to `known` are:
-- explicit user click on "Known",
-- `active_level ≥ 3` from `guided_counted` / `free_chat_used_correctly` / `active_review_correct` / `status_marked_known`.
-
-That's by design — production drives mastery, not recognition — but it should be **surfaced in the UI**. Today the user sees passive level 12 with a "learning" badge and no clear next step.
+✅ **HOLE 9 (RESOLVED 2026-05-19).** A second passive-promotion branch in `_maybe_promote` covers `learning → known` at the same per-user `passive_reps_for_known` threshold that already gates `unknown → learning`. Both transitions share the setting (the name "reps for known" was always the intent; the threshold was just only half-applied). Active level and active SRS are untouched by the passive promotion — passive mastery is recognition mastery, not production. Regression-guarded in `test_progression.py`:
+  - `test_passive_mastery_promotes_learning_to_known`
+  - `test_passive_below_threshold_keeps_learning`
+  - `test_passive_promotion_does_not_touch_active_level`
+  - `test_passive_promotion_does_not_advance_active_srs`
+  - `test_passive_promotion_known_status_is_sticky`
 
 ---
 
@@ -175,7 +177,17 @@ Once known:
 - Recommendation engine de-prioritises it (priority signals do not reward `known` items).
 - Insight cards skip it (filtered by status).
 
-🕳 **HOLE 26 (no de-mastery path).** If the user later marks the word back to `learning` or `unknown`, `status_marked_learning` rule has `passive_delta=1, passive_srs='create'`. It does NOT reset `passive_level` or `active_level`. So a word de-mastered from "Known → Learning" still has active_level=10. The SRS card's interval also isn't reset. Reviewing it brings up the original interval. Either reset on this transition, or never auto-promote back to `known` via Hole 8's `active_delta=1` partial logic.
+✅ **HOLE 26 (RESOLVED 2026-05-19).** Manual demotion is now an explicit branch inside `apply_progression`. When `status_override` lowers the prior status (known → learning, known → unknown, or learning → unknown), the additive rule is bypassed and `_apply_demotion` runs:
+
+- **known → learning**: `passive_level := 1`, `active_level := 0`, both SRS cards `reset` (force `due_date = NOW() + 1 day`, `interval_days = 1`, `repetitions = 0`, `ease_factor` preserved on existing cards). The `reset` action is new (defined in `_update_srs`) — it differs from `incorrect` by creating missing cards and by not penalising ease. So a missing active card (e.g. the user reached `known` via the manual confidence click only) gets created so production practice resumes.
+- **known → unknown**: `passive_level := 0`, `active_level := 0`, both SRS cards `incorrect` (existing cards penalised to 1 day, ease −0.15; missing cards remain missing — the documented `action='incorrect'` no-op).
+- **learning → unknown**: same as known → unknown.
+
+`times_seen` and `times_used_correctly` are NEVER touched by demotion — they record what happened, not what the user thinks. `_maybe_promote` is NOT called from the demotion branch: the chosen targets (passive ≤ 1, active = 0) can't cross thresholds, and even at threshold=1 the demotion is the user's explicit override.
+
+Transition detection uses a pure helper `_is_demotion(prior_status, new_status)` over the `unknown < learning < known` rank — unit-testable without a DB. Upgrades and same-status calls fall through to the existing additive path (unchanged: `unknown → learning` still applies `status_marked_learning` deltas; `learning → known` still preserves levels).
+
+Regression-guarded by 24 new tests in `test_progression.py` (8 unit + 16 integration), covering each transition + grammar_rule guard + post-demotion climb-back-to-known via production events.
 
 🕳 **HOLE 27 (silent forgetting).** There is no scheduled "did the user forget this?" check. Once an item is `known`, no event can autonomously knock it back to `learning`. Mastery is one-way unless the user manually reclassifies.
 

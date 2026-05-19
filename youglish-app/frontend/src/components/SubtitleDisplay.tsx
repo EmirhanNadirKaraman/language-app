@@ -47,7 +47,7 @@ export function SubtitleDisplay({ text, highlightTerms, onWordClick, onWordRight
                     fontWeight: 500,
                     lineHeight: 1.4,
                     textAlign: 'center',
-                    color: '#1a3a6c',
+                    color: 'var(--color-text-strong)',
                     whiteSpace: 'normal',
                     overflowWrap: 'anywhere',
                     wordBreak: 'break-word',

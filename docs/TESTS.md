@@ -104,7 +104,90 @@ Not catalogued individually here — owned by the pipeline modules and rarely to
 
 ## Tests added in this session
 
-🆕 **2026-05-19 (latest) — Global mobile touch-target audit (#27g)**
+🆕 **2026-05-19 (latest) — Dark-mode coverage (#20b)**
+
+Follow-up pass to #20a converting the 22 components that were still rendering hardcoded light colors. 23 components edited in total. Semantic palettes (status pills, mistake/freq badges, word-status colors, PrefButton accents, LLM tint colors) intentionally kept fixed.
+
+| Check | Outcome |
+|---|---|
+| `npx tsc --noEmit` clean | ✅ |
+| `npx vitest run` → 94/94 (was 90; +4 new theme tests) | ✅ |
+| `npm run build` → 421.30 kB JS / 116.03 kB gz | ✅ |
+
+### Tests touched
+
+- `src/test/theme.test.tsx` — added 4 tests for `PlayerControls`, `LoginForm`, `MessageInput`, `ReminderBanner` confirming they use `var(--color-*)` tokens.
+- `src/components/TranscriptPanel.test.tsx` — `applies active highlight style to the active sentence` updated. `toHaveStyle` shorthand can't compute `var(--color-primary)` in jsdom, so the assertion now reads `style.borderLeft` directly via `toContain`.
+
+### Files converted
+
+`PlayerView`, `PlayerControls`, `SubtitleDisplay`, `TranscriptPanel`, `WordStatusPicker`, `SearchBar`, `LoginForm`, `ReminderBanner`, `FreeChatPage`, `ChatWindow`, `TargetCard`, `MessageInput`, `RecommendationsPanel`, `RecommendationCards`, `FollowedChannelsSection`, `ReadingStatsPanel`, `InsightsSection`, `PrepView`, `GuidedChatPage`, `SessionSummaryCard`, `ErrorBoundary`, `PlaylistPanel`, `SRSReviewPage`.
+
+### Files NOT converted (semantic / intentional)
+
+`ResultCard` (dead code, no importers), `STATUS_STYLES` / status badges in `ContentRequestPage`/`SessionSummaryCard`/`SelectionReviewPanel`/`WordStatusPicker`, `PrefButton` activeColor (passed in by parent encoding action meaning), YouTube thumbnail backdrops (`#000` is intentional for poster fade-in), highlight `<mark>` background `#fff176`, mistake-vs-freq border + accent in `InsightsSection`.
+
+🆕 **2026-05-19 — Dark-mode theme system (#20)**
+
+CSS variables in `src/index.css` (`:root` for light, `[data-theme="dark"]` for dark). App.tsx Layout sets `document.documentElement.dataset.theme` from `prefs.dark_mode`. SettingsPanel dark-mode toggle writes the attribute immediately so the UI flips without the 600ms save round-trip.
+
+| Check | Outcome |
+|---|---|
+| `npx tsc --noEmit` clean | ✅ |
+| `npx vitest run` → 90/90 (was 86; +4 new from `src/test/theme.test.tsx`) | ✅ |
+| `npm run build` → 414.80 kB JS / 115.97 kB gz / 3.96 kB CSS (was 2.07 kB; +2 kB from token declarations) | ✅ |
+
+### New test file (#20)
+
+| File | What it asserts |
+|---|---|
+| `src/test/theme.test.tsx` (NEW) | 4 tests: NotificationToast dismiss uses `var(--color-text-muted)`; ContentRequestPage container uses `var(--color-surface)` + `var(--color-text)`; ContentRequestPage input uses `var(--color-input-bg)` + `var(--color-input-border)`; SettingsPanel dark-mode toggle flips `document.documentElement.dataset.theme` immediately. |
+
+### Component refactors (#20)
+
+`darkMode` / `dk` prop signatures dropped from: `NotificationToast.tsx`, `ContentRequestPage.tsx`, `BookLibraryPage.tsx`, `BookReaderPage.tsx` (kept local `dk` state for the in-reader Dark/Light toggle which now wraps content in `<div data-theme="dark|light">` for a scoped override), `SelectionPanel.tsx`, `SelectionReviewPanel.tsx`. `SettingsPanel.tsx` kept `darkMode` LOCAL STATE (drives the checkbox + auto-save) but styling now uses CSS vars. `App.tsx` Layout switched from `document.body.style.background` to `document.documentElement.dataset.theme`.
+
+Call-site updates: `BookLibraryPage.mobile.test.tsx` and `BookReaderPage.mobile.test.tsx` dropped the `darkMode={false}` prop in their `render(...)` calls.
+
+Net ternary count: **104 → 5** (the remaining 5 are all driving the `data-theme` attribute itself, not color decisions).
+
+🆕 **2026-05-19 — PWA icon set (#27i)**
+
+No unit tests — verified via build output:
+
+| Check | Outcome |
+|---|---|
+| `dist/icons/icon-192.png` exists, 192×192 (sips) | ✅ |
+| `dist/icons/icon-512.png` exists, 512×512 (sips) | ✅ |
+| `dist/apple-touch-icon.png` exists, 180×180 (sips) | ✅ |
+| `dist/manifest.webmanifest` references both PNGs (`192x192` + `512x512`, type `image/png`) | ✅ |
+| `dist/index.html` contains `<link rel="apple-touch-icon" href="/apple-touch-icon.png">` | ✅ |
+| `npx tsc --noEmit` clean | ✅ |
+| `npx vitest run` → 86/86 (unchanged) | ✅ |
+| `npm run build` → no warnings about manifest | ✅ |
+
+Files added: `frontend/public/icons/icon-192.png`, `frontend/public/icons/icon-512.png`, `frontend/public/apple-touch-icon.png`.
+
+🆕 **2026-05-19 — PWA shell (#27h)**
+
+No new unit tests — the shell is verified via build-output inspection:
+
+| Check | Outcome |
+|---|---|
+| `dist/manifest.webmanifest` exists + has theme/colours/icons | ✅ |
+| `dist/sw.js` exists | ✅ |
+| `dist/offline.html` exists | ✅ |
+| `dist/index.html` contains `<link rel="manifest">`, `theme-color`, `mobile-web-app-capable`, `apple-mobile-web-app-capable`, `apple-mobile-web-app-title`, `apple-mobile-web-app-status-bar-style` (7 matches) | ✅ |
+| No references to missing icon files (no `192`/`512`/`apple-touch-icon`) in built output | ✅ |
+| `npx tsc --noEmit` clean | ✅ |
+| `npx vitest run` → 86/86 (unchanged) | ✅ |
+| `npm run build` → 414 kB / 116 kB gz (+1 kB from larger HTML head) | ✅ |
+
+Files added: `frontend/public/manifest.webmanifest`, `frontend/public/sw.js`, `frontend/public/offline.html`. Files modified: `frontend/index.html`, `frontend/src/main.tsx`.
+
+Future: an integration test would need Puppeteer/Playwright to verify "Add to Home Screen" install + offline navigation fallback. Not in scope for v1.
+
+🆕 **2026-05-19 — Global mobile touch-target audit (#27g)**
 
 Closing pass: every component #27a–f didn't touch was audited for iOS-zoom-vulnerable inputs (<16px font) and undersized touch targets (<36px secondary, <44px primary). Eleven components edited, one (`ResultCard.tsx`) flagged as dead code (no importers, left as-is).
 
@@ -425,6 +508,24 @@ Fixed 9 pre-existing TS errors so `npm run build` passes for the first time (the
 | **🆕 `test_reminders.py`** | 5 | `/reminders/summary` shape, zero-state, counts after marking learning, excludes known status, auth gate | gap fill |
 
 **Net delta:** 4 new files, 27 new test functions (20 passing + 7 xfailed pinning audit holes), 0 net failures.
+
+🆕 **2026-05-19 — #0b regression guards + Hole 9 (passive learning → known)**
+
+| File | Tests | Covers | Related |
+|---|---|---|---|
+| `test_progression.py` (extended) | +3 | `status_marked_learning` regression guards: active_level stays 0, times_used_correctly stays 0, re-marking does not duplicate or clobber existing cards | TODO #0b |
+| `test_progression.py` (extended) | +5 | Hole 9 promotion path: `learning + passive_level ≥ threshold → known`; below-threshold stays `learning`; promotion leaves `active_level` + `times_used_correctly` at 0; promotion does NOT advance the active SRS card; once `known`, further passive evidence keeps it `known` | Audit Hole 9 / TODO Hole 9 |
+
+**Net delta:** 8 new test functions in 1 edited file. Full suite: 400 passed, 2 skipped.
+
+🆕 **2026-05-19 — Hole 26 (manual demotion resets levels + reschedules cards)**
+
+| File | Tests | Covers | Related |
+|---|---|---|---|
+| `test_progression.py` (extended) | +8 unit | `_is_demotion` rank logic: known→learning/unknown True; learning→unknown True; all upgrades False; same-status False; None prior False | Audit Hole 26 |
+| `test_progression.py` (extended) | +16 integration | `known → learning`: passive_level=1, active_level=0, both cards reset (ease preserved); missing active card created; times_used_correctly preserved. `known → unknown`: both levels=0; existing cards penalised (ease −0.15); missing active card NOT created; times counters preserved. `learning → unknown`: levels=0; existing cards reset. Regression: `unknown → learning` still additive; `learning → known` still preserves levels. Post-demotion: production events still climb back to known. Grammar-rule guard: demotion does not create active grammar SRS card. | Audit Hole 26 |
+
+**Net delta:** 24 new test functions in 1 edited file. Full suite: 424 passed, 2 skipped.
 
 ### Audit holes pinned as xfail (flip on fix)
 

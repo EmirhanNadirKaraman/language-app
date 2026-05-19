@@ -13,10 +13,16 @@ active   — user can produce/use the word correctly
 
 Status promotion (automatic)
 -----------------------------
+active_level  >= ACTIVE_MASTERY_THRESHOLD    (3)  AND status != 'known'
+  → auto-promote to 'known'   (active mastery wins)
+passive_level >= PASSIVE_PROMOTION_THRESHOLD (5)  AND status == 'learning'
+  → auto-promote to 'known'   (Hole 9 — passively mastered items exit 'learning')
 passive_level >= PASSIVE_PROMOTION_THRESHOLD (5)  AND status == 'unknown'
   → auto-promote to 'learning'
-active_level  >= ACTIVE_MASTERY_THRESHOLD    (3)  AND status != 'known'
-  → auto-promote to 'known'
+
+Both passive transitions share the per-user setting users.settings.passive_reps_for_known
+(default 5). Default per-call ordering: 'unknown' crosses the threshold first,
+becomes 'learning'; a subsequent passive event becomes 'known'.
 
 Implemented event hooks (wired to existing code paths)
 -------------------------------------------------------
@@ -44,6 +50,22 @@ SRS actions
   'correct'  — advance existing card (SM-2), or create + advance if missing
   'incorrect' — penalise existing card (SM-2), or no-op if missing
   'create'   — insert card with defaults if missing, no-op if exists
+  'reset'    — ensure card exists AND force due_date=NOW+1d, interval=1, reps=0
+               (ease_factor preserved on existing cards). Used by manual
+               demotion known → learning (Hole 26).
+
+Manual demotion (Hole 26)
+-------------------------
+When the router calls apply_progression with status_override demoting the item
+(known → learning / known → unknown / learning → unknown), the additive rule
+table is the WRONG model — we'd add evidence to a self-correction. Instead a
+dedicated demotion branch resets levels and reschedules cards:
+
+  known → learning:  passive_level := 1, active_level := 0, both SRS 'reset'
+  known → unknown:   passive_level := 0, active_level := 0, both SRS 'incorrect'
+  learning → unknown: passive_level := 0, active_level := 0, both SRS 'incorrect'
+
+times_seen and times_used_correctly are NOT touched — they record history.
 """
 from __future__ import annotations
 
@@ -235,6 +257,23 @@ async def apply_progression(
 
     async with pool.acquire() as conn:
         async with conn.transaction():
+            # ----- Manual demotion (Hole 26) ----------------------------------
+            # If status_override demotes the row's existing status, we ignore
+            # the additive rule and reset levels + reschedule cards. Detect by
+            # reading prior status inside the same transaction.
+            if status_override is not None:
+                prior_status = await conn.fetchval(
+                    """
+                    SELECT status FROM user_word_knowledge
+                     WHERE user_id = $1::uuid AND item_id = $2 AND item_type = $3
+                    """,
+                    user_id, item_id, item_type,
+                )
+                if _is_demotion(prior_status, status_override):
+                    return await _apply_demotion(
+                        conn, user_id, item_id, item_type, status_override,
+                    )
+
             row = None
 
             if needs_uwk_write:
@@ -319,6 +358,88 @@ async def apply_progression(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+_STATUS_RANK = {"unknown": 0, "learning": 1, "known": 2}
+
+
+def _is_demotion(prior_status: str | None, new_status: str) -> bool:
+    """True iff new_status sits strictly lower on the unknown < learning < known scale.
+
+    Pure helper — testable without a DB. If prior_status is None (row doesn't
+    exist yet), nothing is being demoted.
+    """
+    if prior_status is None:
+        return False
+    return _STATUS_RANK.get(new_status, -1) < _STATUS_RANK.get(prior_status, -1)
+
+
+async def _apply_demotion(
+    conn: asyncpg.Connection,
+    user_id: str,
+    item_id: int,
+    item_type: str,
+    new_status: str,
+) -> dict | None:
+    """Manual demotion (Hole 26): user reclassified the item downward.
+
+    Policy:
+      known → learning: passive_level=1, active_level=0, both SRS 'reset'
+      known → unknown:  passive_level=0, active_level=0, both SRS 'incorrect'
+      learning → unknown: passive_level=0, active_level=0, both SRS 'incorrect'
+
+    Why not negative deltas on the rule? Because the target value depends on
+    the destination status, not on the prior level — a known item with
+    active_level=12 should drop to 0 regardless of how high it climbed.
+    Additive deltas can't express that without per-row computation.
+
+    times_seen and times_used_correctly are preserved — they record what
+    actually happened. The user is correcting their classification, not
+    rewriting history.
+
+    Auto-promotion (_maybe_promote) is NOT called. With the chosen targets
+    (passive ≤ 1, active = 0) no threshold can be crossed at any setting in
+    the schema range (1-20), and even at threshold=1 the demotion is the
+    user's explicit override.
+    """
+    if new_status == "learning":
+        new_passive, new_active = 1, 0
+        passive_action, active_action = "reset", "reset"
+    elif new_status == "unknown":
+        new_passive, new_active = 0, 0
+        passive_action, active_action = "incorrect", "incorrect"
+    else:
+        # Demotion only fires when new_status is 'learning' or 'unknown' per
+        # _is_demotion. This branch is unreachable, but defensive.
+        raise ValueError(f"_apply_demotion called with non-demotion status: {new_status!r}")
+
+    await conn.execute(
+        """
+        UPDATE user_word_knowledge SET
+            status        = $4,
+            passive_level = $5,
+            active_level  = $6,
+            last_seen     = NOW()
+         WHERE user_id = $1::uuid AND item_id = $2 AND item_type = $3
+        """,
+        user_id, item_id, item_type, new_status, new_passive, new_active,
+    )
+
+    await _update_srs(conn, user_id, item_id, item_type, "passive", passive_action)
+    await _update_srs(conn, user_id, item_id, item_type, "active", active_action)
+
+    row = await conn.fetchrow(
+        """
+        SELECT item_id, item_type, status,
+               passive_level, active_level,
+               times_seen, times_used_correctly,
+               notes, last_seen
+          FROM user_word_knowledge
+         WHERE user_id = $1::uuid AND item_id = $2 AND item_type = $3
+        """,
+        user_id, item_id, item_type,
+    )
+    return dict(row) if row else None
+
+
 async def _maybe_promote(
     conn: asyncpg.Connection,
     user_id: str,
@@ -328,12 +449,33 @@ async def _maybe_promote(
     passive_threshold: int = PASSIVE_PROMOTION_THRESHOLD,
     active_threshold: int = ACTIVE_MASTERY_THRESHOLD,
 ) -> None:
-    """Promote status if levels cross thresholds. Active mastery takes precedence."""
+    """Promote status if levels cross thresholds.
+
+    Order of precedence (only one branch fires per call):
+      1. active_level >= active_threshold AND status != 'known'  → 'known'
+      2. passive_level >= passive_threshold AND status == 'learning' → 'known'   (Hole 9)
+      3. passive_level >= passive_threshold AND status == 'unknown'  → 'learning'
+
+    Branch (2) is the Hole 9 fix: 'learning' was a one-way trap — a user could
+    pass passive_review_correct dozens of times and the dots would grow but
+    status would stay 'learning' forever. Now passive mastery crosses the same
+    threshold the user already configured as 'reps for known'. Active SRS cards
+    are not touched here; only the status field flips.
+    """
     passive_level = row["passive_level"]
     active_level = row["active_level"]
     current_status = row["status"]
 
     if active_level >= active_threshold and current_status != "known":
+        await conn.execute(
+            """
+            UPDATE user_word_knowledge
+               SET status = 'known', last_seen = NOW()
+             WHERE user_id = $1::uuid AND item_id = $2 AND item_type = $3
+            """,
+            user_id, item_id, item_type,
+        )
+    elif passive_level >= passive_threshold and current_status == "learning":
         await conn.execute(
             """
             UPDATE user_word_knowledge
@@ -383,6 +525,27 @@ async def _update_srs(
             VALUES ($1::uuid, $2, $3, $4,
                     NOW(), 1.0, 2.5, 0)
             ON CONFLICT (user_id, item_id, item_type, direction) DO NOTHING
+            """,
+            user_id, item_id, item_type, direction,
+        )
+        return
+
+    if action == "reset":
+        # Hole 26: manual demotion known → learning. Ensure the card exists
+        # and force a near-future review. Ease is preserved on existing cards
+        # (we're rescheduling, not penalising — that distinguishes 'reset'
+        # from 'incorrect'). On INSERT path the default ease 2.5 is used.
+        await conn.execute(
+            """
+            INSERT INTO srs_cards
+                (user_id, item_id, item_type, direction,
+                 due_date, interval_days, ease_factor, repetitions)
+            VALUES ($1::uuid, $2, $3, $4,
+                    NOW() + INTERVAL '1 day', 1.0, 2.5, 0)
+            ON CONFLICT (user_id, item_id, item_type, direction) DO UPDATE SET
+                due_date      = NOW() + INTERVAL '1 day',
+                interval_days = 1.0,
+                repetitions   = 0
             """,
             user_id, item_id, item_type, direction,
         )

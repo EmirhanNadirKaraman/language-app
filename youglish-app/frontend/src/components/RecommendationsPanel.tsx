@@ -58,7 +58,7 @@ export function RecommendationsPanel({
     const sectionLabel: React.CSSProperties = {
         fontSize: '11px',
         fontWeight: 700,
-        color: '#888',
+        color: 'var(--color-text-muted)',
         textTransform: 'uppercase',
         letterSpacing: '0.06em',
         margin: '16px 0 8px',
@@ -66,26 +66,26 @@ export function RecommendationsPanel({
 
     const emptyText: React.CSSProperties = {
         fontSize: '13px',
-        color: '#aaa',
+        color: 'var(--color-text-subtle)',
         padding: '8px 0',
     };
 
     return (
         <div style={{
-            border: '1px solid #e8eaf6',
+            border: '1px solid var(--color-border-accent)',
             borderRadius: '8px',
             padding: 'clamp(14px, 4vw, 20px)',
-            background: '#fafafa',
+            background: 'var(--color-surface-muted)',
             marginBottom: '16px',
         }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h2 style={{ margin: 0, fontSize: '16px', color: '#1a237e' }}>For You</h2>
+                <h2 style={{ margin: 0, fontSize: '16px', color: 'var(--color-text-strong)' }}>For You</h2>
                 <button
                     onClick={onClose}
                     style={{
                         background: 'none', border: 'none', fontSize: '20px',
-                        cursor: 'pointer', color: '#888',
+                        cursor: 'pointer', color: 'var(--color-text-muted)',
                         minWidth: '44px', minHeight: '44px',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         padding: 0,
@@ -106,10 +106,11 @@ export function RecommendationsPanel({
                     // fontSize: 16px blocks iOS Safari focus-zoom on <select>.
                     style={{
                         padding: '8px 10px',
-                        border: '1px solid #ccc',
+                        border: '1px solid var(--color-input-border)',
                         borderRadius: '5px',
                         fontSize: '16px',
-                        background: '#fff',
+                        background: 'var(--color-input-bg)',
+                        color: 'var(--color-text)',
                         cursor: 'pointer',
                         minHeight: '44px',
                         boxSizing: 'border-box',
@@ -127,10 +128,10 @@ export function RecommendationsPanel({
                     disabled={loading || !language}
                     style={{
                         padding: '8px 14px',
-                        border: '1px solid #c5cae9',
+                        border: '1px solid var(--color-border-accent)',
                         borderRadius: '5px',
-                        background: '#fff',
-                        color: '#1a237e',
+                        background: 'var(--color-surface)',
+                        color: 'var(--color-primary-on-soft)',
                         fontSize: '13px',
                         fontWeight: 600,
                         cursor: loading || !language ? 'not-allowed' : 'pointer',
@@ -150,7 +151,7 @@ export function RecommendationsPanel({
 
             {/* Error */}
             {error && (
-                <p style={{ fontSize: '13px', color: '#c62828', marginTop: '10px' }}>{error}</p>
+                <p style={{ fontSize: '13px', color: 'var(--color-danger)', marginTop: '10px' }}>{error}</p>
             )}
 
             {/* Prep view — replaces panel content when an insight item is selected */}
@@ -325,23 +326,23 @@ function ReadingUnitsDueCard({
 
     return (
         <div style={{
-            background: '#fff8e1',
-            border: '1px solid #ffe082',
+            background: 'var(--color-warning-bg)',
+            border: '1px solid var(--color-warning-border)',
             borderRadius: '6px',
             padding: '10px 14px',
             marginTop: '12px',
             marginBottom: '4px',
         }}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', gap: '8px' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: '#e65100', flex: 1 }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--color-warning)', flex: 1 }}>
                     Reading Units — {due.length} due
                 </span>
                 <button
                     onClick={onOpenBooks}
                     style={{
                         fontSize: '12px', fontWeight: 600,
-                        color: '#e65100', background: 'none',
-                        border: '1px solid #f57c00', borderRadius: '4px',
+                        color: 'var(--color-warning)', background: 'none',
+                        border: '1px solid var(--color-warning)', borderRadius: '4px',
                         padding: '6px 12px', cursor: 'pointer',
                         minHeight: '36px',
                         touchAction: 'manipulation',
@@ -352,9 +353,9 @@ function ReadingUnitsDueCard({
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 {due.slice(0, 4).map(item => (
-                    <div key={item.selection_id} style={{ fontSize: '12px', color: '#333' }}>
+                    <div key={item.selection_id} style={{ fontSize: '12px', color: 'var(--color-text)' }}>
                         <span style={{ fontWeight: 600 }}>{item.surface_text}</span>
-                        <span style={{ color: '#999', marginLeft: '6px', fontSize: '11px' }}>
+                        <span style={{ color: 'var(--color-text-subtle)', marginLeft: '6px', fontSize: '11px' }}>
                             {item.doc_title.length > 30
                                 ? item.doc_title.slice(0, 30) + '…'
                                 : item.doc_title}
@@ -362,7 +363,7 @@ function ReadingUnitsDueCard({
                     </div>
                 ))}
                 {due.length > 4 && (
-                    <span style={{ fontSize: '11px', color: '#aaa' }}>+{due.length - 4} more</span>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-subtle)' }}>+{due.length - 4} more</span>
                 )}
             </div>
         </div>

@@ -28,7 +28,6 @@ function TagInput({
     suggestions,
     presets,
     presetLabel,
-    darkMode,
 }: {
     value: string;
     onChange: (v: string) => void;
@@ -36,7 +35,6 @@ function TagInput({
     suggestions: string[];
     presets: string[];
     presetLabel: string;
-    darkMode: boolean;
 }) {
     const [inputText, setInputText] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
@@ -73,7 +71,7 @@ function TagInput({
         <div>
             {/* Preset chips */}
             <div style={{ marginBottom: '8px' }}>
-                <span style={{ fontSize: '11px', color: darkMode ? '#777' : '#999', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '5px' }}>
+                <span style={{ fontSize: '11px', color: 'var(--color-text-subtle)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: '5px' }}>
                     {presetLabel}
                 </span>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
@@ -88,9 +86,9 @@ function TagInput({
                                     // Preset chips: compact but ≥32px tall for tap.
                                     minHeight: '32px',
                                     padding: '6px 12px', fontSize: '13px', borderRadius: '12px',
-                                    border: '1px solid ' + (active ? (darkMode ? '#7986cb' : '#1a237e') : (darkMode ? '#444' : '#ddd')),
-                                    background: active ? (darkMode ? '#283593' : '#e8eaf6') : (darkMode ? '#2d2d2d' : '#fff'),
-                                    color: active ? (darkMode ? '#c5cae9' : '#1a237e') : (darkMode ? '#aaa' : '#666'),
+                                    border: active ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                                    background: active ? 'var(--color-primary-soft)' : 'var(--color-surface)',
+                                    color: active ? 'var(--color-primary-on-soft)' : 'var(--color-text-muted)',
                                     cursor: 'pointer', fontWeight: active ? 600 : 400,
                                     touchAction: 'manipulation',
                                 }}
@@ -108,21 +106,21 @@ function TagInput({
                     onClick={() => inputRef.current?.focus()}
                     style={{
                         display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center',
-                        padding: '6px 8px', border: `1px solid ${darkMode ? '#555' : '#ccc'}`, borderRadius: '6px',
-                        minHeight: '38px', cursor: 'text', background: darkMode ? '#2d2d2d' : '#fff',
+                        padding: '6px 8px', border: '1px solid var(--color-input-border)', borderRadius: '6px',
+                        minHeight: '38px', cursor: 'text', background: 'var(--color-input-bg)',
                     }}
                 >
                     {current.map(tag => (
                         <span key={tag} style={{
                             display: 'inline-flex', alignItems: 'center', gap: '3px',
-                            padding: '2px 8px', background: darkMode ? '#283593' : '#e8eaf6', borderRadius: '10px',
-                            fontSize: '12px', color: darkMode ? '#c5cae9' : '#1a237e',
+                            padding: '2px 8px', background: 'var(--color-primary-soft)', borderRadius: '10px',
+                            fontSize: '12px', color: 'var(--color-primary-on-soft)',
                         }}>
                             {tag}
                             <button
                                 type="button"
                                 onClick={e => { e.stopPropagation(); removeTag(tag); }}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: darkMode ? '#9fa8da' : '#7986cb', fontSize: '13px', lineHeight: 1, padding: '0 1px' }}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary-on-soft)', fontSize: '13px', lineHeight: 1, padding: '0 1px' }}
                             >
                                 ×
                             </button>
@@ -139,24 +137,22 @@ function TagInput({
                         onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
                         onFocus={() => setShowSuggestions(true)}
                         // fontSize: 16px blocks iOS Safari focus-zoom.
-                        style={{ border: 'none', outline: 'none', flex: 1, minWidth: '100px', fontSize: '16px', background: 'transparent', color: darkMode ? '#e0e0e0' : 'inherit' }}
+                        style={{ border: 'none', outline: 'none', flex: 1, minWidth: '100px', fontSize: '16px', background: 'transparent', color: 'var(--color-text)' }}
                     />
                 </div>
 
                 {showSuggestions && filtered.length > 0 && (
                     <ul style={{
                         position: 'absolute', top: '100%', left: 0, right: 0,
-                        background: darkMode ? '#2d2d2d' : '#fff', border: `1px solid ${darkMode ? '#555' : '#ccc'}`, borderTop: 'none',
+                        background: 'var(--color-surface)', border: '1px solid var(--color-input-border)', borderTop: 'none',
                         borderRadius: '0 0 5px 5px', margin: 0, padding: 0, listStyle: 'none',
                         zIndex: 300, maxHeight: '160px', overflowY: 'auto',
-                        boxShadow: '0 4px 10px rgba(0,0,0,0.2)',
+                        boxShadow: 'var(--shadow-card)',
                     }}>
                         {filtered.map(s => (
                             <li key={s}
                                 onMouseDown={() => addTag(s)}
-                                style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '13px', color: darkMode ? '#e0e0e0' : 'inherit' }}
-                                onMouseEnter={e => (e.currentTarget.style.background = darkMode ? '#383838' : '#f0f4ff')}
-                                onMouseLeave={e => (e.currentTarget.style.background = darkMode ? '#2d2d2d' : '#fff')}
+                                style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '13px', color: 'var(--color-text)' }}
                             >
                                 {s}
                             </li>
@@ -164,7 +160,7 @@ function TagInput({
                     </ul>
                 )}
             </div>
-            <span style={{ fontSize: '11px', color: darkMode ? '#666' : '#aaa', marginTop: '3px', display: 'block' }}>
+            <span style={{ fontSize: '11px', color: 'var(--color-text-subtle)', marginTop: '3px', display: 'block' }}>
                 Click presets or type and press Enter
             </span>
         </div>
@@ -265,36 +261,36 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
     const uniqueChannels = [...new Set(knownChannelNames)];
 
     const field: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' };
-    const label: React.CSSProperties = { fontSize: '13px', fontWeight: 600, color: darkMode ? '#ccc' : '#444' };
+    const label: React.CSSProperties = { fontSize: '13px', fontWeight: 600, color: 'var(--color-text)' };
     // fontSize: 16px blocks iOS Safari focus-zoom. Applied to all number/text
     // inputs in this panel via the `input` helper. minHeight: 44 for tap.
     const input: React.CSSProperties = {
         padding: '8px 10px',
-        border: `1px solid ${darkMode ? '#555' : '#ccc'}`,
+        border: '1px solid var(--color-input-border)',
         borderRadius: '5px',
         fontSize: '16px',
         minHeight: '44px',
-        background: darkMode ? '#2d2d2d' : '#fff',
-        color: darkMode ? '#e0e0e0' : 'inherit',
+        background: 'var(--color-input-bg)',
+        color: 'var(--color-text)',
         boxSizing: 'border-box',
     };
-    const sectionHeader: React.CSSProperties = { fontSize: '12px', fontWeight: 700, color: darkMode ? '#888' : '#888', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 12px' };
-    const checkboxLabel: React.CSSProperties = { fontSize: '13px', color: darkMode ? '#ccc' : '#444', cursor: 'pointer' };
+    const sectionHeader: React.CSSProperties = { fontSize: '12px', fontWeight: 700, color: 'var(--color-text-subtle)', textTransform: 'uppercase' as const, letterSpacing: '0.05em', margin: '0 0 12px' };
+    const checkboxLabel: React.CSSProperties = { fontSize: '13px', color: 'var(--color-text)', cursor: 'pointer' };
 
     return (
         <div
             data-testid="settings-panel"
             style={{
-                border: `1px solid ${darkMode ? '#333' : '#e8eaf6'}`,
+                border: '1px solid var(--color-border)',
                 borderRadius: '8px',
                 // Fluid side padding so 320–375px viewports keep more content room.
                 padding: 'clamp(14px, 4vw, 24px)',
-                background: darkMode ? '#1e1e1e' : '#fafafa',
+                background: 'var(--color-surface-muted)',
                 marginBottom: '16px',
             }}
         >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h2 style={{ margin: 0, fontSize: '16px', color: darkMode ? '#7986cb' : '#1a237e' }}>Preferences</h2>
+                <h2 style={{ margin: 0, fontSize: '16px', color: 'var(--color-text-strong)' }}>Preferences</h2>
                 <button
                     data-testid="settings-close"
                     onClick={onClose}
@@ -303,7 +299,7 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                         minWidth: '44px', minHeight: '44px',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         background: 'none', border: 'none', fontSize: '20px',
-                        cursor: 'pointer', color: darkMode ? '#aaa' : '#888',
+                        cursor: 'pointer', color: 'var(--color-text-muted)',
                         padding: 0,
                         touchAction: 'manipulation',
                     }}
@@ -325,7 +321,6 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                     suggestions={categories}
                     presets={categories}
                     presetLabel="Quick picks"
-                    darkMode={darkMode}
                 />
             </div>
 
@@ -338,7 +333,6 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                     suggestions={uniqueChannels}
                     presets={POPULAR_CHANNELS.slice(0, 8)}
                     presetLabel="Popular channels"
-                    darkMode={darkMode}
                 />
             </div>
 
@@ -379,8 +373,8 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
                     <div key={lbl} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                         <input type="color" value={value} onChange={e => onChange(e.target.value)}
                             // 44×44 — color pickers need a finger-target too.
-                            style={{ width: '44px', height: '44px', border: `1px solid ${darkMode ? '#555' : '#ccc'}`, borderRadius: '4px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }} />
-                        <span style={{ fontSize: '12px', color: darkMode ? '#aaa' : '#555', fontWeight: 600 }}>{lbl}</span>
+                            style={{ width: '44px', height: '44px', border: '1px solid var(--color-input-border)', borderRadius: '4px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }} />
+                        <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 600 }}>{lbl}</span>
                         <span style={{ fontSize: '11px', color: value, fontWeight: 700 }}>Aa</span>
                     </div>
                 ))}
@@ -418,7 +412,17 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
                 <input id="dark-mode-toggle" type="checkbox" checked={darkMode}
-                    onChange={e => setDarkMode(e.target.checked)}
+                    onChange={e => {
+                        const next = e.target.checked;
+                        setDarkMode(next);
+                        // Apply data-theme immediately so the UI flips without
+                        // waiting for the 600ms auto-save → prefs round-trip.
+                        // App.tsx Layout will re-apply the same value once prefs
+                        // updates; it's idempotent.
+                        if (typeof document !== 'undefined') {
+                            document.documentElement.dataset.theme = next ? 'dark' : 'light';
+                        }
+                    }}
                     style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
                 <label htmlFor="dark-mode-toggle" style={checkboxLabel}>
                     Dark mode
@@ -426,8 +430,8 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
             </div>
 
             <div style={{ height: '20px' }}>
-                {saved      && <span style={{ fontSize: '12px', color: '#388e3c' }}>Saved</span>}
-                {saveError  && <span style={{ fontSize: '12px', color: '#c62828' }}>Save failed — check your connection</span>}
+                {saved      && <span style={{ fontSize: '12px', color: 'var(--color-success)' }}>Saved</span>}
+                {saveError  && <span style={{ fontSize: '12px', color: 'var(--color-danger)' }}>Save failed — check your connection</span>}
             </div>
         </div>
     );

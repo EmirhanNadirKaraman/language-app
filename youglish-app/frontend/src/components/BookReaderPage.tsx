@@ -16,7 +16,6 @@ interface Props {
   token: string;
   doc: BookDocument;
   onClose: () => void;
-  darkMode?: boolean;
   autoMarkKnown?: boolean;
 }
 
@@ -54,12 +53,11 @@ interface InteractiveBlockProps {
   showTranslation: boolean;
   onRequestTranslation: () => void;
   translating: boolean;
-  dk?: boolean;
 }
 
 function InteractiveBlock({
   block, selectedKeys, savedAnchorKeys, wordStatuses, onTokenClick, onWordRightClick,
-  translation, showTranslation, onRequestTranslation, translating, dk,
+  translation, showTranslation, onRequestTranslation, translating,
 }: InteractiveBlockProps) {
   // Use server-managed tokens directly (no local tokenization)
   const tokens = block.tokens;
@@ -70,7 +68,7 @@ function InteractiveBlock({
         opacity: block.is_header_footer ? 0.4 : 1,
         fontSize: block.is_header_footer ? '12px' : '16px',
         lineHeight: 1.8,
-        color: dk ? '#ccc' : '#222',
+        color: 'var(--color-text)',
         wordBreak: 'break-word',
       }}>
         {tokens.map(tok => {
@@ -141,7 +139,6 @@ interface SentenceCardProps {
   onSkip: (sentence: string) => void;
   onNext: () => void;
   isLast: boolean;
-  dk?: boolean;
   autoMark?: boolean;
   // Matches handleTokenClick / BlockView shape — tokenId is a string since
   // migration 025 (block_token_ids). The sentence-mode tokenizer produces a
@@ -152,7 +149,7 @@ interface SentenceCardProps {
   savedAnchorKeys?: Set<string>;
 }
 
-function SentenceCard({ sentence, blockId, language, token, wordStatuses, onSkip, onNext, isLast, dk, autoMark, onTokenClick, onWordRightClick, selectedKeys, savedAnchorKeys }: SentenceCardProps) {
+function SentenceCard({ sentence, blockId, language, token, wordStatuses, onSkip, onNext, isLast, autoMark, onTokenClick, onWordRightClick, selectedKeys, savedAnchorKeys }: SentenceCardProps) {
   const [translation, setTranslation] = useState<string | null>(null);
   const [translating, setTranslating] = useState(false);
 
@@ -169,10 +166,10 @@ function SentenceCard({ sentence, blockId, language, token, wordStatuses, onSkip
 
   return (
     <div style={{
-      background: dk ? '#1e1e2e' : '#fff', border: `1px solid ${dk ? '#333' : '#e8eaf6'}`, borderRadius: '10px',
+      background: 'var(--color-surface)', border: '1px solid var(--color-border-accent)', borderRadius: '10px',
       padding: '20px 24px', maxWidth: '620px', margin: '0 auto',
     }}>
-      <div style={{ fontSize: '18px', lineHeight: 1.9, color: dk ? '#c5cae9' : '#1a237e', marginBottom: '10px', wordBreak: 'break-word' }}>
+      <div style={{ fontSize: '18px', lineHeight: 1.9, color: 'var(--color-text-strong)', marginBottom: '10px', wordBreak: 'break-word' }}>
         {tokens.map(tok => {
           if (!tok.isWord) return <span key={tok.index}>{tok.text}</span>;
           const key = `${blockId}:${tok.index}`;
@@ -226,7 +223,7 @@ function SentenceCard({ sentence, blockId, language, token, wordStatuses, onSkip
         </button>
         <button
           onClick={() => onSkip(sentence)}
-          style={{ padding: '7px 14px', background: dk ? '#2a2a3e' : '#fff', color: '#888', border: `1px solid ${dk ? '#444' : '#ddd'}`, borderRadius: '6px', fontSize: '13px', cursor: 'pointer' }}
+          style={{ padding: '7px 14px', background: 'var(--color-surface-muted)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: '6px', fontSize: '13px', cursor: 'pointer' }}
           title={autoMark ? 'Mark all words as passively learned' : 'Skip without marking'}
         >
           {autoMark ? 'Skip (mark seen)' : 'Skip'}
@@ -274,10 +271,9 @@ interface BlockRowProps {
   docId: string;
   onUpdated: (b: BookBlock) => void;
   onPageReload: () => void;
-  dk?: boolean;
 }
 
-function BlockRow({ block, token, docId, onUpdated, onPageReload, dk }: BlockRowProps) {
+function BlockRow({ block, token, docId, onUpdated, onPageReload }: BlockRowProps) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(block.user_text_override ?? block.clean_text ?? '');
   const [repairing, setRepairing] = useState(false);
@@ -329,8 +325,9 @@ function BlockRow({ block, token, docId, onUpdated, onPageReload, dk }: BlockRow
 
   return (
     <div style={{
-      padding: '8px 10px', borderBottom: `1px solid ${dk ? '#333' : '#f0f0f0'}`,
-      opacity: isIgnored ? 0.4 : 1, background: dk ? '#1e1e2e' : (block.is_header_footer ? '#fafafa' : '#fff'),
+      padding: '8px 10px', borderBottom: '1px solid var(--color-border-subtle)',
+      opacity: isIgnored ? 0.4 : 1,
+      background: block.is_header_footer ? 'var(--color-surface-muted)' : 'var(--color-surface)',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px', flexWrap: 'wrap' }}>
         <span style={{ fontSize: '10px', color: '#aaa' }}>#{block.block_index}</span>
@@ -362,8 +359,8 @@ function BlockRow({ block, token, docId, onUpdated, onPageReload, dk }: BlockRow
       </div>
 
       {!editing && (
-        <div style={{ fontSize: '13px', lineHeight: 1.5, color: dk ? '#ccc' : '#333', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-          {block.display_text || <em style={{ color: '#aaa' }}>(empty)</em>}
+        <div style={{ fontSize: '13px', lineHeight: 1.5, color: 'var(--color-text)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {block.display_text || <em style={{ color: 'var(--color-text-subtle)' }}>(empty)</em>}
         </div>
       )}
 
@@ -405,19 +402,27 @@ function btnStyle(bg: string, color: string) {
 
 // ── Main reader ───────────────────────────────────────────────────────────────
 
-export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }: Props) {
-  const [dk, setDk] = useState(darkMode ?? false);
+export function BookReaderPage({ token, doc, onClose, autoMarkKnown }: Props) {
+  // Local dark-mode override (#20). Initialised from the global data-theme so
+  // the reader inherits the user's app-wide preference, but a user can flip
+  // just the reader via the Dark/Light button below. We wrap our render in
+  // `<div data-theme={dk ? 'dark' : 'light'}>` so the CSS variables in
+  // index.css resolve to dark values for everything inside the reader scope
+  // without touching the rest of the app.
+  const [dk, setDk] = useState(
+    typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark'
+  );
   // #27d: switch the side-by-side reader/panel layout to a vertical stack on
   // mobile so a 375px viewport doesn't get a 55%+42% horizontal split.
   const { isMobile } = useViewport();
   const th = {
-    bg:     dk ? '#121212' : '#fff',
-    bgBar:  dk ? '#1a1a2e' : '#f8f9ff',
-    bgSub:  dk ? '#1e1e2e' : '#fafafa',
-    text:   dk ? '#e0e0e0' : '#222',
-    accent: dk ? '#7986cb' : '#1a237e',
-    border: dk ? '#333'    : '#eee',
-    muted:  dk ? '#aaa'    : '#888',
+    bg:     'var(--color-bg)',
+    bgBar:  'var(--color-surface-sunken)',
+    bgSub:  'var(--color-surface-muted)',
+    text:   'var(--color-text)',
+    accent: 'var(--color-text-strong)',
+    border: 'var(--color-border-subtle)',
+    muted:  'var(--color-text-muted)',
   } as const;
   const [pageNum, setPageNum]       = useState(1);
   const [inputPage, setInputPage]   = useState('1');
@@ -806,7 +811,10 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   const totalSentences = allPagesCounted ? pageList.reduce((acc, pNum) => acc + (sentenceCountMap[pNum] ?? 0), 0) : null;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: th.bg, zIndex: 900, display: 'flex', flexDirection: 'column', overflow: 'hidden', color: th.text }}>
+    // data-theme override (#20): the reader's local Dark/Light button flips
+    // this attribute, which re-resolves every `var(--color-*)` inside without
+    // changing the rest of the app's theme.
+    <div data-theme={dk ? 'dark' : 'light'} style={{ position: 'fixed', inset: 0, background: th.bg, zIndex: 900, display: 'flex', flexDirection: 'column', overflow: 'hidden', color: th.text }}>
 
       {/* Top bar — flex-wraps; chrome controls are ≥36px tall for tap. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px clamp(10px, 3vw, 16px)', borderBottom: `1px solid ${th.border}`, background: th.bgBar, flexShrink: 0, flexWrap: 'wrap' }}>
@@ -828,14 +836,14 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
         </span>
 
         {/* Mode toggle */}
-        <div style={{ display: 'flex', border: `1px solid ${dk ? '#4a4a6a' : '#c5cae9'}`, borderRadius: '6px', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', border: '1px solid var(--color-border-accent)', borderRadius: '6px', overflow: 'hidden' }}>
           {(['page', 'sentence'] as const).map(m => (
             <button key={m} onClick={() => { setReadingMode(m); setSentenceIdx(0); }}
               style={{
                 minHeight: '36px',
                 padding: '6px 14px', fontSize: '13px', border: 'none',
-                background: readingMode === m ? (dk ? '#2a2a4e' : '#e8eaf6') : (dk ? '#1e1e2e' : '#fff'),
-                color: readingMode === m ? (dk ? '#9fa8da' : '#1a237e') : (dk ? '#666' : '#888'),
+                background: readingMode === m ? 'var(--color-primary-soft)' : 'var(--color-surface)',
+                color: readingMode === m ? 'var(--color-primary-on-soft)' : 'var(--color-text-subtle)',
                 cursor: 'pointer', fontWeight: readingMode === m ? 600 : 400,
                 touchAction: 'manipulation',
               }}>
@@ -854,15 +862,15 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
             />
             Auto-mark
           </label>
-          <button onClick={() => setDk(d => !d)} style={topBtnStyle(dk, dk)}>{dk ? 'Light' : 'Dark'}</button>
+          <button onClick={() => setDk(d => !d)} style={topBtnStyle(dk)}>{dk ? 'Light' : 'Dark'}</button>
           {pageData?.has_image && (
-            <button onClick={() => { setShowImage(s => !s); if (!showImage) loadPageImage(); }} style={topBtnStyle(showImage, dk)}>Scan</button>
+            <button onClick={() => { setShowImage(s => !s); if (!showImage) loadPageImage(); }} style={topBtnStyle(showImage)}>Scan</button>
           )}
-          <button onClick={openSavedPanel} style={topBtnStyle(showSaved && !hasSelection, dk)}>
+          <button onClick={openSavedPanel} style={topBtnStyle(showSaved && !hasSelection)}>
             Saved{allDocSelections.length > 0 ? ` (${allDocSelections.length})` : ''}
           </button>
           <button onClick={() => { const next = !showReview; setShowReview(next); setShowSaved(false); if (hasSelection) clearSelection(); if (next) loadPageImage(); }}
-            style={topBtnStyle(showReview && !hasSelection && !showSaved, dk)}>
+            style={topBtnStyle(showReview && !hasSelection && !showSaved)}>
             Edit
           </button>
         </div>
@@ -873,7 +881,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
         <button
           onClick={() => navigateRef.current(-1)}
           disabled={readingMode === 'sentence' ? (sentenceIdx === 0 && pageNum <= 1) : pageNum <= 1}
-          style={navBtnStyle(readingMode === 'sentence' ? (sentenceIdx > 0 || pageNum > 1) : pageNum > 1, dk)}
+          style={navBtnStyle(readingMode === 'sentence' ? (sentenceIdx > 0 || pageNum > 1) : pageNum > 1)}
         >◀</button>
         <span style={{ fontSize: '13px', color: th.muted }}>Page</span>
         <input
@@ -883,13 +891,13 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
           onKeyDown={handlePageInput}
           onBlur={() => setInputPage(String(pageNum))}
           // fontSize: 16px blocks iOS Safari's focus-zoom. minHeight 44 for tap.
-          style={{ width: '56px', textAlign: 'center', padding: '6px 8px', border: `1px solid ${dk ? '#444' : '#ccc'}`, borderRadius: '4px', fontSize: '16px', minHeight: '44px', background: dk ? '#1e1e2e' : '#fff', color: th.text }}
+          style={{ width: '56px', textAlign: 'center', padding: '6px 8px', border: '1px solid var(--color-input-border)', borderRadius: '4px', fontSize: '16px', minHeight: '44px', background: 'var(--color-input-bg)', color: 'var(--color-text)' }}
         />
         <span style={{ fontSize: '13px', color: th.muted }}>of {totalPages}</span>
         <button
           onClick={() => navigateRef.current(1)}
           disabled={readingMode === 'sentence' ? (sentenceIdx === allSentences.length - 1 && pageNum >= totalPages) : pageNum >= totalPages}
-          style={navBtnStyle(readingMode === 'sentence' ? (sentenceIdx < allSentences.length - 1 || pageNum < totalPages) : pageNum < totalPages, dk)}
+          style={navBtnStyle(readingMode === 'sentence' ? (sentenceIdx < allSentences.length - 1 || pageNum < totalPages) : pageNum < totalPages)}
         >▶</button>
         {pageData?.is_scanned && <span style={{ fontSize: '11px', color: '#f57c00', marginLeft: '8px' }}>OCR page</span>}
 
@@ -951,7 +959,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
               borderBottom: isMobile ? `1px solid ${th.border}` : 'none',
               background: th.bgSub,
             }}>
-              <div style={{ padding: '10px 14px', borderBottom: `1px solid ${th.border}`, background: dk ? '#2a2a3e' : '#f0f0ff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ padding: '10px 14px', borderBottom: `1px solid ${th.border}`, background: 'var(--color-surface-muted)', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ fontWeight: 600, fontSize: '13px', color: th.accent }}>Annotation — Page {pageNum}</span>
                 <span style={{ fontSize: '12px', color: th.muted }}>{pageData.blocks.length} blocks</span>
               </div>
@@ -963,7 +971,6 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                   docId={doc.doc_id}
                   onUpdated={updateBlock}
                   onPageReload={() => loadPage(actualPageNumber)}
-                  dk={dk}
                 />
               ))}
             </div>
@@ -972,7 +979,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
               flex: isMobile ? '0 0 auto' : '0 0 50%',
               maxHeight: isMobile ? '50vh' : undefined,
               overflowY: 'auto',
-              background: dk ? '#1a1a1a' : '#f5f5f5',
+              background: 'var(--color-surface-muted)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -1025,7 +1032,6 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                       showTranslation={shownTranslations.has(block.block_id)}
                       onRequestTranslation={() => requestTranslation(block.block_id, block.display_text)}
                       translating={translating[block.block_id] ?? false}
-                      dk={dk}
                     />
                   ))}
                 </div>
@@ -1059,7 +1065,6 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                           }
                         }}
                         isLast={sentenceIdx === allSentences.length - 1}
-                        dk={dk}
                         autoMark={autoMark}
                         onTokenClick={handleTokenClick}
                         onWordRightClick={handleToggleWordStatus}
@@ -1082,7 +1087,7 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
             overflowY: 'auto',
             borderLeft: isMobile ? 'none' : `1px solid ${th.border}`,
             borderTop:  isMobile ? `1px solid ${th.border}` : 'none',
-            background: dk ? '#1a1a1a' : '#f0f0f0',
+            background: 'var(--color-surface-muted)',
             display: 'flex',
             alignItems: 'flex-start',
             justifyContent: 'center',
@@ -1119,7 +1124,6 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                 setAllDocSelections(prev => prev.filter(s => s.selection_id !== id));
               }}
               onClear={clearSelection}
-              dk={dk}
             />
           ) : (
             <SelectionReviewPanel
@@ -1134,7 +1138,6 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
                 setSavedSelections(prev => prev.filter(s => s.selection_id !== id));
               }}
               onClose={() => setShowSaved(false)}
-              dk={dk}
             />
           )
         )}
@@ -1159,28 +1162,32 @@ export function BookReaderPage({ token, doc, onClose, darkMode, autoMarkKnown }:
   );
 }
 
-function navBtnStyle(enabled: boolean, dk = false) {
+function navBtnStyle(enabled: boolean) {
   // Page-nav arrows are primary controls — 44×44 finger target.
+  // Colors come from CSS variables; the reader's local data-theme wrapper
+  // (#20) resolves them to the current dark/light pair at render time.
   return {
     minWidth: '44px', minHeight: '44px',
     padding: '6px 12px',
-    border: `1px solid ${dk ? '#444' : '#ddd'}`, borderRadius: '4px',
-    cursor: enabled ? 'pointer' : 'not-allowed', background: dk ? '#1e1e2e' : '#fff',
-    color: enabled ? (dk ? '#9fa8da' : '#1a237e') : (dk ? '#555' : '#ccc'),
+    border: '1px solid var(--color-border)', borderRadius: '4px',
+    cursor: enabled ? 'pointer' : 'not-allowed',
+    background: 'var(--color-surface)',
+    color: enabled ? 'var(--color-primary-on-soft)' : 'var(--color-text-subtle)',
     fontSize: '16px',
     touchAction: 'manipulation' as const,
+    opacity: enabled ? 1 : 0.6,
   } as const;
 }
 
-function topBtnStyle(active: boolean, dk = false) {
+function topBtnStyle(active: boolean) {
   // Top-bar buttons are secondary; ≥36px is finger-friendly without crowding
   // the row when many controls (Back, Mode, Scan, Saved, Edit, Dark/Light) wrap.
   return {
     minHeight: '36px',
     padding: '7px 12px',
-    border: `1px solid ${dk ? '#4a4a6a' : '#c5cae9'}`, borderRadius: '5px',
-    background: active ? (dk ? '#2a2a4e' : '#e8eaf6') : (dk ? '#1e1e2e' : '#fff'),
-    color: dk ? '#9fa8da' : '#1a237e', fontSize: '13px', cursor: 'pointer',
+    border: '1px solid var(--color-border-accent)', borderRadius: '5px',
+    background: active ? 'var(--color-primary-soft)' : 'var(--color-surface)',
+    color: 'var(--color-primary-on-soft)', fontSize: '13px', cursor: 'pointer',
     touchAction: 'manipulation' as const,
   } as const;
 }

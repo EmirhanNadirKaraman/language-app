@@ -25,11 +25,11 @@ const btnStyle: React.CSSProperties = {
     minHeight: '44px',
     width: '44px',
     height: '44px',
-    border: '1px solid #ccc',
+    border: '1px solid var(--color-input-border)',
     borderRadius: '6px',
-    background: '#fff',
+    background: 'var(--color-surface)',
     cursor: 'pointer',
-    color: '#333',
+    color: 'var(--color-text)',
     touchAction: 'manipulation',
 };
 
@@ -51,8 +51,8 @@ export function PlayerControls({
                 flexWrap: 'wrap',
                 gap: '8px',
                 padding: '10px 16px',
-                background: '#f5f5f5',
-                borderTop: '1px solid #e0e0e0',
+                background: 'var(--color-surface-muted)',
+                borderTop: '1px solid var(--color-border)',
             }}
         >
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -99,7 +99,7 @@ export function PlayerControls({
 
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
                 {sentenceCount > 1 && (
-                    <span style={{ fontSize: '12px', color: '#888' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--color-text-muted)' }}>
                         {sentenceIdx + 1}/{sentenceCount} in video
                     </span>
                 )}

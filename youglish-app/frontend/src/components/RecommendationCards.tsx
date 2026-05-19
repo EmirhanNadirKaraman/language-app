@@ -117,7 +117,7 @@ function PassiveLevelPips({ level, max }: { level: number; max: number }) {
                     }}
                 />
             ))}
-            <span style={{ fontSize: '10px', color: '#aaa', marginLeft: '4px' }}>
+            <span style={{ fontSize: '10px', color: 'var(--color-text-subtle)', marginLeft: '4px' }}>
                 {level}/{max}
             </span>
         </div>
@@ -137,7 +137,7 @@ function StatusDot({ status, wordColors }: { status: string | null; wordColors: 
     const color = status ? colorMap[status] ?? '#bbb' : '#bbb';
     const label = status ?? 'new';
     return (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#666' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
             {label}
         </span>
@@ -204,24 +204,24 @@ export function ItemRecommendationCard({
 
     return (
         <div style={{
-            border: '1px solid #e8eaf6',
+            border: '1px solid var(--color-border-accent)',
             borderRadius: '8px',
             padding: '12px 14px',
-            background: '#fff',
+            background: 'var(--color-surface)',
             minWidth: '200px',
             maxWidth: '260px',
             flexShrink: 0,
         }}>
             {/* Header row */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '4px' }}>
-                <span style={{ fontSize: '20px', fontWeight: 700, color: '#111', wordBreak: 'break-word' }}>
+                <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--color-text)', wordBreak: 'break-word' }}>
                     {rec.display_text}
                 </span>
                 <span style={{
                     fontSize: '10px',
                     fontWeight: 600,
-                    color: '#888',
-                    background: '#f5f5f5',
+                    color: 'var(--color-text-muted)',
+                    background: 'var(--color-surface-muted)',
                     padding: '2px 6px',
                     borderRadius: '4px',
                     whiteSpace: 'nowrap',
@@ -233,7 +233,7 @@ export function ItemRecommendationCard({
 
             {/* Secondary text (lemma) */}
             {rec.secondary_text && (
-                <div style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>
+                <div style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>
                     {rec.secondary_text}
                 </div>
             )}
@@ -249,7 +249,7 @@ export function ItemRecommendationCard({
 
             {/* Error */}
             {saveError && (
-                <div style={{ fontSize: '11px', color: '#c62828', marginBottom: '4px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--color-danger)', marginBottom: '4px' }}>
                     Failed to save. Try again.
                 </div>
             )}
@@ -265,7 +265,7 @@ export function ItemRecommendationCard({
                     />
                 )}
                 {status === 'learning' && (
-                    <span style={{ fontSize: '11px', color: '#2e7d32', fontWeight: 600, alignSelf: 'center' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--color-success)', fontWeight: 600, alignSelf: 'center' }}>
                         In study list
                     </span>
                 )}
@@ -351,17 +351,17 @@ export function VideoRecommendationCard({ rec, onWatch, prefs, onChannelAction, 
 
     return (
         <div style={{
-            border: '1px solid #e8eaf6',
+            border: '1px solid var(--color-border-accent)',
             borderRadius: '8px',
             overflow: 'hidden',
-            background: '#fff',
+            background: 'var(--color-surface)',
             display: 'flex',
             flexDirection: 'column',
             minWidth: '220px',
             maxWidth: '280px',
             flexShrink: 0,
         }}>
-            {/* Thumbnail */}
+            {/* Thumbnail — solid black so YouTube poster fades in cleanly. */}
             <div style={{ position: 'relative', paddingTop: '56.25%', background: '#000', flexShrink: 0 }}>
                 <img
                     src={rec.thumbnail_url}
@@ -379,18 +379,18 @@ export function VideoRecommendationCard({ rec, onWatch, prefs, onChannelAction, 
 
             <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
                 {/* Title */}
-                <div style={{ fontSize: '13px', fontWeight: 600, color: '#222', lineHeight: 1.3,
+                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--color-text)', lineHeight: 1.3,
                     display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' }}>
                     {rec.title}
                 </div>
 
                 {/* Channel name */}
                 {channelName && (
-                    <div style={{ fontSize: '11px', color: '#888' }}>{channelName}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{channelName}</div>
                 )}
 
                 {/* Timestamp */}
-                <div style={{ fontSize: '11px', color: '#888' }}>
+                <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
                     starts at {formatDuration(rec.start_time)}
                 </div>
 
@@ -433,7 +433,7 @@ export function VideoRecommendationCard({ rec, onWatch, prefs, onChannelAction, 
                 {/* Genre preference buttons */}
                 {genre && onGenreAction && (
                     <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                        <span style={{ fontSize: '10px', color: '#aaa' }}>{genre}:</span>
+                        <span style={{ fontSize: '10px', color: 'var(--color-text-subtle)' }}>{genre}:</span>
                         <PrefButton
                             label="Like"
                             active={isLikedG}
@@ -476,9 +476,9 @@ function PrefButton({
             style={{
                 padding: '2px 8px',
                 borderRadius: '10px',
-                border: `1px solid ${active ? activeColor : '#e0e0e0'}`,
-                background: active ? activeColor : '#fff',
-                color: active ? '#fff' : '#888',
+                border: `1px solid ${active ? activeColor : 'var(--color-border)'}`,
+                background: active ? activeColor : 'var(--color-surface)',
+                color: active ? '#fff' : 'var(--color-text-muted)',
                 fontSize: '10px',
                 fontWeight: 600,
                 cursor: disabled ? 'not-allowed' : 'pointer',
@@ -531,16 +531,16 @@ export function SentenceRecommendationCard({ rec, language, onWatch, onPractice 
 
     return (
         <div style={{
-            border: '1px solid #e8eaf6',
+            border: '1px solid var(--color-border-accent)',
             borderRadius: '8px',
             padding: '12px 14px',
-            background: '#fff',
+            background: 'var(--color-surface)',
         }}>
             {/* Sentence text */}
             <div style={{
                 fontSize: '15px',
                 lineHeight: 1.5,
-                color: '#111',
+                color: 'var(--color-text)',
                 marginBottom: '6px',
                 fontStyle: 'italic',
             }}>
@@ -548,7 +548,7 @@ export function SentenceRecommendationCard({ rec, language, onWatch, onPractice 
             </div>
 
             {/* Source */}
-            <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginBottom: '4px' }}>
                 {rec.video_title} &middot; at {formatDuration(rec.start_time)}
             </div>
 

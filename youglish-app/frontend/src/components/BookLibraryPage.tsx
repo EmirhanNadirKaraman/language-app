@@ -6,7 +6,6 @@ interface Props {
   token: string;
   onOpen: (doc: BookDocument) => void;
   onClose: () => void;
-  darkMode?: boolean;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -53,15 +52,16 @@ function sortBooks(books: BookDocument[], key: SortKey): BookDocument[] {
   }
 }
 
-export function BookLibraryPage({ token, onOpen, onClose, darkMode }: Props) {
-  const dk = darkMode ?? false;
+export function BookLibraryPage({ token, onOpen, onClose }: Props) {
+  // Theme tokens come from CSS variables in index.css (#20). Local `th`
+  // object kept so call sites read cleanly — values are var(--...) strings.
   const th = {
-    bg:     dk ? '#1e1e2e' : '#fff',
-    bgSub:  dk ? '#2a2a3e' : '#fafbff',
-    text:   dk ? '#e0e0e0' : '#1a237e',
-    muted:  dk ? '#aaa'    : '#999',
-    border: dk ? '#333'    : '#eee',
-    card:   dk ? '#2a2a3e' : '#fff',
+    bg:     'var(--color-surface)',
+    bgSub:  'var(--color-surface-sunken)',
+    text:   'var(--color-text-strong)',
+    muted:  'var(--color-text-subtle)',
+    border: 'var(--color-border-subtle)',
+    card:   'var(--color-surface-muted)',
   } as const;
   const [books, setBooks]       = useState<BookDocument[]>([]);
   const [loading, setLoading]   = useState(true);
@@ -155,7 +155,7 @@ export function BookLibraryPage({ token, onOpen, onClose, darkMode }: Props) {
         width: '680px', maxWidth: '96vw', maxHeight: '92vh',
         display: 'flex', flexDirection: 'column',
         boxShadow: '0 12px 40px rgba(0,0,0,0.4)',
-        color: dk ? '#e0e0e0' : undefined,
+        color: 'var(--color-text)',
       }}>
         {/* Header */}
         <div style={{

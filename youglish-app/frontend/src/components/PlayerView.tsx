@@ -57,10 +57,10 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
                 width: '100%',
                 maxWidth: '100%',
                 minWidth: 0,
-                border: '1px solid #ddd',
+                border: '1px solid var(--color-border)',
                 borderRadius: '8px',
                 overflow: 'hidden',
-                background: '#fff',
+                background: 'var(--color-surface)',
                 boxSizing: 'border-box',
             }}
         >
@@ -89,7 +89,7 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
                 />
             </div>
 
-            <div style={{ display: 'flex', borderBottom: '1px solid #e8eaf6', padding: '0 12px', gap: '2px' }}>
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border-accent)', padding: '0 12px', gap: '2px' }}>
                 {(['player', 'transcript'] as const).map(v => (
                     <button
                         key={v}
@@ -97,8 +97,8 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
                         style={{
                             padding: '6px 14px',
                             border: 'none',
-                            background: view === v ? '#e8eaf6' : 'transparent',
-                            color: view === v ? '#1a237e' : '#888',
+                            background: view === v ? 'var(--color-primary-soft)' : 'transparent',
+                            color: view === v ? 'var(--color-primary-on-soft)' : 'var(--color-text-subtle)',
                             fontWeight: view === v ? 700 : 400,
                             fontSize: '13px',
                             borderRadius: '4px 4px 0 0',

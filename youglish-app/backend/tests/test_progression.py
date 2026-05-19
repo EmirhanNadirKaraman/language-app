@@ -25,6 +25,7 @@ from backend.services.progression_service import (
     ACTIVE_MASTERY_THRESHOLD,
     PASSIVE_PROMOTION_THRESHOLD,
     ProgressionDelta,
+    _is_demotion,
     apply_progression,
     compute_delta,
 )
@@ -306,6 +307,74 @@ async def test_status_marked_learning_creates_active_card(db_pool):
     card = await _get_srs(db_pool, uid, wid, "active")
     assert card is not None
     assert card["repetitions"] == 0    # 'create' action — not advanced yet
+
+
+async def test_status_marked_learning_does_not_increment_active_level(db_pool):
+    """#0b regression: scheduling an active card on Learning must NOT count as
+    active production evidence. Active level only grows from real production."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await _apply(db_pool, uid, wid, "status_marked_learning")
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row is not None
+    assert row["active_level"] == 0
+
+
+async def test_status_marked_learning_does_not_increment_times_used_correctly(db_pool):
+    """#0b regression: marking Learning is exposure, not a correct production."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await _apply(db_pool, uid, wid, "status_marked_learning")
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row is not None
+    assert row["times_used_correctly"] == 0
+
+
+async def test_status_marked_learning_does_not_duplicate_cards(db_pool):
+    """#0b regression: re-marking Learning must be idempotent — both SRS card
+    inserts use ON CONFLICT DO NOTHING, so the second click should leave the
+    existing cards' SM-2 state untouched."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await _apply(db_pool, uid, wid, "status_marked_learning")
+    passive_before = await _get_srs(db_pool, uid, wid, "passive")
+    active_before  = await _get_srs(db_pool, uid, wid, "active")
+    assert passive_before is not None
+    assert active_before  is not None
+
+    # Advance the cards a bit so we can detect any clobber.
+    await _apply(db_pool, uid, wid, "passive_review_correct")
+    passive_mid = await _get_srs(db_pool, uid, wid, "passive")
+    assert passive_mid["repetitions"] == passive_before["repetitions"] + 1
+
+    # Second status_marked_learning — must not reset either card.
+    await _apply(db_pool, uid, wid, "status_marked_learning")
+
+    passive_after = await _get_srs(db_pool, uid, wid, "passive")
+    active_after  = await _get_srs(db_pool, uid, wid, "active")
+
+    # No duplicate rows (only one passive + one active card per user/item/direction
+    # — enforced by the unique constraint, but assert via raw count too).
+    count = await db_pool.fetchval(
+        """
+        SELECT COUNT(*)
+          FROM srs_cards
+         WHERE user_id = $1::uuid AND item_id = $2 AND item_type = 'word'
+        """,
+        uid, wid,
+    )
+    assert count == 2
+
+    # Existing cards untouched by the second 'create' action.
+    assert passive_after["repetitions"]   == passive_mid["repetitions"]
+    assert passive_after["interval_days"] == passive_mid["interval_days"]
+    assert active_after["repetitions"]    == active_before["repetitions"]
+    assert active_after["interval_days"]  == active_before["interval_days"]
 
 
 async def test_status_marked_known_creates_passive_card_only(db_pool):
@@ -721,3 +790,534 @@ async def test_active_mastery_overrides_passive_promotion(db_pool):
 
     row = await _get_uwk(db_pool, uid, wid)
     assert row["status"] == "known"   # not just 'learning'
+
+
+# ---------------------------------------------------------------------------
+# Hole 9 — passive mastery promotes 'learning' → 'known'
+#
+# Before: 'learning' was a one-way trap. passive_review_correct raised
+# passive_level but no auto-promotion took the user out of 'learning'. Only
+# active-track events (guided_counted / free_chat_used_correctly /
+# active_review_correct) could reach 'known'.
+#
+# After: when passive_level reaches the per-user passive_reps_for_known
+# threshold (same setting that already gates 'unknown' → 'learning'), a
+# learning item auto-promotes to 'known'. Active level + active SRS are
+# untouched — passive mastery is recognition mastery, not production.
+# ---------------------------------------------------------------------------
+
+async def test_passive_mastery_promotes_learning_to_known(db_pool):
+    """Status 'learning' + passive_level reaches threshold → 'known'."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Start at status='learning' (override sets it explicitly + bumps passive to 1)
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["status"] == "learning"
+    assert row["passive_level"] == 1
+
+    # Drive passive_level up via passive reviews until it crosses the threshold.
+    # passive_review_correct gives passive_delta=1, so PASSIVE_PROMOTION_THRESHOLD-1
+    # more events get us to the threshold value.
+    for _ in range(PASSIVE_PROMOTION_THRESHOLD - 1):
+        await _apply(db_pool, uid, wid, "passive_review_correct")
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["passive_level"] >= PASSIVE_PROMOTION_THRESHOLD
+    assert row["status"] == "known"
+
+
+async def test_passive_below_threshold_keeps_learning(db_pool):
+    """At passive_level = threshold - 1, status stays 'learning'."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    # Already at passive_level=1 from the override event. Bring it to
+    # threshold-1 (so still below threshold).
+    for _ in range(PASSIVE_PROMOTION_THRESHOLD - 2):
+        await _apply(db_pool, uid, wid, "passive_review_correct")
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["passive_level"] == PASSIVE_PROMOTION_THRESHOLD - 1
+    assert row["status"] == "learning"
+
+
+async def test_passive_promotion_does_not_touch_active_level(db_pool):
+    """Hole 9: auto-promotion to 'known' via passive evidence must NOT
+    fabricate active mastery. active_level + times_used_correctly stay zero."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    for _ in range(PASSIVE_PROMOTION_THRESHOLD - 1):
+        await _apply(db_pool, uid, wid, "passive_review_correct")
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["status"] == "known"
+    assert row["active_level"] == 0
+    assert row["times_used_correctly"] == 0
+
+
+async def test_passive_promotion_does_not_advance_active_srs(db_pool):
+    """Hole 9: auto-promotion to 'known' via passive evidence must NOT advance
+    the active SRS card (created by status_marked_learning at reps=0, interval=1)."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    active_before = await _get_srs(db_pool, uid, wid, "active")
+    assert active_before is not None
+    assert active_before["repetitions"] == 0
+
+    for _ in range(PASSIVE_PROMOTION_THRESHOLD - 1):
+        await _apply(db_pool, uid, wid, "passive_review_correct")
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["status"] == "known"
+
+    active_after = await _get_srs(db_pool, uid, wid, "active")
+    assert active_after is not None
+    assert active_after["repetitions"]   == active_before["repetitions"]
+    assert active_after["interval_days"] == active_before["interval_days"]
+    assert active_after["ease_factor"]   == active_before["ease_factor"]
+
+
+async def test_passive_promotion_known_status_is_sticky(db_pool):
+    """Once 'known', further passive reviews must not flip status back."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    for _ in range(PASSIVE_PROMOTION_THRESHOLD - 1):
+        await _apply(db_pool, uid, wid, "passive_review_correct")
+    assert (await _get_uwk(db_pool, uid, wid))["status"] == "known"
+
+    # Another passive review on the (already known) item.
+    await _apply(db_pool, uid, wid, "passive_review_correct")
+    assert (await _get_uwk(db_pool, uid, wid))["status"] == "known"
+
+
+# ---------------------------------------------------------------------------
+# Hole 26 — manual demotion resets levels + reschedules cards
+#
+# Before: known item demoted to learning/unknown kept mastered levels + long
+# SRS intervals. State was internally contradictory.
+#
+# After: a dedicated demotion branch inside apply_progression resets levels
+# and reschedules cards. Triggered only when status_override demotes (lower
+# rank in unknown < learning < known). Additive rule deltas are bypassed.
+#
+# Policy:
+#   known → learning:  passive=1, active=0, both SRS 'reset' (due+1d, ease kept)
+#   known → unknown:   passive=0, active=0, both SRS 'incorrect' (no card created)
+#   learning → unknown: passive=0, active=0, both SRS 'incorrect'
+# ---------------------------------------------------------------------------
+
+
+# --- unit tests for the transition detector --------------------------------
+
+def test_is_demotion_known_to_learning():
+    assert _is_demotion("known", "learning") is True
+
+
+def test_is_demotion_known_to_unknown():
+    assert _is_demotion("known", "unknown") is True
+
+
+def test_is_demotion_learning_to_unknown():
+    assert _is_demotion("learning", "unknown") is True
+
+
+def test_is_demotion_unknown_to_learning_is_not_demotion():
+    assert _is_demotion("unknown", "learning") is False
+
+
+def test_is_demotion_learning_to_known_is_not_demotion():
+    assert _is_demotion("learning", "known") is False
+
+
+def test_is_demotion_unknown_to_known_is_not_demotion():
+    assert _is_demotion("unknown", "known") is False
+
+
+def test_is_demotion_same_status_is_not_demotion():
+    for s in ("unknown", "learning", "known"):
+        assert _is_demotion(s, s) is False
+
+
+def test_is_demotion_none_prior_is_not_demotion():
+    """First-time status set (no prior row) is never a demotion."""
+    assert _is_demotion(None, "unknown") is False
+    assert _is_demotion(None, "learning") is False
+    assert _is_demotion(None, "known") is False
+
+
+# --- known → learning ------------------------------------------------------
+
+async def _drive_to_known(pool, uid, wid):
+    """Build status=known with high passive_level + advanced active card."""
+    # status=learning + active card via learning click
+    await apply_progression(
+        pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    # active mastery via guided_counted × ACTIVE_MASTERY_THRESHOLD → auto-known
+    for _ in range(ACTIVE_MASTERY_THRESHOLD):
+        await _apply(pool, uid, wid, "guided_counted")
+
+
+async def test_demote_known_to_learning_resets_passive_level(db_pool):
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+    await _drive_to_known(db_pool, uid, wid)
+    before = await _get_uwk(db_pool, uid, wid)
+    assert before["status"] == "known"
+    assert before["passive_level"] > 1
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["status"] == "learning"
+    assert row["passive_level"] == 1
+
+
+async def test_demote_known_to_learning_resets_active_level_to_zero(db_pool):
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+    await _drive_to_known(db_pool, uid, wid)
+    before = await _get_uwk(db_pool, uid, wid)
+    assert before["active_level"] >= ACTIVE_MASTERY_THRESHOLD
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["active_level"] == 0
+
+
+async def test_demote_known_to_learning_reschedules_passive_card(db_pool):
+    """Advanced passive card should drop to interval=1, reps=0, ease preserved."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+    await _drive_to_known(db_pool, uid, wid)
+    # Advance the passive card a couple of times so interval > 1.
+    for _ in range(2):
+        await _apply(db_pool, uid, wid, "passive_review_correct")
+    before_p = await _get_srs(db_pool, uid, wid, "passive")
+    assert before_p["interval_days"] > 1.0
+    before_ease = before_p["ease_factor"]
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+
+    after_p = await _get_srs(db_pool, uid, wid, "passive")
+    assert after_p["interval_days"] == 1.0
+    assert after_p["repetitions"] == 0
+    # 'reset' preserves ease — distinguishes it from 'incorrect' which subtracts 0.15.
+    assert after_p["ease_factor"] == before_ease
+
+
+async def test_demote_known_to_learning_reschedules_active_card(db_pool):
+    """Advanced active card should drop to interval=1, reps=0, ease preserved."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+    await _drive_to_known(db_pool, uid, wid)
+    before_a = await _get_srs(db_pool, uid, wid, "active")
+    assert before_a is not None
+    assert before_a["repetitions"] >= ACTIVE_MASTERY_THRESHOLD
+    before_ease = before_a["ease_factor"]
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+
+    after_a = await _get_srs(db_pool, uid, wid, "active")
+    assert after_a is not None
+    assert after_a["interval_days"] == 1.0
+    assert after_a["repetitions"] == 0
+    assert after_a["ease_factor"] == before_ease
+
+
+async def test_demote_known_to_learning_creates_missing_active_card(db_pool):
+    """If the user reached 'known' via the manual confidence click only
+    (status_marked_known has active_srs=None — no active card), demoting to
+    learning must create the active card so production practice is scheduled."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Become 'known' via manual click only (no production events).
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_known", status_override="known",
+    )
+    assert (await _get_uwk(db_pool, uid, wid))["status"] == "known"
+    assert await _get_srs(db_pool, uid, wid, "active") is None  # precondition
+
+    # Demote to learning.
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+
+    active = await _get_srs(db_pool, uid, wid, "active")
+    assert active is not None
+    assert active["repetitions"] == 0
+    assert active["interval_days"] == 1.0
+
+
+async def test_demote_known_to_learning_preserves_times_used_correctly(db_pool):
+    """Counters record history — demotion must not rewrite them."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+    await _drive_to_known(db_pool, uid, wid)
+    before = await _get_uwk(db_pool, uid, wid)
+    assert before["times_used_correctly"] >= ACTIVE_MASTERY_THRESHOLD
+    before_count = before["times_used_correctly"]
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["times_used_correctly"] == before_count
+
+
+# --- known → unknown -------------------------------------------------------
+
+async def test_demote_known_to_unknown_resets_both_levels(db_pool):
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+    await _drive_to_known(db_pool, uid, wid)
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_unknown", status_override="unknown",
+    )
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["status"] == "unknown"
+    assert row["passive_level"] == 0
+    assert row["active_level"] == 0
+
+
+async def test_demote_known_to_unknown_resets_existing_cards(db_pool):
+    """known → unknown uses 'incorrect' action: existing cards reset, ease drops 0.15."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+    await _drive_to_known(db_pool, uid, wid)
+    before_p = await _get_srs(db_pool, uid, wid, "passive")
+    before_a = await _get_srs(db_pool, uid, wid, "active")
+    assert before_p is not None
+    assert before_a is not None
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_unknown", status_override="unknown",
+    )
+
+    after_p = await _get_srs(db_pool, uid, wid, "passive")
+    after_a = await _get_srs(db_pool, uid, wid, "active")
+    assert after_p["interval_days"] == 1.0
+    assert after_p["repetitions"] == 0
+    assert after_a["interval_days"] == 1.0
+    assert after_a["repetitions"] == 0
+    # 'incorrect' lowers ease by 0.15 (floored at 1.3).
+    assert after_p["ease_factor"] < before_p["ease_factor"]
+    assert after_a["ease_factor"] < before_a["ease_factor"]
+
+
+async def test_demote_known_to_unknown_does_not_create_missing_active_card(db_pool):
+    """A 'known via confidence click' item has no active card. Demoting to
+    unknown must NOT fabricate one — the 'incorrect' action is a no-op when
+    the card is missing."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_known", status_override="known",
+    )
+    assert await _get_srs(db_pool, uid, wid, "active") is None
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_unknown", status_override="unknown",
+    )
+
+    assert await _get_srs(db_pool, uid, wid, "active") is None
+
+
+async def test_demote_known_to_unknown_preserves_times_counters(db_pool):
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+    await _drive_to_known(db_pool, uid, wid)
+    before = await _get_uwk(db_pool, uid, wid)
+    before_seen = before["times_seen"]
+    before_used = before["times_used_correctly"]
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_unknown", status_override="unknown",
+    )
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["times_seen"] == before_seen
+    assert row["times_used_correctly"] == before_used
+
+
+# --- learning → unknown ----------------------------------------------------
+
+async def test_demote_learning_to_unknown_resets_levels(db_pool):
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Build status=learning with non-trivial passive_level via passive reviews.
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    await _apply(db_pool, uid, wid, "passive_review_correct")
+    await _apply(db_pool, uid, wid, "passive_review_correct")
+    before = await _get_uwk(db_pool, uid, wid)
+    assert before["status"] == "learning"
+    assert before["passive_level"] >= 2
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_unknown", status_override="unknown",
+    )
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["status"] == "unknown"
+    assert row["passive_level"] == 0
+    assert row["active_level"] == 0
+
+
+async def test_demote_learning_to_unknown_resets_existing_cards(db_pool):
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    for _ in range(2):
+        await _apply(db_pool, uid, wid, "passive_review_correct")
+    before_p = await _get_srs(db_pool, uid, wid, "passive")
+    assert before_p["interval_days"] > 1.0
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_unknown", status_override="unknown",
+    )
+
+    after_p = await _get_srs(db_pool, uid, wid, "passive")
+    assert after_p["interval_days"] == 1.0
+    assert after_p["repetitions"] == 0
+
+
+# --- regression: upgrade paths unaffected ----------------------------------
+
+async def test_upgrade_unknown_to_learning_uses_additive_path(db_pool):
+    """unknown → learning is NOT a demotion. The additive status_marked_learning
+    rule applies: passive_delta=1, active_delta=0, both cards 'create'."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    # Ensure a row exists with status='unknown' (via a non-status event).
+    await _apply(db_pool, uid, wid, "transcript_clicked")
+    assert (await _get_uwk(db_pool, uid, wid))["status"] == "unknown"
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["status"] == "learning"
+    # 1 from transcript_clicked + 1 from status_marked_learning rule = 2.
+    assert row["passive_level"] == 2
+    assert row["active_level"] == 0
+    assert await _get_srs(db_pool, uid, wid, "passive") is not None
+    assert await _get_srs(db_pool, uid, wid, "active")  is not None
+
+
+async def test_upgrade_learning_to_known_does_not_reset(db_pool):
+    """learning → known is NOT a demotion. Levels are preserved (the rule has
+    no level deltas) — only the status field flips via status_override."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    # Bump passive a bit so we can detect a reset (there shouldn't be one).
+    await _apply(db_pool, uid, wid, "passive_review_correct")
+    before = await _get_uwk(db_pool, uid, wid)
+    assert before["passive_level"] >= 2
+
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_known", status_override="known",
+    )
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["status"] == "known"
+    assert row["passive_level"] == before["passive_level"]
+
+
+# --- production events still work ------------------------------------------
+
+async def test_production_events_still_bump_active_level_post_demotion(db_pool):
+    """After a known → learning demotion, the user should be able to climb
+    back to known via real production events (guided_counted, etc.)."""
+    uid = await _make_user(db_pool)
+    wid = await _get_word_id(db_pool)
+    await _drive_to_known(db_pool, uid, wid)
+
+    # Demote.
+    await apply_progression(
+        db_pool, uid, wid, "word", "status_marked_learning", status_override="learning",
+    )
+    assert (await _get_uwk(db_pool, uid, wid))["active_level"] == 0
+
+    # Climb back via guided_counted.
+    for _ in range(ACTIVE_MASTERY_THRESHOLD):
+        await _apply(db_pool, uid, wid, "guided_counted")
+
+    row = await _get_uwk(db_pool, uid, wid)
+    assert row["active_level"] == ACTIVE_MASTERY_THRESHOLD
+    assert row["status"] == "known"
+
+
+# --- grammar_rule guard ----------------------------------------------------
+
+async def test_demote_grammar_rule_to_learning_does_not_create_active_card(db_pool):
+    """Grammar rules are passive-only — _update_srs short-circuits active.
+    Demotion 'reset' action must respect that guard."""
+    rule_row = await db_pool.fetchrow("SELECT rule_id FROM grammar_rule_table LIMIT 1")
+    if rule_row is None:
+        pytest.skip("grammar_rule_table is empty")
+    rid = rule_row["rule_id"]
+    uid = await _make_user(db_pool)
+
+    # Mark known then demote to learning.
+    await apply_progression(
+        db_pool, uid, rid, "grammar_rule", "status_marked_known", status_override="known",
+    )
+    await apply_progression(
+        db_pool, uid, rid, "grammar_rule", "status_marked_learning", status_override="learning",
+    )
+
+    passive = await db_pool.fetchrow(
+        "SELECT * FROM srs_cards WHERE user_id=$1::uuid AND item_id=$2 AND item_type='grammar_rule' AND direction='passive'",
+        uid, rid,
+    )
+    active = await db_pool.fetchrow(
+        "SELECT * FROM srs_cards WHERE user_id=$1::uuid AND item_id=$2 AND item_type='grammar_rule' AND direction='active'",
+        uid, rid,
+    )
+    assert passive is not None
+    assert active is None

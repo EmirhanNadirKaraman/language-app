@@ -14,7 +14,7 @@ export function SessionSummaryCard({ summary, onNextItem, onPracticeAgain, onClo
         <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', flex: 1 }}>
             {/* Target result */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '20px', fontWeight: 700, color: '#111' }}>
+                <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--color-text)' }}>
                     {summary.target_word}
                 </span>
                 <TargetBadge used={target_used} counted={target_counted} />
@@ -22,12 +22,12 @@ export function SessionSummaryCard({ summary, onNextItem, onPracticeAgain, onClo
 
             {/* Sentence quality */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '12px', color: '#795548', fontWeight: 600 }}>Sentence quality</span>
+                <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 600 }}>Sentence quality</span>
                 <QualityPill quality={sentence_quality} />
             </div>
 
             {/* Divider */}
-            <div style={{ borderTop: '1px solid #ffe082' }} />
+            <div style={{ borderTop: '1px solid var(--color-warning-border)' }} />
 
             {/* What went well */}
             {what_went_well && (
@@ -127,7 +127,7 @@ function TargetBadge({ used, counted }: { used: boolean; counted: boolean }) {
         return (
             <span style={{
                 fontSize: '12px', fontWeight: 700,
-                background: '#e8f5e9', color: '#2e7d32',
+                background: 'var(--color-success-bg)', color: 'var(--color-success)',
                 borderRadius: '10px', padding: '3px 10px',
             }}>
                 ✓ Used correctly
@@ -138,7 +138,7 @@ function TargetBadge({ used, counted }: { used: boolean; counted: boolean }) {
         return (
             <span style={{
                 fontSize: '12px', fontWeight: 700,
-                background: '#fff8e1', color: '#e65100',
+                background: 'var(--color-warning-bg)', color: 'var(--color-warning)',
                 borderRadius: '10px', padding: '3px 10px',
             }}>
                 ~ Used (not counted)
@@ -148,7 +148,7 @@ function TargetBadge({ used, counted }: { used: boolean; counted: boolean }) {
     return (
         <span style={{
             fontSize: '12px', fontWeight: 700,
-            background: '#ffebee', color: '#c62828',
+            background: 'var(--color-danger-bg)', color: 'var(--color-danger)',
             borderRadius: '10px', padding: '3px 10px',
         }}>
             ✗ Missed
@@ -192,9 +192,9 @@ function FeedbackRow({
             display: 'flex',
             gap: '10px',
             padding: highlight ? '8px 12px' : '0',
-            background: highlight ? '#fff3e0' : 'transparent',
+            background: highlight ? 'var(--color-warning-bg)' : 'transparent',
             borderRadius: highlight ? '6px' : '0',
-            borderLeft: highlight ? '3px solid #ff8f00' : 'none',
+            borderLeft: highlight ? '3px solid var(--color-warning)' : 'none',
         }}>
             <span style={{
                 fontSize: '14px', fontWeight: 700, color: iconColor,
@@ -203,10 +203,10 @@ function FeedbackRow({
                 {icon}
             </span>
             <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: '#888', marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-muted)', marginBottom: '3px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     {label}
                 </div>
-                <div style={{ fontSize: '13px', color: '#333', lineHeight: 1.5 }}>
+                <div style={{ fontSize: '13px', color: 'var(--color-text)', lineHeight: 1.5 }}>
                     {text}
                 </div>
             </div>

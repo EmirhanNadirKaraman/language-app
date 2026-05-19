@@ -52,7 +52,6 @@ interface Props {
   onReviewed: (updated: ReadingSelection) => void;
   onDeleted: (selectionId: string) => void;
   onClose: () => void;
-  dk?: boolean;
 }
 
 export function SelectionReviewPanel({
@@ -62,7 +61,6 @@ export function SelectionReviewPanel({
   onReviewed,
   onDeleted,
   onClose,
-  dk = false,
 }: Props) {
   const dueCount = selections.filter(isDue).length;
   const sorted = sortSelections(selections);
@@ -70,9 +68,9 @@ export function SelectionReviewPanel({
   return (
     <div style={{
       flex: '0 0 340px',
-      borderLeft: `1px solid ${dk ? '#333' : '#e8eaf6'}`,
+      borderLeft: '1px solid var(--color-border)',
       overflowY: 'auto',
-      background: dk ? '#1a1a2e' : '#f8f9ff',
+      background: 'var(--color-surface-sunken)',
       display: 'flex',
       flexDirection: 'column',
     }}>
@@ -81,11 +79,11 @@ export function SelectionReviewPanel({
         display: 'flex',
         alignItems: 'center',
         padding: '10px 14px',
-        borderBottom: `1px solid ${dk ? '#333' : '#e8eaf6'}`,
-        background: dk ? '#2a2a4e' : '#e8eaf6',
+        borderBottom: '1px solid var(--color-border)',
+        background: 'var(--color-primary-soft)',
         flexShrink: 0,
       }}>
-        <span style={{ fontWeight: 700, fontSize: '13px', color: dk ? '#9fa8da' : '#1a237e', flex: 1 }}>
+        <span style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-primary-on-soft)', flex: 1 }}>
           Saved ({selections.length})
         </span>
         {dueCount > 0 && (
@@ -134,7 +132,6 @@ export function SelectionReviewPanel({
             sel={sel}
             onReviewed={onReviewed}
             onDeleted={onDeleted}
-            dk={dk}
           />
         ))}
       </div>
@@ -149,13 +146,11 @@ function SelectionCard({
   sel,
   onReviewed,
   onDeleted,
-  dk = false,
 }: {
   token: string;
   sel: ReadingSelection;
   onReviewed: (updated: ReadingSelection) => void;
   onDeleted: (id: string) => void;
-  dk?: boolean;
 }) {
   const due = isDue(sel);
   const label = dueLabel(sel);
@@ -192,12 +187,12 @@ function SelectionCard({
     }
   }
 
+  const isActive = due && sel.status !== 'mastered';
+
   return (
     <div style={{
-      borderBottom: `1px solid ${dk ? '#333' : '#e8eaf6'}`,
-      background: dk
-        ? (due && sel.status !== 'mastered' ? '#1e1e2e' : '#181828')
-        : (due && sel.status !== 'mastered' ? '#fff' : '#fafafa'),
+      borderBottom: '1px solid var(--color-border)',
+      background: isActive ? 'var(--color-surface)' : 'var(--color-surface-muted)',
     }}>
       {/* Row header — always visible */}
       <div
@@ -209,7 +204,7 @@ function SelectionCard({
       >
         <span style={{
           flex: 1, fontSize: '14px', fontWeight: 600,
-          color: sel.status === 'mastered' ? '#888' : (dk ? '#9fa8da' : '#1a237e'),
+          color: sel.status === 'mastered' ? 'var(--color-text-subtle)' : 'var(--color-primary-on-soft)',
         }}>
           {sel.surface_text}
         </span>
@@ -241,10 +236,10 @@ function SelectionCard({
 
       {/* Expanded body */}
       {expanded && (
-        <div style={{ padding: '4px 12px 12px', borderTop: `1px solid ${dk ? '#333' : '#f0f0f0'}` }}>
+        <div style={{ padding: '4px 12px 12px', borderTop: '1px solid var(--color-border-subtle)' }}>
           {/* Sentence context */}
           <div style={{
-            fontSize: '12px', color: dk ? '#aaa' : '#666', fontStyle: 'italic',
+            fontSize: '12px', color: 'var(--color-text-muted)', fontStyle: 'italic',
             lineHeight: 1.6, marginBottom: '8px',
           }}>
             {context}
@@ -253,9 +248,9 @@ function SelectionCard({
           {/* Note */}
           {sel.note && (
             <div style={{
-              fontSize: '12px', color: dk ? '#ddd' : '#333',
-              background: dk ? '#2a2a1e' : '#fffde7',
-              border: `1px solid ${dk ? '#555' : '#ffe082'}`,
+              fontSize: '12px', color: 'var(--color-text)',
+              background: 'var(--color-warning-bg)',
+              border: '1px solid var(--color-warning-border)',
               borderRadius: '4px', padding: '6px 8px', marginBottom: '8px',
             }}>
               {sel.note}

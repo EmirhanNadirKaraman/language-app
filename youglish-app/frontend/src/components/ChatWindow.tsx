@@ -20,7 +20,7 @@ export function ChatWindow({ messages }: Props) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: '#aaa',
+                color: 'var(--color-text-subtle)',
                 fontSize: '14px',
                 padding: '24px',
                 textAlign: 'center',
@@ -54,8 +54,8 @@ export function ChatWindow({ messages }: Props) {
                         borderRadius: msg.role === 'user'
                             ? '18px 18px 4px 18px'
                             : '18px 18px 18px 4px',
-                        background: msg.role === 'user' ? '#1a237e' : '#f1f3f4',
-                        color: msg.role === 'user' ? '#fff' : '#202124',
+                        background: msg.role === 'user' ? 'var(--color-primary)' : 'var(--color-surface-muted)',
+                        color: msg.role === 'user' ? 'var(--color-primary-text)' : 'var(--color-text)',
                         fontSize: '14px',
                         lineHeight: 1.55,
                         whiteSpace: 'pre-wrap',

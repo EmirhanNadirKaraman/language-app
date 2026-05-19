@@ -31,8 +31,8 @@ export function MessageInput({ onSend, disabled }: Props) {
             display: 'flex',
             gap: '8px',
             padding: '10px 12px',
-            borderTop: '1px solid #e0e0e0',
-            background: '#fafafa',
+            borderTop: '1px solid var(--color-border)',
+            background: 'var(--color-surface-muted)',
         }}>
             <textarea
                 data-testid="chat-input"
@@ -52,7 +52,9 @@ export function MessageInput({ onSend, disabled }: Props) {
                     resize: 'none',
                     padding: '8px 12px',
                     borderRadius: '8px',
-                    border: '1px solid #ccc',
+                    border: '1px solid var(--color-input-border)',
+                    background: 'var(--color-input-bg)',
+                    color: 'var(--color-text)',
                     fontSize: '16px',
                     fontFamily: 'inherit',
                     outline: 'none',
@@ -68,8 +70,8 @@ export function MessageInput({ onSend, disabled }: Props) {
                     minHeight: '44px',
                     borderRadius: '8px',
                     border: 'none',
-                    background: canSend ? '#1a237e' : '#ccc',
-                    color: '#fff',
+                    background: canSend ? 'var(--color-primary)' : 'var(--color-input-border)',
+                    color: 'var(--color-primary-text)',
                     cursor: canSend ? 'pointer' : 'not-allowed',
                     fontSize: '14px',
                     fontWeight: 600,
