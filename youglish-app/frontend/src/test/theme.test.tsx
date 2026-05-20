@@ -128,6 +128,7 @@ describe('Theme attribute (#20 + T1.3 tristate)', () => {
                 prefs={PREFERENCE_DEFAULTS}
                 onSave={vi.fn().mockResolvedValue(undefined)}
                 onClose={() => {}}
+                token="test-token"
             />,
         );
         const select = screen.getByTestId('theme-mode-select') as HTMLSelectElement;
@@ -157,6 +158,7 @@ describe('Theme attribute (#20 + T1.3 tristate)', () => {
                 prefs={PREFERENCE_DEFAULTS}
                 onSave={vi.fn().mockResolvedValue(undefined)}
                 onClose={() => {}}
+                token="test-token"
             />,
         );
         const select = screen.getByTestId('theme-mode-select') as HTMLSelectElement;

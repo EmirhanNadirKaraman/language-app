@@ -7,10 +7,18 @@ numbers the workflow holes referenced below).
 Last re-ranked: 2026-05-20 (later same day — direction changed: finish
 polishing the web/desktop app to "bug free" first, then resume iOS
 migration. T1.1–T1.4, the four Capacitor-prereq Tier-1 items, are all
-done. W1–W7 also done; W1 verified clean (`npm audit` → 0 vulns).
-Capacitor itself partially installed (`npx cap add ios` complete,
-`xcode-select` needs full Xcode before next sync) — DEFERRED.
-Next open item: W8.)
+done. W1–W8 + W10 + W11 + W12 also done; W1 verified clean
+(`npm audit` → 0 vulns); W8 #25 sub-task reported as overscoped and
+dropped; W10 BookReaderPage memoization deferred as
+architecture-not-memo; W11 shipped account-deletion endpoint +
+`/privacy` page + `docs/PRIVACY.md`; W12 closed the pre-launch
+placeholder, localStorage disclosure, T3.2 audit (0 rows), Hole 10
+orphan-SRS cleanup (0 rows), and #30 schema doc. W9 (free-chat
+multi-lang) stays deferred — bundle with #19 when a 2nd language
+ships. Web-polish + privacy + Tier-3/4 maintenance are
+**complete**. Capacitor itself partially installed (`npx cap add ios`
+complete, `xcode-select` needs full Xcode before next sync) —
+DEFERRED.
 
 ---
 
@@ -183,16 +191,36 @@ old Tier 2 ordering for the moment.
     (NULL when unset); defensive `.catch(() => {})` so a regression in the
     reporter can't surface as an unhandled rejection on top of the crash.
 
-### W8 — #28 + #25 + dead code sweep
-- **Effort:** S–M bundled. `#28` cleans `index.css` + `App.css` of
-  Panda/Vite leftovers (10 min). `#25` consolidates the per-service
-  `SELECT ... FROM user_word_knowledge WHERE ...` reads behind a single
-  `word_service.get_knowledge(user, item, type)` accessor (touch ~5
-  services). Also delete `components/ResultCard.tsx` (verified dead in
-  #27g audit) and `tests/legacy/` (glob-ignored, no one looks).
-- **Impact:** Low individually, moderate cumulative. Sets up #21
-  (memoization) by trimming surface.
-- **Category:** cleanup.
+### W8 — cleanup bundle — ✅ RESOLVED 2026-05-20
+- **#28 CSS leftovers:** deleted `src/App.css` (184 lines, not imported
+  anywhere). Pruned `src/index.css` from ~424 lines to ~150: removed two
+  large commented-out Vite-template blocks, the orphan legacy CSS vars
+  (`--text/--text-h/--bg/--border/--code-bg/--accent/--accent-bg/
+  --accent-border/--social-bg/--shadow/--sans/--heading/--mono`) and
+  their consumers (h1/h2/code/.counter default rules — all overridden
+  by inline styles), a stray duplicate `font/letter-spacing/...` block
+  that had leaked inside `[data-theme="dark"]`, the dead
+  `@media (prefers-color-scheme: dark)` block referencing nonexistent
+  `#social`, and the duplicate `body { margin: 0 }`. Built CSS bundle
+  dropped 4 kB → 2.34 kB (0.76 kB gz). Theme tokens (#20a/#20b)
+  intact.
+- **#25 get_knowledge accessor:** SKIPPED per the prompt's overscope
+  escape valve. Audit found zero duplication of the single-row
+  `(user, item, item_type)` read pattern outside the
+  `progression_service` write path; every other `user_word_knowledge`
+  site is a JOIN / COUNT / DISTINCT / list-by-user with a different
+  access shape. Accessor would have zero adopters. Reclassify or drop
+  #25.
+- **ResultCard.tsx:** deleted (144 lines). Re-verified zero importers
+  before removal.
+- **`tests/legacy/`:** deleted (9 ad-hoc phrase_finder debug scripts +
+  `__init__.py` + `__pycache__/`). Glob-ignored by root `conftest.py`,
+  never collected; zero overlap with `tests/runtime/`. The
+  `collect_ignore_glob = ["tests/legacy/*"]` line was removed from
+  `conftest.py` in the same commit.
+- **Validation:** backend `pytest --tb=no -q` → 512 passed / 2 skipped;
+  root `pytest` → 562 passed (matches W4 baseline). Frontend
+  `tsc --noEmit` clean, vitest 151 passed, `vite build` clean.
 
 ### W9 — Hole 19 + Hole 20: free-chat multi-language + per-message detection
 - **Effort:** M. Today `chat.py:175` hardcodes `language='de'` and
@@ -205,19 +233,88 @@ old Tier 2 ordering for the moment.
   extractor when adding a second language; otherwise defer.
 - **Category:** product (multi-language readiness).
 
-### W10 — #21 memoization hotspots
-- **Effort:** S–M. `useMemo` parsed sentences in `usePlayerSentences`,
-  `React.memo` cards keyed by `item_id` in `RecommendationCards`,
-  debounce search input in `SearchBar`, memo book-page rendering in
-  `BookReaderPage`.
-- **Impact:** Perf at scale. Real win on devices once we resume iOS.
-- **Category:** polish.
+### W10 — #21 memoization hotspots — ✅ RESOLVED 2026-05-20
+- **usePlayerSentences:** `baseTerms` → `useMemo([surface_form, query])`;
+  `hasPrevMatch` / `hasNextMatch` → `useMemo([sentences, sentenceIdx,
+  highlightTerms])`. Parsing itself was already inside the fetch effect
+  (no per-render re-parse); these two scans were the actual hotspots.
+- **RecommendationCards:** all three exports wrapped in `React.memo`
+  (`ItemRecommendationCard`, `VideoRecommendationCard`,
+  `SentenceRecommendationCard`). `RecommendationsPanel` lifts the
+  per-card `onChannelAction` / `onGenreAction` wrappers to stable
+  `useCallback`s (was: inline `async (cid, cname, action) => { … }`
+  closures created on every render, which would have defeated the
+  memo).
+- **SearchBar:** debounce bumped 200 → 250ms (spec range 250–300).
+  Already had AbortController for stale-request cancellation and
+  synchronous local-input echo; both preserved.
+- **BookReaderPage:** SKIPPED with reason. `InteractiveBlock`'s
+  `selectedKeys` / `savedAnchorKeys` are page-wide sets — every token
+  click replaces the Set, so a naive `React.memo` would still re-render
+  every block. Partitioning selection state per-block is an
+  architecture change, not memoization. Cheap wins (`allSentences`,
+  `savedAnchorKeys`, `SentenceCard.tokens`) were already memoized.
+- **Verified:** `tsc --noEmit` clean, vitest 151 passed, `vite build`
+  clean (+0.16 kB gz from memo wrappers; CSS 2.34 kB unchanged).
+
+### W11 — Account deletion + privacy policy — ✅ RESOLVED 2026-05-20
+- **Backend:** new `DELETE /api/v1/account` (`routers/account.py`).
+  Single statement `DELETE FROM users WHERE user_id = $1::uuid` — every
+  FK to `users` already declares `ON DELETE CASCADE` (private learning
+  data: `user_word_knowledge`, `srs_cards`, `chat_*`, `word_lists`,
+  `word_usage_events`, `book_*`, `reading_selections`, `notification`,
+  `user_channel_preference`) or `ON DELETE SET NULL` (audit signal:
+  `content_request`, `client_error_log`). Shared catalog
+  (`word_table`, `phrase_table`, `grammar_rule_table`, `channel`,
+  `video`, `sentence`, `llm_cache`) has no user FK and is left intact.
+- **Frontend:** `api/account.ts` (never-throws-on-401-loop wrapper,
+  signals `auth:expired` on success); SettingsPanel gained a
+  destructive Account section with two-step confirm (start → "Yes,
+  permanently delete" / "Cancel"); buttons 44px tall; failure surfaces
+  inline. New `/privacy` page (logged-out accessible); footer link
+  added to the global Layout.
+- **Docs:** `docs/PRIVACY.md` engineering-side companion enumerating
+  cascade / SET-NULL / untouched tables + the App-Store compliance
+  gap checklist. Privacy text + page point at `privacy@example.com`
+  placeholder — flagged for replacement before launch.
+- **Verified:** backend 521 passed / 2 skipped (was 512; +9 new
+  tests); frontend 158 passed across 29 files (was 151; +7 new tests
+  — 6 settings-panel deletion flow + 1 privacy page); `tsc` clean;
+  `vite build` clean (+7 kB JS for PrivacyPage + new test deps).
+
+### W12 — Pre-launch cleanup bundle — ✅ RESOLVED 2026-05-20
+- **Privacy placeholder hardened.** `CONTACT_EMAIL` in
+  `PrivacyPage.tsx` now `<YOUR_REAL_PRIVACY_EMAIL_BEFORE_LAUNCH>` with a
+  TODO comment; rendered as `<code>` not `mailto:` so the placeholder
+  can't ship clickable. Mirrored in `docs/PRIVACY.md` checklist.
+- **localStorage disclosure shipped.** New "Browser storage" section
+  in `/privacy` names `auth_token` + `auth_email`, when they clear,
+  and confirms they are not sent in client error reports. No cookie
+  banner needed (we don't use cookies for auth).
+- **T3.2 active-card audit:** ran the W6 script on dev DB →
+  **0 learning items missing active cards.** No backfill needed.
+- **Hole 10 orphan-SRS cleanup:** new
+  `services/srs_cleanup_service.py` (`find_orphan_srs_cards` +
+  `cleanup_orphan_srs_cards(apply=False)`, dry-run default,
+  idempotent) + `scripts/cleanup_orphan_srs_cards.py`. Pure SQL —
+  never touches `user_word_knowledge`, catalog tables, or valid SRS
+  rows. 7 new tests. Audit on dev DB → **0 orphans.**
+- **#30 docs/SCHEMA.md:** written as a text companion (table groups,
+  polymorphic-key explainer, deletion cascade behaviour, recent
+  migration highlights, conventions). `eralchemy` skipped (not
+  installed, per spec "don't fight it"); the file documents the
+  exact command to produce an SVG later.
+- **Verified:** backend 528 passed / 2 skipped (was 521; +7);
+  frontend 158 passed; `tsc` clean; `vite build` clean.
 
 ### Deferred until web polish ships
 
 - **T3.1 Capacitor wrap (#34)** — packages installed, `ios/` scaffolded,
   `VITE_API_BASE_URL` helper in place. Paused per direction change.
-  Resume after W1–W7 land + privacy/account-deletion are done.
+  Account-deletion + privacy now done (W11). Remaining prerequisites
+  before resuming: real privacy contact email, localStorage
+  disclosure for EU, App Store Privacy Nutrient Label declarations,
+  full Xcode install on the dev machine.
 - **T2.2 LISTEN/NOTIFY (#4b)** — cost not correctness. Defer until
   user count + cost signal warrants it.
 - **T3.3 multi-language pipeline (#18, #19)** — feature, not a bug.

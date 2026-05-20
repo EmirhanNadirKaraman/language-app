@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ThemeMode, UserPreferences, UserPreferencesUpdate } from '../api/settings';
 import { fetchCategories } from '../api/search';
+import { deleteAccount } from '../api/account';
 
 interface Props {
     prefs: UserPreferences;
     onSave: (update: UserPreferencesUpdate) => Promise<void>;
     onClose: () => void;
+    token: string;
 }
 
 const POPULAR_CHANNELS = [
@@ -167,7 +169,7 @@ function TagInput({
     );
 }
 
-export function SettingsPanel({ prefs, onSave, onClose }: Props) {
+export function SettingsPanel({ prefs, onSave, onClose, token }: Props) {
     const [categories, setCategories] = useState<string[]>([]);
     const [likedGenres, setLikedGenres]     = useState('');
     const [likedChannels, setLikedChannels] = useState('');
@@ -181,6 +183,25 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
     const [autoMarkKnown, setAutoMarkKnown]       = useState(prefs.auto_mark_known);
     const [saved, setSaved]       = useState(false);
     const [saveError, setSaveError] = useState(false);
+
+    // Account deletion: two-step (confirm) so a misclick can't nuke the user.
+    const [deleteConfirm, setDeleteConfirm] = useState(false);
+    const [deleting, setDeleting]           = useState(false);
+    const [deleteError, setDeleteError]     = useState<string | null>(null);
+
+    async function handleDeleteAccount(): Promise<void> {
+        setDeleting(true);
+        setDeleteError(null);
+        try {
+            await deleteAccount(token);
+            // deleteAccount() already cleared local auth + dispatched
+            // 'auth:expired'. Layout listens for that event and resets
+            // token state + navigates back to '/'. No further action here.
+        } catch (e) {
+            setDeleting(false);
+            setDeleteError((e as Error).message || 'Delete failed');
+        }
+    }
 
     const syncingFromProps = useRef(false);
     const savedTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -451,6 +472,97 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
             <div style={{ height: '20px' }}>
                 {saved      && <span style={{ fontSize: '12px', color: 'var(--color-success)' }}>Saved</span>}
                 {saveError  && <span style={{ fontSize: '12px', color: 'var(--color-danger)' }}>Save failed — check your connection</span>}
+            </div>
+
+            {/* Account — destructive zone. Two-step confirm so a misclick can't
+                delete the user. */}
+            <p style={{ ...sectionHeader, margin: '24px 0 10px', color: 'var(--color-danger)' }}>
+                Account
+            </p>
+            <div style={{
+                border: '1px solid var(--color-danger-border)',
+                background: 'var(--color-danger-bg)',
+                borderRadius: '6px',
+                padding: '12px 14px',
+                marginBottom: '10px',
+            }}>
+                <p style={{ margin: '0 0 8px', fontSize: '13px', color: 'var(--color-text)', lineHeight: 1.45 }}>
+                    Deleting your account is permanent. Your learning history,
+                    SRS cards, uploaded books, reading selections, chat
+                    sessions, and saved preferences will be removed.
+                    Shared catalog data (words, channels, videos) is kept.
+                </p>
+                <p style={{ margin: '0 0 10px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                    See the <a href="/privacy" style={{ color: 'var(--color-primary)' }}>privacy policy</a> for what is stored and how to contact us.
+                </p>
+
+                {!deleteConfirm ? (
+                    <button
+                        data-testid="account-delete-start"
+                        onClick={() => { setDeleteError(null); setDeleteConfirm(true); }}
+                        style={{
+                            padding: '10px 16px',
+                            minHeight: '44px',
+                            border: '1px solid var(--color-danger)',
+                            background: 'var(--color-surface)',
+                            color: 'var(--color-danger)',
+                            borderRadius: '5px',
+                            fontSize: '14px',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            touchAction: 'manipulation',
+                        }}
+                    >
+                        Delete account
+                    </button>
+                ) : (
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                            data-testid="account-delete-confirm"
+                            onClick={handleDeleteAccount}
+                            disabled={deleting}
+                            style={{
+                                padding: '10px 16px',
+                                minHeight: '44px',
+                                border: 'none',
+                                background: 'var(--color-danger)',
+                                color: '#fff',
+                                borderRadius: '5px',
+                                fontSize: '14px',
+                                fontWeight: 700,
+                                cursor: deleting ? 'wait' : 'pointer',
+                                touchAction: 'manipulation',
+                                opacity: deleting ? 0.7 : 1,
+                            }}
+                        >
+                            {deleting ? 'Deleting…' : 'Yes, permanently delete'}
+                        </button>
+                        <button
+                            data-testid="account-delete-cancel"
+                            onClick={() => setDeleteConfirm(false)}
+                            disabled={deleting}
+                            style={{
+                                padding: '10px 16px',
+                                minHeight: '44px',
+                                border: '1px solid var(--color-border)',
+                                background: 'var(--color-surface)',
+                                color: 'var(--color-text)',
+                                borderRadius: '5px',
+                                fontSize: '14px',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                touchAction: 'manipulation',
+                            }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                )}
+                {deleteError && (
+                    <p style={{ margin: '8px 0 0', fontSize: '12px', color: 'var(--color-danger)' }}>
+                        {deleteError}
+                    </p>
+                )}
             </div>
         </div>
     );

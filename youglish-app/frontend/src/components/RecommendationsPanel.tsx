@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRecommendations } from '../hooks/useRecommendations';
 import {
     ItemRecommendationCard,
@@ -54,6 +54,26 @@ export function RecommendationsPanel({
     const { items, phrases, videos, sentences, noTargetItems, loading, error, refresh } =
         useRecommendations(token, language);
     const [prepItem, setPrepItem] = useState<InsightItem | null>(null);
+
+    // Stable per-card callbacks so React.memo on the cards isn't defeated by
+    // a fresh closure every render. Undefined when the parent doesn't pass
+    // the action handler (e.g. AddContentPage without channel actions).
+    const wrappedChannelAction = useCallback(
+        async (cid: string, cname: string, action: ChannelAction) => {
+            if (!onChannelAction) return;
+            await onChannelAction(cid, cname, action);
+            refresh();
+        },
+        [onChannelAction, refresh],
+    );
+    const wrappedGenreAction = useCallback(
+        async (genre: string, action: GenreAction) => {
+            if (!onGenreAction) return;
+            await onGenreAction(genre, action);
+            refresh();
+        },
+        [onGenreAction, refresh],
+    );
 
     const sectionLabel: React.CSSProperties = {
         fontSize: '11px',
@@ -240,14 +260,8 @@ export function RecommendationsPanel({
                             language={language}
                             prefs={prefs}
                             onWatch={onWatch}
-                            onChannelAction={async (cid, cname, action) => {
-                                await onChannelAction(cid, cname, action);
-                                refresh();
-                            }}
-                            onGenreAction={async (genre, action) => {
-                                await onGenreAction(genre, action);
-                                refresh();
-                            }}
+                            onChannelAction={wrappedChannelAction}
+                            onGenreAction={wrappedGenreAction}
                         />
                     )}
 
@@ -267,14 +281,8 @@ export function RecommendationsPanel({
                                     rec={rec}
                                     onWatch={onWatch}
                                     prefs={prefs}
-                                    onChannelAction={onChannelAction && (async (cid, cname, action) => {
-                                        await onChannelAction(cid, cname, action);
-                                        refresh();
-                                    })}
-                                    onGenreAction={onGenreAction && (async (genre, action) => {
-                                        await onGenreAction(genre, action);
-                                        refresh();
-                                    })}
+                                    onChannelAction={onChannelAction ? wrappedChannelAction : undefined}
+                                    onGenreAction={onGenreAction ? wrappedGenreAction : undefined}
                                 />
                             ))}
                         </div>

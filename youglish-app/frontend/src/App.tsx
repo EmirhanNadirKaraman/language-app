@@ -6,6 +6,7 @@ import { LoginForm } from './components/LoginForm';
 import { FreeChatPage } from './components/FreeChatPage';
 import { GuidedChatPage } from './components/GuidedChatPage';
 import { SettingsPanel } from './components/SettingsPanel';
+import { PrivacyPage } from './components/PrivacyPage';
 import { RecommendationsPanel } from './components/RecommendationsPanel';
 import { PlaylistPanel } from './components/PlaylistPanel';
 import { BookLibraryPage } from './components/BookLibraryPage';
@@ -148,6 +149,21 @@ function Layout() {
         <ErrorBoundary>
           <Outlet context={ctx} />
         </ErrorBoundary>
+
+        <footer
+          style={{
+            marginTop: '24px',
+            paddingTop: '12px',
+            borderTop: '1px solid var(--color-border-subtle)',
+            fontSize: '12px',
+            color: 'var(--color-text-muted)',
+            textAlign: 'center',
+          }}
+        >
+          <NavLink to="/privacy" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+            Privacy
+          </NavLink>
+        </footer>
       </div>
     </>
   );
@@ -374,7 +390,7 @@ function SettingsPage() {
   const { token, prefs, savePreferences } = useAppCtx();
   const navigate = useNavigate();
   if (!token) return <Navigate to="/" />;
-  return <SettingsPanel prefs={prefs} onSave={savePreferences} onClose={() => navigate('/')} />;
+  return <SettingsPanel prefs={prefs} onSave={savePreferences} onClose={() => navigate('/')} token={token} />;
 }
 
 export default function App() {
@@ -389,6 +405,7 @@ export default function App() {
         <Route path="reading-review" element={<ReadingReviewRoute />} />
         <Route path="add-content" element={<AddContentPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="privacy" element={<PrivacyPage />} />
       </Route>
     </Routes>
   );

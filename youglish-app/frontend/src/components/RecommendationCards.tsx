@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import type { ItemRecommendation, VideoRecommendation, SentenceRecommendation } from '../types';
 import { setItemStatus } from '../api/words';
 import { formatDuration } from '../utils/recommendationUtils';
@@ -159,7 +159,7 @@ interface ItemCardProps {
     passiveMax?:    number;
 }
 
-export function ItemRecommendationCard({
+export const ItemRecommendationCard = memo(function ItemRecommendationCard({
     rec, token, onSearch, onPractice, language, onStatusChange, wordColors, passiveMax = 5,
 }: ItemCardProps) {
     const colors = wordColors ?? WORD_COLORS;
@@ -277,7 +277,7 @@ export function ItemRecommendationCard({
             </div>
         </div>
     );
-}
+});
 
 // ---------------------------------------------------------------------------
 // VideoRecommendationCard
@@ -291,7 +291,7 @@ interface VideoCardProps {
     onGenreAction?:  (genre: string, action: GenreAction) => Promise<void>;
 }
 
-export function VideoRecommendationCard({ rec, onWatch, prefs, onChannelAction, onGenreAction }: VideoCardProps) {
+export const VideoRecommendationCard = memo(function VideoRecommendationCard({ rec, onWatch, prefs, onChannelAction, onGenreAction }: VideoCardProps) {
     const [saving, setSaving] = useState(false);
 
     const reasons: string[] = [];
@@ -458,7 +458,7 @@ export function VideoRecommendationCard({ rec, onWatch, prefs, onChannelAction, 
             </div>
         </div>
     );
-}
+});
 
 function PrefButton({
     label, active, activeColor, onClick, disabled,
@@ -502,7 +502,7 @@ interface SentenceCardProps {
     onPractice: (result: SearchResult) => void;
 }
 
-export function SentenceRecommendationCard({ rec, language, onWatch, onPractice }: SentenceCardProps) {
+export const SentenceRecommendationCard = memo(function SentenceRecommendationCard({ rec, language, onWatch, onPractice }: SentenceCardProps) {
     const reasons: string[] = [];
     if (rec.due_count > 0)
         reasons.push(`${rec.due_count} due for review`);
@@ -568,4 +568,4 @@ export function SentenceRecommendationCard({ rec, language, onWatch, onPractice 
             </div>
         </div>
     );
-}
+});

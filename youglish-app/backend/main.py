@@ -29,6 +29,7 @@ from .routers.words import router as words_router
 from .routers.content_requests import router as content_requests_router
 from .routers.notifications import router as notifications_router
 from .routers.errors import router as errors_router
+from .routers.account import router as account_router
 
 
 @asynccontextmanager
@@ -134,6 +135,7 @@ app.include_router(reminders_router,       prefix="/api/v1")    # /api/v1/remind
 app.include_router(content_requests_router, prefix="/api/v1")  # /api/v1/content-requests
 app.include_router(notifications_router,    prefix="/api/v1")  # /api/v1/notifications/stream
 app.include_router(errors_router,           prefix="/api/v1")  # /api/v1/errors/client
+app.include_router(account_router,          prefix="/api/v1")  # /api/v1/account (DELETE)
 
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():

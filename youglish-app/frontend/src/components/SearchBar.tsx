@@ -46,7 +46,7 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
       } catch {
         // AbortError or network error — ignore
       }
-    }, 200);
+    }, 250);
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [input]);

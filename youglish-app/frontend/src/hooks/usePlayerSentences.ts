@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { SearchResult } from '../types';
 import type { YoutubeEmbedHandle } from '../components/YoutubeEmbed';
 import { fetchVideoSentences, fetchWordForms } from '../api/search';
@@ -17,9 +17,14 @@ export function usePlayerSentences({ result, query, onPrev, onNext }: Args) {
 
     const playerRef = useRef<YoutubeEmbedHandle>(null);
 
-    const baseTerms = result.surface_form
-        ? [result.surface_form]
-        : query.split(' ').filter(t => t.length > 0);
+    // Stable per (surface_form, query) so the highlight-terms effect below
+    // doesn't see a fresh array identity on every render.
+    const baseTerms = useMemo(
+        () => result.surface_form
+            ? [result.surface_form]
+            : query.split(' ').filter(t => t.length > 0),
+        [result.surface_form, query],
+    );
 
     const [highlightTerms, setHighlightTerms] = useState<string[]>(baseTerms);
 
@@ -111,8 +116,16 @@ export function usePlayerSentences({ result, query, onPrev, onNext }: Args) {
         playerRef.current?.seekTo(Math.floor(time));
     }, [current, result.start_time_int]);
 
-    const hasPrevMatch = sentences.slice(0, sentenceIdx).some(s => sentenceContainsTerm(s, highlightTerms));
-    const hasNextMatch = sentences.slice(sentenceIdx + 1).some(s => sentenceContainsTerm(s, highlightTerms));
+    // Both scans cost O(n) per render; memoize so unrelated parent state changes
+    // don't re-scan the full transcript.
+    const hasPrevMatch = useMemo(
+        () => sentences.slice(0, sentenceIdx).some(s => sentenceContainsTerm(s, highlightTerms)),
+        [sentences, sentenceIdx, highlightTerms],
+    );
+    const hasNextMatch = useMemo(
+        () => sentences.slice(sentenceIdx + 1).some(s => sentenceContainsTerm(s, highlightTerms)),
+        [sentences, sentenceIdx, highlightTerms],
+    );
 
     return {
         sentences,

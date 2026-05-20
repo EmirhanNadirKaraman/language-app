@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe('SettingsPanel mobile (#27f)', () => {
     it('reps inputs have fontSize: 16px and minHeight: 44px', () => {
-        render(<SettingsPanel prefs={PREFERENCE_DEFAULTS} onSave={vi.fn().mockResolvedValue(undefined)} onClose={() => {}} />);
+        render(<SettingsPanel prefs={PREFERENCE_DEFAULTS} onSave={vi.fn().mockResolvedValue(undefined)} onClose={() => {}} token="test-token" />);
         const passive = screen.getByTestId('settings-passive-reps') as HTMLInputElement;
         const active  = screen.getByTestId('settings-active-reps')  as HTMLInputElement;
         for (const input of [passive, active]) {
@@ -34,7 +34,7 @@ describe('SettingsPanel mobile (#27f)', () => {
     });
 
     it('TagInput text field has fontSize: 16px (iOS guard)', () => {
-        render(<SettingsPanel prefs={PREFERENCE_DEFAULTS} onSave={vi.fn().mockResolvedValue(undefined)} onClose={() => {}} />);
+        render(<SettingsPanel prefs={PREFERENCE_DEFAULTS} onSave={vi.fn().mockResolvedValue(undefined)} onClose={() => {}} token="test-token" />);
         // There are two TagInput instances (liked_genres + liked_channels); both share the testid.
         const inputs = screen.getAllByTestId('tag-input-field');
         expect(inputs.length).toBeGreaterThan(0);
@@ -45,7 +45,7 @@ describe('SettingsPanel mobile (#27f)', () => {
 
     it('close button is 44×44 and dismisses', () => {
         const onClose = vi.fn();
-        render(<SettingsPanel prefs={PREFERENCE_DEFAULTS} onSave={vi.fn().mockResolvedValue(undefined)} onClose={onClose} />);
+        render(<SettingsPanel prefs={PREFERENCE_DEFAULTS} onSave={vi.fn().mockResolvedValue(undefined)} onClose={onClose} token="test-token" />);
         const close = screen.getByTestId('settings-close') as HTMLElement;
         expect(close.style.minWidth).toBe('44px');
         expect(close.style.minHeight).toBe('44px');
@@ -55,7 +55,7 @@ describe('SettingsPanel mobile (#27f)', () => {
 
     it('changing a preference still triggers onSave (debounce respected)', async () => {
         const onSave = vi.fn().mockResolvedValue(undefined);
-        render(<SettingsPanel prefs={PREFERENCE_DEFAULTS} onSave={onSave} onClose={() => {}} />);
+        render(<SettingsPanel prefs={PREFERENCE_DEFAULTS} onSave={onSave} onClose={() => {}} token="test-token" />);
 
         const passive = await screen.findByTestId('settings-passive-reps') as HTMLInputElement;
         // Wait one tick for syncFromProps to settle so this change isn't treated as a sync.
