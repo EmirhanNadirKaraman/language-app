@@ -7,12 +7,15 @@ Channels in subscribed_channels.txt are language-detected automatically.
 """
 
 import json
+import logging
 import os
 import sys
 import time
 
 import psycopg2
 import yt_dlp
+
+logger = logging.getLogger(__name__)
 from scrapetube import scrapetube
 import spacy
 from langdetect import detect, LangDetectException
@@ -132,11 +135,11 @@ def get_transcript(video_id, language=None):
                 continue  # no subtitles for this language, try next
 
     except ValueError as e:
-        print(f"  No subtitles for {video_id}: {e}")
+        logger.info("No subtitles for %s: %s", video_id, e)
         return None, None, None, None  # permanent — no subtitles exist
 
-    except Exception as e:
-        print(f"  Error fetching transcript for {video_id}: {e}")
+    except Exception:
+        logger.exception("Error fetching transcript for %s", video_id)
         raise  # transient — let caller decide whether to blacklist
 
 
@@ -160,8 +163,8 @@ def fetch_video_metadata(video_id: str) -> dict | None:
                 "thumbnail_url": info.get("thumbnail", ""),
                 "category":     category,
             }
-    except Exception as e:
-        print(f"  [yt-dlp] Could not fetch metadata for {video_id}: {e}")
+    except Exception:
+        logger.warning("yt-dlp could not fetch metadata for %s", video_id, exc_info=True)
     return None
 
 
@@ -179,8 +182,8 @@ def fetch_channel_name(channel_id: str) -> str:
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=False)
             return (info.get("channel") or info.get("uploader") or info.get("title") or "").strip()
-    except Exception as e:
-        print(f"  [yt-dlp] Could not fetch channel name for {channel_id}: {e}")
+    except Exception:
+        logger.warning("yt-dlp could not fetch channel name for %s", channel_id, exc_info=True)
     return ""
 
 
@@ -475,7 +478,7 @@ def _scan_channel_videos(  # noqa: PLR0913
         )
         processed_videos.add(vid_id)
         added += 1
-        print(f"    [{added}] {title} ({detected_lang})")
+        logger.info("[%d] %s (%s)", added, title, detected_lang)
 
     return added
 
@@ -494,7 +497,7 @@ def _process_channel_request(  # noqa: PLR0913
     if row:
         internal_channel_id, channel_name, language = row
         channel_name = channel_name or youtube_channel_id
-        print(f"  [request] channel already known: {channel_name}")
+        logger.info("[request] channel already known: %s", channel_name)
     else:
         channel_name = fetch_channel_name(youtube_channel_id)
         cursor.execute(
@@ -513,15 +516,15 @@ def _process_channel_request(  # noqa: PLR0913
         internal_channel_id = cursor.fetchone()[0]
         connection.commit()
         language = None
-        print(f"  [request] added new channel: {channel_name or youtube_channel_id}")
+        logger.info("[request] added new channel: %s", channel_name or youtube_channel_id)
 
-    print(f"  [request] scanning {channel_name or youtube_channel_id} for new videos…")
+    logger.info("[request] scanning %s for new videos…", channel_name or youtube_channel_id)
     added = _scan_channel_videos(
         cursor, connection,
         youtube_channel_id, internal_channel_id, language,
         nlp_cache, sentence_types, db_words, processed_videos, blacklist,
     )
-    print(f"  [request] done — {added} new video(s) added")
+    logger.info("[request] done — %d new video(s) added", added)
     _mark_request(cursor, connection, request_id, "done")
     _notify_user(cursor, connection, request_id, "channel_done", {
         "youtube_channel_id": youtube_channel_id,
@@ -538,18 +541,18 @@ def _process_video_request(  # noqa: PLR0913
     """Process a single requested video."""
     if video_id in blacklist:
         _mark_request(cursor, connection, request_id, "failed", "video is blacklisted")
-        print(f"  [request] video {video_id} is blacklisted")
+        logger.info("[request] video %s is blacklisted", video_id)
         return
 
     if video_id in processed_videos:
         _mark_request(cursor, connection, request_id, "done")
-        print(f"  [request] video {video_id} already in DB")
+        logger.info("[request] video %s already in DB", video_id)
         return
 
     meta = fetch_video_metadata(video_id)
     if not meta or not meta["channel_id"]:
         _mark_request(cursor, connection, request_id, "failed", "could not fetch video metadata")
-        print(f"  [request] could not fetch metadata for {video_id}")
+        logger.warning("[request] could not fetch metadata for %s", video_id)
         return
 
     internal_channel_id = upsert_channel(cursor, meta["channel_id"], meta["channel_name"], None)
@@ -558,7 +561,7 @@ def _process_video_request(  # noqa: PLR0913
         fetched, detected_lang, language_code, transcript_source = get_transcript(video_id)
     except Exception:
         _mark_request(cursor, connection, request_id, "failed", "transcript fetch error (transient)")
-        print(f"  [request] transient error fetching transcript for {video_id}, will retry")
+        logger.warning("[request] transient error fetching transcript for %s, will retry", video_id, exc_info=True)
         return
     if fetched is None:
         blacklist.add(video_id)
@@ -568,7 +571,7 @@ def _process_video_request(  # noqa: PLR0913
         )
         _mark_request(cursor, connection, request_id, "failed", "no transcript available")
         connection.commit()
-        print(f"  [request] no transcript for {video_id}")
+        logger.info("[request] no transcript for %s", video_id)
         return
 
     if detected_lang not in nlp_cache:
@@ -593,7 +596,7 @@ def _process_video_request(  # noqa: PLR0913
         transcript_source=transcript_source,
     )
     processed_videos.add(video_id)
-    print(f"  [request] processed video: {meta['title']} ({detected_lang})")
+    logger.info("[request] processed video: %s (%s)", meta['title'], detected_lang)
     _mark_request(cursor, connection, request_id, "done")
     _notify_user(cursor, connection, request_id, "video_done", {
         "video_id": video_id,
@@ -613,7 +616,7 @@ def process_pending_requests(
     if not pending:
         return
 
-    print(f"\nProcessing {len(pending)} pending content request(s)...")
+    logger.info("Processing %d pending content request(s)...", len(pending))
     for request_id, request_type, content_id in pending:
         try:
             if request_type == "channel":
@@ -628,7 +631,7 @@ def process_pending_requests(
                 )
         except Exception as e:
             _mark_request(cursor, connection, request_id, "failed", str(e))
-            print(f"  [request] error processing {request_type} {content_id}: {e}")
+            logger.exception("[request] error processing %s %s", request_type, content_id)
 
 
 def main():
@@ -636,7 +639,7 @@ def main():
     cursor = connection.cursor()
 
     channels = load_channels(cursor)
-    print(f"Loaded {len(channels)} channels total")
+    logger.info("Loaded %d channels total", len(channels))
 
     cursor.execute("SELECT video_id FROM video")
     processed_videos = {row[0] for row in cursor.fetchall()}
@@ -664,7 +667,7 @@ def main():
         (ch, iter(scrapetube.get_channel(ch["id"])))
         for ch in channels
     ]
-    print(f"Active channels: {len(channel_iters)}")
+    logger.info("Active channels: %d", len(channel_iters))
 
     total = 0
     while channel_iters:
@@ -681,7 +684,7 @@ def main():
                 try:
                     candidate = next(vid_iter)
                 except StopIteration:
-                    print(f"\nChannel exhausted this run: {channel_name}")
+                    logger.info("Channel exhausted this run: %s", channel_name)
                     break
                 vid_id = candidate["videoId"]
                 if vid_id in blacklist or vid_id in processed_videos:
@@ -716,7 +719,7 @@ def main():
                         enable=["tok2vec", "tagger", "attribute_ruler", "lemmatizer"]
                     )
                 except Exception:
-                    print(f"  No spacy model for '{detected_lang}', skipping video")
+                    logger.warning("No spacy model for %r, skipping video", detected_lang, exc_info=True)
                     next_round.append((channel, vid_iter))
                     continue
 
@@ -744,12 +747,12 @@ def main():
 
             processed_videos.add(video_id)
             total += 1
-            print(f"  [{total}] {channel_name}: {title} ({detected_lang})")
+            logger.info("[%d] %s: %s (%s)", total, channel_name, title, detected_lang)
             next_round.append((channel, vid_iter))
 
         channel_iters = next_round
 
-    print("\nDone.")
+    logger.info("Done.")
 
 
 def run_pending_requests_only() -> None:
@@ -774,11 +777,15 @@ def run_pending_requests_only() -> None:
         cursor, connection, nlp_cache, sentence_types, db_words, processed_videos, blacklist
     )
     connection.close()
-    print("\nDone.")
+    logger.info("Done.")
 
 
 if __name__ == "__main__":
     import argparse
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     parser = argparse.ArgumentParser()
     parser.add_argument("--requests-only", action="store_true",
                         help="Process pending content requests and exit (skip channel loop)")

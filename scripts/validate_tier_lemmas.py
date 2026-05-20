@@ -4,6 +4,9 @@ validate_tier_lemmas.py
 Diagnostic script: verify that onboarding tier lemma keys match what
 LearningUnitExtractor actually produces from spaCy.
 
+Stdout is the product: every print() emits a row of the mismatch / OK / separable
+report that the human reads to act on. Intentionally left as print(), not logging.
+
 A mismatch means the onboarding seeds a key that the extractor never
 generates — the unit silently remains UNSEEN and doesn't protect against
 false unknowns in the i+1 filter.

@@ -1,6 +1,9 @@
 """
 Standalone debug script — run this to see exactly where transcript fetching fails.
 Usage: python subtitle-scraper/debug_transcript.py iF8crBezySA
+
+Interactive debugging tool: every print() emits diagnostic data to stdout,
+which IS the product. Intentionally left as print(), not logging.
 """
 import json
 import os

@@ -23,6 +23,7 @@ from httpx import AsyncClient
 
 from backend.routers.chat import _compute_sentence_quality
 from backend.services.chat_service import match_learning_words
+from ._email_helper import make_test_email
 
 REGISTER = "/api/v1/auth/register"
 LOGIN    = "/api/v1/auth/login"
@@ -34,7 +35,7 @@ SESSIONS = "/api/v1/chat/sessions"
 # ---------------------------------------------------------------------------
 
 def _email() -> str:
-    return f"test+{uuid.uuid4().hex[:10]}@example.com"
+    return make_test_email()
 
 
 async def _register_and_login(client: AsyncClient, db_pool, email: str) -> tuple[dict, str]:

@@ -1,8 +1,11 @@
+# CLI report: emits a formatted vocabulary-coverage-by-file table to stdout,
+# which IS the product. Intentionally left as print(), not logging.
+
 import sys
 from pathlib import Path
 import psycopg2
 from psycopg2.extras import RealDictCursor
-import os 
+import os
 from collections import OrderedDict
 
 # Add parent directory to Python path

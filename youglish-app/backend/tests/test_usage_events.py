@@ -22,6 +22,7 @@ from backend.services.usage_events_service import (
     record_event,
     recently_failed_items,
 )
+from ._email_helper import make_test_email
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +65,7 @@ async def _set_status(pool, user_id: str, item_id: int, item_type: str, status_v
 # ---------------------------------------------------------------------------
 
 async def test_record_event_inserts_row(db_pool):
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user_id = await _make_user(db_pool, email)
     word_id = await _make_word(db_pool, 0)
 
@@ -78,7 +79,7 @@ async def test_record_event_inserts_row(db_pool):
 
 
 async def test_record_event_stores_metadata(db_pool):
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user_id = await _make_user(db_pool, email)
     word_id = await _make_word(db_pool, 0)
 
@@ -101,7 +102,7 @@ async def test_record_event_stores_metadata(db_pool):
 # ---------------------------------------------------------------------------
 
 async def test_most_frequent_unknown_returns_only_unknown(db_pool):
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user_id = await _make_user(db_pool, email)
     unknown_id = await _make_word(db_pool, 0)
     learning_id = await _make_word(db_pool, 1)
@@ -121,7 +122,7 @@ async def test_most_frequent_unknown_returns_only_unknown(db_pool):
 
 
 async def test_most_frequent_unknown_ordered_by_count(db_pool):
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user_id = await _make_user(db_pool, email)
     w1 = await _make_word(db_pool, 0)
     w2 = await _make_word(db_pool, 1)
@@ -144,7 +145,7 @@ async def test_most_frequent_unknown_ordered_by_count(db_pool):
 # ---------------------------------------------------------------------------
 
 async def test_most_frequent_learning_returns_only_learning(db_pool):
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user_id = await _make_user(db_pool, email)
     learning_id = await _make_word(db_pool, 0)
     known_id = await _make_word(db_pool, 1)
@@ -168,7 +169,7 @@ async def test_most_frequent_learning_returns_only_learning(db_pool):
 # ---------------------------------------------------------------------------
 
 async def test_recently_failed_returns_incorrect_outcomes(db_pool):
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user_id = await _make_user(db_pool, email)
     word_id = await _make_word(db_pool, 0)
 
@@ -183,7 +184,7 @@ async def test_recently_failed_returns_incorrect_outcomes(db_pool):
 
 
 async def test_recently_failed_excludes_correct_outcomes(db_pool):
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user_id = await _make_user(db_pool, email)
     word_id = await _make_word(db_pool, 0)
 
@@ -199,7 +200,7 @@ async def test_recently_failed_excludes_correct_outcomes(db_pool):
 # ---------------------------------------------------------------------------
 
 async def test_most_interacted_counts_all_outcomes(db_pool):
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user_id = await _make_user(db_pool, email)
     word_id = await _make_word(db_pool, 0)
 
@@ -213,7 +214,7 @@ async def test_most_interacted_counts_all_outcomes(db_pool):
 
 
 async def test_most_interacted_respects_since_days_window(db_pool):
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user_id = await _make_user(db_pool, email)
     word_id = await _make_word(db_pool, 0)
 
@@ -238,7 +239,7 @@ async def test_most_interacted_respects_since_days_window(db_pool):
 # ---------------------------------------------------------------------------
 
 async def test_all_aggregations_return_empty_for_new_user(db_pool):
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user_id = await _make_user(db_pool, email)
 
     assert await most_frequent_unknown_items(db_pool, user_id) == []

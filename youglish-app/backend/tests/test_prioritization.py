@@ -36,6 +36,7 @@ from backend.services.prioritization_service import (
     explain_signals,
     get_prioritized_items,
 )
+from ._email_helper import make_test_email
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +136,7 @@ class TestExplainSignals:
 async def _create_user(pool) -> str:
     row = await pool.fetchrow(
         "INSERT INTO users (email, password_hash) VALUES ($1, 'x') RETURNING user_id",
-        f"test+{uuid.uuid4().hex[:12]}@example.com",
+        make_test_email(),
     )
     return str(row["user_id"])
 

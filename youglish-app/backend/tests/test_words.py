@@ -8,6 +8,7 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from ._email_helper import cleanup_pattern, make_test_email
 
 REGISTER = "/api/v1/auth/register"
 LOGIN = "/api/v1/auth/login"
@@ -16,7 +17,7 @@ BY_TEXT = "/api/v1/words/by-text"
 
 
 def make_email() -> str:
-    return f"test+{uuid.uuid4().hex[:10]}@example.com"
+    return make_test_email()
 
 
 async def _registered_token(client: AsyncClient) -> str:
@@ -266,7 +267,7 @@ async def test_put_known_does_not_create_active_srs_card(client: AsyncClient, db
     word_id, _, _ = await _get_word_for_lookup(db_pool)
     token = await _registered_token(client)
     uid = await db_pool.fetchval(
-        "SELECT user_id FROM users WHERE email LIKE 'test+%@example.com' ORDER BY user_id DESC LIMIT 1"
+        "SELECT user_id FROM users WHERE email LIKE $1 ORDER BY user_id DESC LIMIT 1", cleanup_pattern()
     )
 
     await client.put(
@@ -288,7 +289,7 @@ async def test_put_known_does_not_increment_active_level(client: AsyncClient, db
     word_id, _, _ = await _get_word_for_lookup(db_pool)
     token = await _registered_token(client)
     uid = await db_pool.fetchval(
-        "SELECT user_id FROM users WHERE email LIKE 'test+%@example.com' ORDER BY user_id DESC LIMIT 1"
+        "SELECT user_id FROM users WHERE email LIKE $1 ORDER BY user_id DESC LIMIT 1", cleanup_pattern()
     )
 
     await client.put(
@@ -315,7 +316,7 @@ async def test_put_known_after_learning_does_not_advance_active_card(client: Asy
     token = await _registered_token(client)
     headers = {"Authorization": f"Bearer {token}"}
     uid = await db_pool.fetchval(
-        "SELECT user_id FROM users WHERE email LIKE 'test+%@example.com' ORDER BY user_id DESC LIMIT 1"
+        "SELECT user_id FROM users WHERE email LIKE $1 ORDER BY user_id DESC LIMIT 1", cleanup_pattern()
     )
 
     # First mark learning → creates active card at interval=1.0, reps=0.

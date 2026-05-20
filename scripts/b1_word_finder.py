@@ -1,4 +1,7 @@
-with open('data/b1_unparsed.txt', 'r') as b1_words: 
+# Dev throwaway: prints a vocabulary dict to stdout for inspection. Stdout IS
+# the product; prints left intentionally (not converted to logging).
+
+with open('data/b1_unparsed.txt', 'r') as b1_words:
     b1_words = [word.strip() for word in b1_words.readlines()]
 
 with open('data/final_result.txt', 'r') as top_4000_words: 

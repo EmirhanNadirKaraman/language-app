@@ -6,6 +6,9 @@ interface Props {
   token: string;
   onOpen: (doc: BookDocument) => void;
   onClose: () => void;
+  // Optional entry point to the saved-selection review queue (#5).
+  // Wired by the parent route — undefined hides the button.
+  onOpenReadingReview?: () => void;
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -52,7 +55,7 @@ function sortBooks(books: BookDocument[], key: SortKey): BookDocument[] {
   }
 }
 
-export function BookLibraryPage({ token, onOpen, onClose }: Props) {
+export function BookLibraryPage({ token, onOpen, onClose, onOpenReadingReview }: Props) {
   // Theme tokens come from CSS variables in index.css (#20). Local `th`
   // object kept so call sites read cleanly — values are var(--...) strings.
   const th = {
@@ -170,21 +173,41 @@ export function BookLibraryPage({ token, onOpen, onClose }: Props) {
               </span>
             )}
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer',
-              color: th.muted, lineHeight: 1,
-              minWidth: '44px', minHeight: '44px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              padding: 0,
-              touchAction: 'manipulation',
-            }}
-            aria-label="Close"
-            data-testid="book-library-close"
-          >
-            ×
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            {onOpenReadingReview && (
+              <button
+                onClick={onOpenReadingReview}
+                style={{
+                  padding: '8px 14px', minHeight: '40px',
+                  border: '1px solid var(--color-border-accent)',
+                  borderRadius: '6px',
+                  background: 'var(--color-surface)',
+                  color: 'var(--color-primary-on-soft)',
+                  fontSize: '13px', fontWeight: 600,
+                  cursor: 'pointer',
+                  touchAction: 'manipulation',
+                }}
+                data-testid="book-library-reading-review"
+              >
+                Reading Review
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              style={{
+                background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer',
+                color: th.muted, lineHeight: 1,
+                minWidth: '44px', minHeight: '44px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: 0,
+                touchAction: 'manipulation',
+              }}
+              aria-label="Close"
+              data-testid="book-library-close"
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         {/* Upload form */}

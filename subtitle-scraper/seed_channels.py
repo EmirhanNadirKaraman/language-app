@@ -12,11 +12,14 @@ Run from the subtitle-scraper directory after migration 015 has been applied:
 
 import argparse
 import json
+import logging
 import os
 from pathlib import Path
 
 import psycopg2
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -58,7 +61,7 @@ def seed(dry_run: bool = False) -> None:
 
     # ── merged_channels.json ──────────────────────────────────────────────────
     merged = load_merged_channels()
-    print(f"merged_channels.json: {len(merged)} channels")
+    logger.info("merged_channels.json: %d channels", len(merged))
 
     merged_inserted = 0
     merged_skipped = 0
@@ -84,11 +87,11 @@ def seed(dry_run: bool = False) -> None:
             else:
                 merged_skipped += 1
         else:
-            print(f"  [dry] upsert channel {channel_id!r} ({channel_name!r}, {language})")
+            logger.info("[dry] upsert channel %r (%r, %s)", channel_id, channel_name, language)
 
     # ── subscribed_channels.txt ───────────────────────────────────────────────
     subscribed = load_subscribed_ids()
-    print(f"subscribed_channels.txt: {len(subscribed)} channel IDs")
+    logger.info("subscribed_channels.txt: %d channel IDs", len(subscribed))
 
     sub_inserted = 0
     for channel_id in subscribed:
@@ -104,15 +107,15 @@ def seed(dry_run: bool = False) -> None:
             if cursor.rowcount:
                 sub_inserted += 1
         else:
-            print(f"  [dry] insert channel_id {channel_id!r} (name/language unknown)")
+            logger.info("[dry] insert channel_id %r (name/language unknown)", channel_id)
 
     if not dry_run:
         conn.commit()
-        print(f"\nDone.")
-        print(f"  merged_channels: {merged_inserted} upserted, {merged_skipped} already present")
-        print(f"  subscribed_only: {sub_inserted} new rows (no name/language yet)")
+        logger.info("Done.")
+        logger.info("  merged_channels: %d upserted, %d already present", merged_inserted, merged_skipped)
+        logger.info("  subscribed_only: %d new rows (no name/language yet)", sub_inserted)
     else:
-        print("\nDry run complete — nothing written.")
+        logger.info("Dry run complete — nothing written.")
 
     cursor.close()
     conn.close()
@@ -126,4 +129,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     main()

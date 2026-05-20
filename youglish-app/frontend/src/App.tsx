@@ -12,6 +12,7 @@ import { BookLibraryPage } from './components/BookLibraryPage';
 import { BookReaderPage } from './components/BookReaderPage';
 import { ReminderBanner } from './components/ReminderBanner';
 import { SRSReviewPage } from './components/SRSReviewPage';
+import { ReadingReviewPage } from './components/ReadingReviewPage';
 import { ContentRequestPage } from './components/ContentRequestPage';
 import { NotificationContainer } from './components/NotificationToast';
 import { useNotifications } from './hooks/useNotifications';
@@ -332,6 +333,7 @@ function BooksPage() {
       token={token}
       onOpen={setActiveBook}
       onClose={() => navigate('/')}
+      onOpenReadingReview={() => navigate('/reading-review')}
     />
   );
 }
@@ -348,6 +350,13 @@ function ReviewPage() {
       onClose={() => navigate('/')}
     />
   );
+}
+
+function ReadingReviewRoute() {
+  const { token } = useAppCtx();
+  const navigate = useNavigate();
+  if (!token) return <Navigate to="/" />;
+  return <ReadingReviewPage token={token} onClose={() => navigate('/books')} />;
 }
 
 function AddContentPage() {
@@ -373,6 +382,7 @@ export default function App() {
         <Route path="playlist" element={<PlaylistPage />} />
         <Route path="books" element={<BooksPage />} />
         <Route path="review" element={<ReviewPage />} />
+        <Route path="reading-review" element={<ReadingReviewRoute />} />
         <Route path="add-content" element={<AddContentPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>

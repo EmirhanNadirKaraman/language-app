@@ -1,3 +1,6 @@
+# CLI tool: emits the ILP solver progress + final coverage tables to stdout,
+# which IS the product. Intentionally left as print(), not logging.
+
 import pulp
 import os
 import sys

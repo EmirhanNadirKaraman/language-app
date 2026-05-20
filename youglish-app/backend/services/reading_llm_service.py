@@ -6,8 +6,9 @@ LLM functions for the interactive reading feature.
   translate_sentence   -- translate a sentence into English (cached permanently)
   explain_in_context   -- explain a selected unit in the context of its sentence (cached)
 
-Both functions follow the same caching pattern as llm_service.py:
-  make_cache_key -> get_cached -> (call LLM) -> set_cached
+Both funnel through llm_cache_service.get_or_compute (#24): cache hits skip
+the LLM; concurrent misses on the same key serialise on a per-key
+asyncio.Lock so the provider is called exactly once across the wave.
 """
 from __future__ import annotations
 
@@ -58,39 +59,33 @@ async def translate_sentence(
     if _MOCK:
         return f"[Mock translation of {language} sentence: \"{sentence[:60]}\"]"
 
-    cache_key: str | None = None
-    if pool is not None:
-        cache_key = llm_cache_service.make_cache_key(
-            "reading_translate", _MODEL,
-            {"sentence": sentence, "language": language},
+    async def _compute() -> dict:
+        response = await _client.messages.create(
+            model=_MODEL,
+            max_tokens=256,
+            system=(
+                f"You are a precise translator. Translate the following {language} sentence into "
+                f"natural, fluent English. Preserve the meaning faithfully. "
+                f"You MUST call the translate_sentence tool."
+            ),
+            tools=[_TRANSLATE_TOOL],
+            tool_choice={"type": "tool", "name": "translate_sentence"},
+            messages=[{"role": "user", "content": f"Translate: {sentence}"}],
         )
-        cached = await llm_cache_service.get_cached(pool, cache_key)
-        if cached is not None:
-            return cached["translation"]
+        tool_block = next(b for b in response.content if b.type == "tool_use")
+        return {"translation": tool_block.input["translation"]}
 
-    response = await _client.messages.create(
-        model=_MODEL,
-        max_tokens=256,
-        system=(
-            f"You are a precise translator. Translate the following {language} sentence into "
-            f"natural, fluent English. Preserve the meaning faithfully. "
-            f"You MUST call the translate_sentence tool."
-        ),
-        tools=[_TRANSLATE_TOOL],
-        tool_choice={"type": "tool", "name": "translate_sentence"},
-        messages=[{"role": "user", "content": f"Translate: {sentence}"}],
+    if pool is None:
+        return (await _compute())["translation"]
+
+    cache_key = llm_cache_service.make_cache_key(
+        "reading_translate", _MODEL,
+        {"sentence": sentence, "language": language},
     )
-
-    tool_block = next(b for b in response.content if b.type == "tool_use")
-    translation: str = tool_block.input["translation"]
-
-    if pool is not None and cache_key is not None:
-        await llm_cache_service.set_cached(
-            pool, cache_key, "reading_translate", _MODEL,
-            {"translation": translation},
-        )
-
-    return translation
+    result = await llm_cache_service.get_or_compute(
+        pool, cache_key, "reading_translate", _MODEL, _compute,
+    )
+    return result["translation"]
 
 
 # ---------------------------------------------------------------------------
@@ -138,49 +133,43 @@ async def explain_in_context(
             f"the pattern shown here. Pay attention to the grammatical case used.]"
         )
 
-    cache_key: str | None = None
-    if pool is not None:
-        cache_key = llm_cache_service.make_cache_key(
-            "reading_explain", _MODEL,
-            {
-                "selection": selection.lower(),
-                "sentence": sentence,
-                "language": language,
-            },
-        )
-        cached = await llm_cache_service.get_cached(pool, cache_key)
-        if cached is not None:
-            return cached["explanation"]
-
-    response = await _client.messages.create(
-        model=_MODEL,
-        max_tokens=512,
-        system=(
-            f"You are a {language} language learning assistant helping an intermediate learner "
-            f"understand a word or phrase in context. "
-            f"Be concise (2-3 sentences), practical, and focused on meaning-in-context. "
-            f"Mention grammatical structure only when it matters for understanding. "
-            f"You MUST call the explain_in_context tool."
-        ),
-        tools=[_EXPLAIN_TOOL],
-        tool_choice={"type": "tool", "name": "explain_in_context"},
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Sentence: {sentence}\n\n"
-                f"Selected: \"{selection}\"\n\n"
-                f"Explain what \"{selection}\" means and how it works in this sentence."
+    async def _compute() -> dict:
+        response = await _client.messages.create(
+            model=_MODEL,
+            max_tokens=512,
+            system=(
+                f"You are a {language} language learning assistant helping an intermediate learner "
+                f"understand a word or phrase in context. "
+                f"Be concise (2-3 sentences), practical, and focused on meaning-in-context. "
+                f"Mention grammatical structure only when it matters for understanding. "
+                f"You MUST call the explain_in_context tool."
             ),
-        }],
-    )
-
-    tool_block = next(b for b in response.content if b.type == "tool_use")
-    explanation: str = tool_block.input["explanation"]
-
-    if pool is not None and cache_key is not None:
-        await llm_cache_service.set_cached(
-            pool, cache_key, "reading_explain", _MODEL,
-            {"explanation": explanation},
+            tools=[_EXPLAIN_TOOL],
+            tool_choice={"type": "tool", "name": "explain_in_context"},
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Sentence: {sentence}\n\n"
+                    f"Selected: \"{selection}\"\n\n"
+                    f"Explain what \"{selection}\" means and how it works in this sentence."
+                ),
+            }],
         )
+        tool_block = next(b for b in response.content if b.type == "tool_use")
+        return {"explanation": tool_block.input["explanation"]}
 
-    return explanation
+    if pool is None:
+        return (await _compute())["explanation"]
+
+    cache_key = llm_cache_service.make_cache_key(
+        "reading_explain", _MODEL,
+        {
+            "selection": selection.lower(),
+            "sentence": sentence,
+            "language": language,
+        },
+    )
+    result = await llm_cache_service.get_or_compute(
+        pool, cache_key, "reading_explain", _MODEL, _compute,
+    )
+    return result["explanation"]

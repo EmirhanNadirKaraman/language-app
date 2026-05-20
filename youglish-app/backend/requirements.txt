@@ -31,3 +31,4 @@ regex
 httpx
 pytest
 pytest-asyncio
+pytest-xdist

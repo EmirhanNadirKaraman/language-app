@@ -13,6 +13,7 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from ._email_helper import make_test_email
 
 REGISTER     = "/api/v1/auth/register"
 LOGIN        = "/api/v1/auth/login"
@@ -20,7 +21,7 @@ INSIGHT_URL  = "/api/v1/insights/cards"
 
 
 def _email() -> str:
-    return f"test+{uuid.uuid4().hex[:10]}@example.com"
+    return make_test_email()
 
 
 async def _register_and_get_user(client: AsyncClient, db_pool, email: str) -> tuple[dict, str]:

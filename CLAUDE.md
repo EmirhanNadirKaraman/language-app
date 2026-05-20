@@ -105,7 +105,7 @@ language-app/
 | `reading_selections` | LingQ-style multi-token selections with anchors (`[{block_id, token_id, surface}]`) |
 | `content_request` | user-submitted channel/video adds, status pending → processing → done/failed |
 | `notification` | exists, table populated lazily, **generation logic largely missing** |
-| `reading_review` | exists, **unused** |
+| `reading_review` | columns on `reading_selections` (`review_count`, `next_review_at`), driven by `/reading/selections/{id}/review` + `ReadingReviewPage` |
 
 ### Notable migrations
 - **001** — users / user_word_knowledge / srs_cards baseline
@@ -208,7 +208,7 @@ Read this before assuming anything about how an event flows through `progression
 
 **Phrases + grammar rules now first-class throughout the loop (2026-05-19).** Chat: `chat_service.match_learning_words` delegates to `matcher_service.match_sentence_with_ids` (spaCy-based; catches inflected production like *ich freue mich auf* → `sich freuen auf`). Guided targets: `guided_chat_service.get_next_target` considers `phrase_table` alongside `word_table` at all three priority tiers. Enrichment: `recommendation_service.enrich_by_type` is the single dispatcher for words + phrases + grammar rules, keyed by `(item_type, item_id)` to avoid SERIAL-key collisions. Used by `recommend_items` and `insights_service._build_card`.
 
-**Reading SRS is parallel to main SRS.** `reading_selections.next_review_at` runs a fixed `[1,2,4,7,14,30]` day schedule. When `find_catalog_item` matches a selection to a `word_table` / `phrase_table` row, BOTH schedules advance (reading on its own table, main via `apply_progression`). They diverge after the first review. There is no UI that consumes `/api/v1/reading/selections/due` yet.
+**Reading SRS is parallel to main SRS.** `reading_selections.next_review_at` runs a fixed `[1,2,4,7,14,30]` day schedule. When `find_catalog_item` matches a selection to a `word_table` / `phrase_table` row, BOTH schedules advance (reading on its own table, main via `apply_progression`). They diverge after the first review. Frontend `ReadingReviewPage` (since #5, 2026-05-20) consumes `/api/v1/reading/selections/due`; entry point is a "Reading Review" button in `BookLibraryPage`. **Save + outcome mapping** in `routers/reading.py`: `save_selection → status_marked_learning with status_override="learning"` (#5 follow-up, 2026-05-20 — saving means "I want to learn this", status flips atomically); `got_it → passive_review_correct`, `still_learning → passive_review_incorrect`, `mastered → status_marked_known with status_override="known"` (reading Mastered = manual known confidence, NOT active production — `active_delta=0`, no active SRS card fabricated). Save's catalog progression runs in a *separate* transaction from the `reading_selections` INSERT — same pool, different `apply_progression` call. Failure mode unchanged: if `apply_progression` errors, the reading row persists without catalog state.
 
 **`status_marked_*` event flow has a sequencing trap.** `routers/words.py:update_status` writes the status row first (`word_service.upsert_word_status`), THEN calls `apply_progression`. Two separate transactions. If the second fails, the user sees their new status but no SRS card / level bump and no error.
 
@@ -241,7 +241,7 @@ Read this before assuming anything about how an event flows through `progression
 - **Dark mode** is a boolean threaded through 35+ components with hardcoded colours. No theme context.
 - **Mobile** mostly desktop-only. Memory says polish is blocked until end-to-end loop works.
 - **Notifications** — write side: scraper emits `channel_done`, `video_done`, and `request_failed` (since 2026-05-19) via `_notify_user`. Read side: `routers/notifications.py` SSE handler now yields each row first and marks `seen=true` only after the yield resumes (per-row, mark-after-yield via the extracted `_yield_unseen(pool, user_id)` helper). Disconnect mid-stream leaves un-yielded rows unseen for re-delivery. Polling is still 3s (LISTEN/NOTIFY refactor is TODO #4b — not user-visible).
-- **Migration 010 ≠ separate `reading_review` table.** It adds `review_count` + `next_review_at` columns to `reading_selections`. Reading SRS is implemented backend-side but has no frontend session UI, and runs a parallel schedule to `srs_cards` for the same item (both advance on review).
+- **Migration 010 ≠ separate `reading_review` table.** It adds `review_count` + `next_review_at` columns to `reading_selections`. Reading SRS now has a frontend (`ReadingReviewPage`, since #5 / 2026-05-20) and a wired `mastered → known` propagation; it still runs a parallel schedule to `srs_cards` for the same item (both advance on review — Hole 23 documented and accepted).
 - **`@/scripts/`** is mostly one-off legacy data fixers; check before editing.
 - **Two copies of pipeline code** (root vs `src/app/`). Until consolidated, edits go in root.
 
@@ -276,8 +276,14 @@ python pipeline.py --requests-only  # consume content_request queue
 ### Backend tests
 ```bash
 cd youglish-app/backend
-pytest                              # 19 test files
+pytest                              # serial — ~165s for 433 tests
+pytest -n auto                      # parallel via pytest-xdist — ~48s (3.4× speedup)
 ```
+Each test user's email is tagged with `PYTEST_XDIST_WORKER` (or `main` when serial)
+via `tests/_email_helper.make_test_email()`; the autouse cleanup fixture uses the
+same per-worker LIKE pattern, so parallel workers don't trample each other's rows.
+Tests that need to look up "a test user" must filter via `cleanup_pattern()`
+instead of bare `'test+%@example.com'` — see `test_words.py` / `test_recommendations.py`.
 
 ### Root-pipeline tests
 ```bash

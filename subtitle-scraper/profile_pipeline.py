@@ -1,6 +1,9 @@
 """
 Profiler for the subtitle parsing pipeline.
 
+Stdout is the product: every print() emits a timing/coverage row that the user
+reads to compare runs. Intentionally left as print(), not logging.
+
 Usage:
     # Profile using a real transcript fetched from YouTube (reads/writes real DB):
     python profile_pipeline.py --video-id <VIDEO_ID> [--lang de]

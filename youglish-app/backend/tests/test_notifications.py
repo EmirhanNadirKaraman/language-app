@@ -17,6 +17,7 @@ import uuid
 import pytest
 
 from backend.routers.notifications import _yield_unseen
+from ._email_helper import make_test_email
 
 
 # ---------------------------------------------------------------------------
@@ -25,7 +26,7 @@ from backend.routers.notifications import _yield_unseen
 
 async def _make_user(db_pool) -> str:
     from backend.services.auth_service import register_user
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user = await register_user(db_pool, email, "password123")
     return str(user["user_id"])
 

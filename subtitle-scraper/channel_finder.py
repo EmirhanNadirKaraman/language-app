@@ -1,7 +1,10 @@
 import csv
+import logging
 import re
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+
+logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.readonly"]
 CSV_PATH = "top-1000-most-subscribed-youtube-channels-in-germany.csv"
@@ -34,9 +37,10 @@ def get_channel_ids_from_csv(youtube, csv_path: str) -> list[str]:
             not_found.append(name)
 
     if not_found:
-        print(f"Could not find {len(not_found)} channels by handle:")
-        for name in not_found:
-            print(f"  {name}")
+        logger.warning(
+            "Could not find %d channels by handle: %s",
+            len(not_found), ", ".join(not_found),
+        )
 
     return channel_ids
 
@@ -67,6 +71,9 @@ def get_subscribed_channel_ids(youtube) -> list[str]:
 
 
 if __name__ == "__main__":
+    # CLI tool — prints below report the result of the run on stdout.
+    # Status updates go through `logger` (set up here so they appear too).
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     youtube = build_youtube_client()
 
     subscribed = get_subscribed_channel_ids(youtube)

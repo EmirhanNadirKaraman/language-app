@@ -10,11 +10,28 @@ Integration tests (real DB via db_pool fixture):
   - hit_count increments on repeated gets
   - ON CONFLICT DO NOTHING: second set_cached for the same key is silently ignored
   - expired entries are treated as misses
+
+Thundering-herd guard (#24, get_or_compute):
+  - cache hit: compute is never called
+  - concurrent same-key callers: compute called exactly once, all get the
+    same result
+  - concurrent different-key callers: compute runs independently per key
+  - compute raises → lock released; later call retries
+  - double-check inside the lock returns the value written by an earlier
+    waiter (no duplicate compute)
 """
+import asyncio
 import uuid
 
+import pytest
 
-from backend.services.llm_cache_service import get_cached, make_cache_key, set_cached
+from backend.services import llm_cache_service
+from backend.services.llm_cache_service import (
+    get_cached,
+    get_or_compute,
+    make_cache_key,
+    set_cached,
+)
 
 # ---------------------------------------------------------------------------
 # Unit tests — no DB required
@@ -147,3 +164,194 @@ async def test_ttl_entry_is_returned_before_expiry(db_pool):
 
     result = await get_cached(db_pool, key)
     assert result == {"v": "ttl"}
+
+
+# ---------------------------------------------------------------------------
+# #24 — get_or_compute thundering-herd guard
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def _reset_locks_between_tests():
+    """Drop any locks left over from previous tests so each test sees a clean
+    set. Keys themselves are uuid-unique already, but starting from an empty
+    dict keeps assertions about lock identity (used below) trustworthy."""
+    llm_cache_service.reset_for_tests()
+    yield
+    llm_cache_service.reset_for_tests()
+
+
+async def test_get_or_compute_hit_does_not_call_compute(db_pool):
+    """If the cache already has a value, compute() is never invoked."""
+    key = _unique_key()
+    await set_cached(db_pool, key, "test_prompt", "test-model", {"v": "cached"})
+
+    calls = 0
+    async def _compute():
+        nonlocal calls
+        calls += 1
+        return {"v": "fresh"}
+
+    result = await get_or_compute(db_pool, key, "test_prompt", "test-model", _compute)
+    assert result == {"v": "cached"}
+    assert calls == 0
+
+
+async def test_get_or_compute_miss_writes_and_returns(db_pool):
+    """On a cold miss, compute() runs once and its result is both returned
+    AND persisted to the cache table."""
+    key = _unique_key()
+    calls = 0
+    async def _compute():
+        nonlocal calls
+        calls += 1
+        return {"v": "fresh"}
+
+    result = await get_or_compute(db_pool, key, "test_prompt", "test-model", _compute)
+    assert result == {"v": "fresh"}
+    assert calls == 1
+
+    # Persisted: a second call reads from cache, doesn't call compute.
+    result2 = await get_or_compute(db_pool, key, "test_prompt", "test-model", _compute)
+    assert result2 == {"v": "fresh"}
+    assert calls == 1
+
+
+async def test_concurrent_same_key_calls_compute_exactly_once(db_pool):
+    """The load-bearing test: ten concurrent callers for the same cache_key
+    must produce exactly one compute() invocation and all receive the same
+    result."""
+    key = _unique_key()
+    calls = 0
+    gate = asyncio.Event()
+
+    async def _compute():
+        nonlocal calls
+        calls += 1
+        # Hold inside compute so all waiters queue on the lock before we
+        # actually finish — this is what surfaces the bug if locking is
+        # missing.
+        await gate.wait()
+        return {"v": "fresh", "n": calls}
+
+    async def _caller():
+        return await get_or_compute(db_pool, key, "test_prompt", "test-model", _compute)
+
+    # Fire 10 callers concurrently.
+    tasks = [asyncio.create_task(_caller()) for _ in range(10)]
+    # Let them all reach the lock before unblocking compute.
+    await asyncio.sleep(0.05)
+    gate.set()
+    results = await asyncio.gather(*tasks)
+
+    assert calls == 1, f"expected exactly one compute() invocation, got {calls}"
+    # All 10 callers received the SAME dict the single compute returned.
+    for r in results:
+        assert r == {"v": "fresh", "n": 1}
+
+
+async def test_concurrent_different_keys_do_not_block(db_pool):
+    """Two different cache_keys must compute in parallel — the per-key lock
+    must not serialise unrelated work."""
+    key_a, key_b = _unique_key(), _unique_key()
+
+    # Each compute parks on its own event until both have started — proves
+    # they're actually running concurrently and not waiting on each other.
+    a_started = asyncio.Event()
+    b_started = asyncio.Event()
+
+    async def _compute_a():
+        a_started.set()
+        await b_started.wait()   # would deadlock if A blocked B
+        return {"k": "a"}
+
+    async def _compute_b():
+        b_started.set()
+        await a_started.wait()
+        return {"k": "b"}
+
+    task_a = asyncio.create_task(
+        get_or_compute(db_pool, key_a, "p", "m", _compute_a)
+    )
+    task_b = asyncio.create_task(
+        get_or_compute(db_pool, key_b, "p", "m", _compute_b)
+    )
+
+    # Tight timeout — if locking is wrong this hangs forever.
+    results = await asyncio.wait_for(asyncio.gather(task_a, task_b), timeout=2.0)
+    assert results[0] == {"k": "a"}
+    assert results[1] == {"k": "b"}
+
+
+async def test_compute_exception_releases_lock_and_allows_retry(db_pool):
+    """If compute() raises, the lock must be released (the async-with handles
+    this) and the cache must NOT be populated. A subsequent call with a
+    working compute then succeeds."""
+    key = _unique_key()
+    attempts = 0
+
+    async def _failing():
+        nonlocal attempts
+        attempts += 1
+        raise RuntimeError("provider blew up")
+
+    with pytest.raises(RuntimeError, match="provider blew up"):
+        await get_or_compute(db_pool, key, "test_prompt", "test-model", _failing)
+
+    assert attempts == 1
+    # Cache was NOT populated.
+    assert await get_cached(db_pool, key) is None
+
+    # A second call with a working compute succeeds — the lock from the
+    # previous failure didn't strand the key.
+    async def _working():
+        return {"v": "fresh"}
+
+    result = await get_or_compute(db_pool, key, "test_prompt", "test-model", _working)
+    assert result == {"v": "fresh"}
+
+
+async def test_double_check_returns_first_writers_value(db_pool):
+    """A waiter that enters the lock AFTER the first caller has written the
+    cache must short-circuit on the double-check — its own compute() should
+    never run.
+
+    Differs from `test_concurrent_same_key_calls_compute_exactly_once` by
+    proving the *waiter's* own compute is bypassed (not just that the first
+    compute happens once)."""
+    key = _unique_key()
+
+    # First caller's compute is held until we explicitly release it.
+    first_gate = asyncio.Event()
+    second_compute_called = False
+
+    async def _first_compute():
+        await first_gate.wait()
+        return {"v": "first-writer"}
+
+    async def _second_compute():
+        nonlocal second_compute_called
+        second_compute_called = True
+        return {"v": "second-writer"}
+
+    first_task = asyncio.create_task(
+        get_or_compute(db_pool, key, "p", "m", _first_compute)
+    )
+    # Yield so the first task acquires the lock and enters compute().
+    await asyncio.sleep(0.05)
+
+    # Now fire the second caller. It'll cache-miss on the fast path, queue on
+    # the lock, and only enter the critical section after the first finishes.
+    second_task = asyncio.create_task(
+        get_or_compute(db_pool, key, "p", "m", _second_compute)
+    )
+    await asyncio.sleep(0.05)
+
+    # Release the first compute — it writes the cache then exits the lock.
+    first_gate.set()
+    results = await asyncio.gather(first_task, second_task)
+
+    assert results[0] == {"v": "first-writer"}
+    assert results[1] == {"v": "first-writer"}, \
+        "second caller must see the first writer's value, not its own"
+    assert second_compute_called is False, \
+        "double-check must short-circuit the waiter's compute()"

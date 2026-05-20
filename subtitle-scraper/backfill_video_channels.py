@@ -12,6 +12,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import time
 from pathlib import Path
@@ -19,6 +20,8 @@ from pathlib import Path
 import psycopg2
 import yt_dlp
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -44,8 +47,8 @@ def fetch_channel_info(video_id: str) -> dict | None:
             channel_name = (info.get("channel") or info.get("uploader") or "").strip()
             if channel_id:
                 return {"channel_id": channel_id, "channel_name": channel_name}
-    except Exception as e:
-        print(f"  [yt-dlp] {video_id}: {e}")
+    except Exception:
+        logger.warning("[yt-dlp] %s metadata fetch failed", video_id, exc_info=True)
     return None
 
 
@@ -66,31 +69,29 @@ def main() -> None:
     total = len(rows)
 
     if total == 0:
-        print("No videos with NULL channel_id. Nothing to do.")
+        logger.info("No videos with NULL channel_id. Nothing to do.")
         conn.close()
         return
 
-    print(f"Found {total} video(s) with NULL channel_id.")
+    logger.info("Found %d video(s) with NULL channel_id.", total)
     if args.dry_run:
-        print("DRY RUN — no changes will be written.\n")
+        logger.info("DRY RUN — no changes will be written.")
 
     updated = 0
     failed = 0
 
     for i, (video_id,) in enumerate(rows, start=1):
-        print(f"[{i}/{total}] {video_id} ...", end=" ", flush=True)
-
         info = fetch_channel_info(video_id)
 
         if not info:
-            print("(not found)")
+            logger.info("[%d/%d] %s -> (not found)", i, total, video_id)
             failed += 1
             time.sleep(0.5)
             continue
 
         channel_id = info["channel_id"]
         channel_name = info["channel_name"]
-        print(f"{channel_name} ({channel_id})")
+        logger.info("[%d/%d] %s -> %s (%s)", i, total, video_id, channel_name, channel_id)
 
         if not args.dry_run:
             cursor.execute(
@@ -119,10 +120,11 @@ def main() -> None:
     conn.close()
 
     if not args.dry_run:
-        print(f"\nDone. Updated: {updated}, failed: {failed}")
+        logger.info("Done. Updated: %d, failed: %d", updated, failed)
     else:
-        print("\nDry run complete.")
+        logger.info("Dry run complete.")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     main()

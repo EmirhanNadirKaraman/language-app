@@ -11,6 +11,7 @@ import pytest
 from httpx import AsyncClient
 
 from backend.core.security import create_access_token
+from ._email_helper import make_test_email
 
 
 # ---------------------------------------------------------------------------
@@ -108,7 +109,7 @@ async def test_expired_token_returns_token_expired_detail(client: AsyncClient, d
     """ExpiredSignatureError → 401 with detail='token_expired'."""
     uid = await db_pool.fetchval(
         "INSERT INTO users (email, password_hash) VALUES ($1, 'x') RETURNING user_id",
-        f"test+{int(time.time()*1000)}@example.com",
+        make_test_email(),
     )
     token = _expired_token(str(uid))
 
@@ -154,7 +155,7 @@ async def test_valid_token_still_authenticates(client: AsyncClient, db_pool):
     """Sanity: the new exception split doesn't break the happy path."""
     uid = await db_pool.fetchval(
         "INSERT INTO users (email, password_hash) VALUES ($1, 'x') RETURNING user_id",
-        f"test+valid+{int(time.time()*1000)}@example.com",
+        make_test_email(),
     )
     token = create_access_token(str(uid))
     resp = await client.get(

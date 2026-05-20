@@ -31,6 +31,7 @@ import uuid
 
 
 from backend.services.settings_service import DEFAULTS, apply_defaults, get_preferences, update_preferences
+from ._email_helper import make_test_email
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +94,7 @@ async def _create_user(pool) -> str:
     """Insert a fresh test user, return user_id string."""
     row = await pool.fetchrow(
         "INSERT INTO users (email, password_hash) VALUES ($1, 'x') RETURNING user_id",
-        f"test+{uuid.uuid4().hex[:12]}@example.com",
+        make_test_email(),
     )
     return str(row["user_id"])
 
@@ -165,7 +166,7 @@ async def test_update_preserves_previous_updates(db_pool):
 # ---------------------------------------------------------------------------
 
 async def _auth_token(client) -> str:
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     await client.post("/api/v1/auth/register", json={"email": email, "password": "password123"})
     resp = await client.post("/api/v1/auth/login", json={"email": email, "password": "password123"})
     return resp.json()["access_token"]

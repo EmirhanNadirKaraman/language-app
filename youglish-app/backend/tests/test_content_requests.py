@@ -18,6 +18,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 from httpx import AsyncClient
+from ._email_helper import make_test_email
 
 REGISTER = "/api/v1/auth/register"
 LOGIN    = "/api/v1/auth/login"
@@ -25,7 +26,7 @@ URL      = "/api/v1/content-requests"
 
 
 def _email() -> str:
-    return f"test+{uuid.uuid4().hex[:10]}@example.com"
+    return make_test_email()
 
 
 def _channel_id() -> str:

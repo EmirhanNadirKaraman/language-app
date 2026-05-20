@@ -15,6 +15,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import time
 from pathlib import Path
@@ -22,6 +23,8 @@ from pathlib import Path
 import psycopg2
 import yt_dlp
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -46,8 +49,8 @@ def fetch_channel_info_via_video(video_id: str) -> dict | None:
             name = (info.get("channel") or info.get("uploader") or "").strip()
             if name:
                 return {"channel_name": name}
-    except Exception as e:
-        print(f"  [yt-dlp] video {video_id}: {e}")
+    except Exception:
+        logger.warning("[yt-dlp] video %s metadata fetch failed", video_id, exc_info=True)
     return None
 
 
@@ -67,8 +70,8 @@ def fetch_channel_info_via_channel_page(channel_id: str) -> dict | None:
             name = (info.get("channel") or info.get("uploader") or info.get("title") or "").strip()
             if name:
                 return {"channel_name": name}
-    except Exception as e:
-        print(f"  [yt-dlp] channel page {channel_id}: {e}")
+    except Exception:
+        logger.warning("[yt-dlp] channel page %s fetch failed", channel_id, exc_info=True)
     return None
 
 
@@ -89,20 +92,18 @@ def main() -> None:
     total = len(rows)
 
     if total == 0:
-        print("No channels with empty names. Nothing to do.")
+        logger.info("No channels with empty names. Nothing to do.")
         conn.close()
         return
 
-    print(f"Found {total} channel(s) with empty names.")
+    logger.info("Found %d channel(s) with empty names.", total)
     if args.dry_run:
-        print("DRY RUN — no changes will be written.\n")
+        logger.info("DRY RUN — no changes will be written.")
 
     updated = 0
     failed = 0
 
     for i, (channel_id,) in enumerate(rows, start=1):
-        print(f"[{i}/{total}] {channel_id} ...", end=" ", flush=True)
-
         # Try via an existing video first — cheaper and more reliable.
         cursor.execute(
             """
@@ -123,7 +124,7 @@ def main() -> None:
             info = fetch_channel_info_via_channel_page(channel_id)
 
         if info:
-            print(info["channel_name"])
+            logger.info("[%d/%d] %s -> %s", i, total, channel_id, info["channel_name"])
             if not args.dry_run:
                 cursor.execute(
                     "UPDATE channel SET channel_name = %s WHERE youtube_channel_id = %s",
@@ -132,7 +133,7 @@ def main() -> None:
                 conn.commit()
                 updated += 1
         else:
-            print("(not found)")
+            logger.info("[%d/%d] %s -> (not found)", i, total, channel_id)
             failed += 1
 
         time.sleep(0.5)
@@ -140,10 +141,11 @@ def main() -> None:
     conn.close()
 
     if not args.dry_run:
-        print(f"\nDone. Updated: {updated}, failed: {failed}")
+        logger.info("Done. Updated: %d, failed: %d", updated, failed)
     else:
-        print("\nDry run complete.")
+        logger.info("Dry run complete.")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     main()

@@ -132,18 +132,15 @@ async def repair_block(
         },
     )
 
-    cached = await llm_cache_service.get_cached(pool, cache_key)
-    if cached is not None:
-        logger.debug("book_llm_service: cache hit for block %s", block.get("block_id"))
-        return cached.get("text", "")
+    async def _compute() -> dict:
+        user_message = _build_user_message(prev_clean_text, source_text, next_clean_text)
+        corrected    = await _call_llm(user_message)
+        return {"text": corrected}
 
-    user_message = _build_user_message(prev_clean_text, source_text, next_clean_text)
-    corrected    = await _call_llm(user_message)
-
-    await llm_cache_service.set_cached(
-        pool, cache_key, "book_ocr_repair", _MODEL, {"text": corrected}
+    result = await llm_cache_service.get_or_compute(
+        pool, cache_key, "book_ocr_repair", _MODEL, _compute,
     )
-    return corrected
+    return result.get("text", "")
 
 
 async def repair_block_by_id(

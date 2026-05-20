@@ -13,13 +13,14 @@ import pytest
 from httpx import AsyncClient
 
 from backend.services.progression_service import _RULES, compute_delta
+from ._email_helper import make_test_email
 
 REGISTER = "/api/v1/auth/register"
 LOGIN    = "/api/v1/auth/login"
 
 
 def _email() -> str:
-    return f"test+{uuid.uuid4().hex[:10]}@example.com"
+    return make_test_email()
 
 
 async def _register(client: AsyncClient, db_pool, email: str) -> tuple[dict, str]:
@@ -98,7 +99,7 @@ async def test_transcript_context_in_frequent_unknowns_aggregation(db_pool):
     try:
         await db_pool.execute(
             "INSERT INTO users (user_id, email, password_hash) VALUES ($1, $2, 'x')",
-            uid, f"test+{uuid.uuid4().hex[:6]}@example.com",
+            uid, make_test_email(),
         )
         await db_pool.execute(
             "INSERT INTO user_word_knowledge (user_id, item_id, item_type, status) "
@@ -166,7 +167,7 @@ async def test_match_learning_words_matches_phrases(db_pool):
     try:
         await db_pool.execute(
             "INSERT INTO users (user_id, email, password_hash) VALUES ($1, $2, 'x')",
-            uid, f"test+{uuid.uuid4().hex[:6]}@example.com",
+            uid, make_test_email(),
         )
         await db_pool.execute(
             "INSERT INTO user_word_knowledge (user_id, item_id, item_type, status) "

@@ -25,6 +25,7 @@ import pytest
 from httpx import AsyncClient
 
 from backend.services.reading_service import _interval_days, find_catalog_item
+from ._email_helper import make_test_email
 
 REGISTER = "/api/v1/auth/register"
 LOGIN    = "/api/v1/auth/login"
@@ -35,7 +36,7 @@ LOGIN    = "/api/v1/auth/login"
 # ---------------------------------------------------------------------------
 
 def _email() -> str:
-    return f"test+{uuid.uuid4().hex[:10]}@example.com"
+    return make_test_email()
 
 
 async def _register_and_login(client: AsyncClient, db_pool, email: str) -> tuple[dict, str]:
@@ -259,6 +260,138 @@ async def test_save_selection_no_catalog_match_creates_no_srs_card(
     assert count == 0
 
 
+# ---------------------------------------------------------------------------
+# Save-selection → status='learning' atomic (#5 follow-up)
+#
+# Before: save fired status_marked_learning WITHOUT status_override, so
+# user_word_knowledge.status stayed 'unknown' until passive evidence later
+# auto-promoted it. Product-wise, saving from reading means "I want to learn
+# this" — the status should flip atomically.
+#
+# After: save passes status_override='learning'. The existing #2 atomicity
+# fix folds the status flip into the same transaction as the level/SRS
+# deltas, so a successful save means status='learning' is persisted.
+# ---------------------------------------------------------------------------
+
+async def test_save_selection_with_word_match_marks_learning(
+    client: AsyncClient, db_pool
+):
+    word_id, word, language = await _get_word(db_pool)
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    doc_id = await _create_doc(db_pool, uid, language)
+
+    resp = await client.post(
+        f"/api/v1/books/{doc_id}/selections",
+        json=_sel_body(word),
+        headers=headers,
+    )
+    assert resp.status_code == 201
+
+    uwk = await db_pool.fetchrow(
+        "SELECT status, passive_level, active_level, times_used_correctly "
+        "FROM user_word_knowledge "
+        "WHERE user_id=$1::uuid AND item_id=$2 AND item_type='word'",
+        uid, word_id,
+    )
+    assert uwk is not None
+    assert uwk["status"] == "learning"
+    # status_marked_learning passive_delta=1; active stays 0 per #0b.
+    assert uwk["passive_level"] == 1
+    assert uwk["active_level"] == 0
+    assert uwk["times_used_correctly"] == 0
+
+
+async def test_save_selection_creates_both_srs_cards_for_word_match(
+    client: AsyncClient, db_pool
+):
+    """status_marked_learning (with override) creates BOTH passive and active
+    SRS cards per #0b. Saving a matched reading selection is the same shape."""
+    word_id, word, language = await _get_word(db_pool)
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    doc_id = await _create_doc(db_pool, uid, language)
+
+    resp = await client.post(
+        f"/api/v1/books/{doc_id}/selections",
+        json=_sel_body(word),
+        headers=headers,
+    )
+    assert resp.status_code == 201
+
+    passive = await db_pool.fetchrow(
+        "SELECT card_id, repetitions FROM srs_cards "
+        "WHERE user_id=$1::uuid AND item_id=$2 AND item_type='word' AND direction='passive'",
+        uid, word_id,
+    )
+    active = await db_pool.fetchrow(
+        "SELECT card_id, repetitions FROM srs_cards "
+        "WHERE user_id=$1::uuid AND item_id=$2 AND item_type='word' AND direction='active'",
+        uid, word_id,
+    )
+    assert passive is not None
+    assert active is not None
+    assert passive["repetitions"] == 0
+    assert active["repetitions"] == 0
+
+
+async def test_save_selection_with_phrase_match_marks_learning(
+    client: AsyncClient, db_pool
+):
+    """Same contract for phrase_table matches."""
+    phrase_row = await db_pool.fetchrow(
+        "SELECT phrase_id, surface_form, language FROM phrase_table LIMIT 1"
+    )
+    if phrase_row is None:
+        pytest.skip("phrase_table is empty")
+
+    phrase_id     = phrase_row["phrase_id"]
+    surface_form  = phrase_row["surface_form"]
+    language      = phrase_row["language"]
+
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    doc_id = await _create_doc(db_pool, uid, language)
+
+    resp = await client.post(
+        f"/api/v1/books/{doc_id}/selections",
+        json=_sel_body(surface_form),
+        headers=headers,
+    )
+    assert resp.status_code == 201
+
+    uwk = await db_pool.fetchrow(
+        "SELECT status, passive_level, active_level "
+        "FROM user_word_knowledge "
+        "WHERE user_id=$1::uuid AND item_id=$2 AND item_type='phrase'",
+        uid, phrase_id,
+    )
+    assert uwk is not None
+    assert uwk["status"] == "learning"
+    assert uwk["passive_level"] == 1
+    assert uwk["active_level"] == 0
+
+
+async def test_save_selection_unmatched_creates_no_uwk_row(
+    client: AsyncClient, db_pool
+):
+    """No catalog match → save still succeeds, but no user_word_knowledge row
+    is created (catalog progression is skipped entirely)."""
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    doc_id = await _create_doc(db_pool, uid, "de")
+
+    nonsense = f"zzz_not_in_catalog_{uuid.uuid4().hex[:8]}"
+    resp = await client.post(
+        f"/api/v1/books/{doc_id}/selections",
+        json=_sel_body(nonsense),
+        headers=headers,
+    )
+    assert resp.status_code == 201
+
+    uwk_count = await db_pool.fetchval(
+        "SELECT COUNT(*) FROM user_word_knowledge WHERE user_id=$1::uuid",
+        uid,
+    )
+    assert uwk_count == 0
+
+
 async def test_review_got_it_advances_passive_srs_card(client: AsyncClient, db_pool):
     """got_it fires passive_review_correct → SM-2 repetitions increments."""
     word_id, word, language = await _get_word(db_pool)
@@ -289,8 +422,113 @@ async def test_review_got_it_advances_passive_srs_card(client: AsyncClient, db_p
     assert card_after["interval_days"] > card_before["interval_days"]
 
 
-async def test_review_mastered_does_not_change_srs_card(client: AsyncClient, db_pool):
-    """mastered fires no progression event — SRS card state stays the same."""
+async def test_review_mastered_marks_catalog_item_known(client: AsyncClient, db_pool):
+    """Reading 'Mastered' on a catalog-matched selection (#5 / Hole 24 fix):
+    fires status_marked_known on the linked word/phrase via status_override.
+    The user_word_knowledge row's status flips to 'known' atomically inside the
+    standard progression transaction.
+    """
+    word_id, word, language = await _get_word(db_pool)
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    doc_id = await _create_doc(db_pool, uid, language)
+
+    save_resp = await client.post(
+        f"/api/v1/books/{doc_id}/selections",
+        json=_sel_body(word),
+        headers=headers,
+    )
+    sel_id = save_resp.json()["selection_id"]
+
+    # The save already runs apply_progression('status_marked_learning'), giving
+    # passive_level=1, status='unknown' (no auto-promotion until threshold).
+    uwk_before = await db_pool.fetchrow(
+        "SELECT status, passive_level, active_level FROM user_word_knowledge "
+        "WHERE user_id=$1::uuid AND item_id=$2 AND item_type='word'",
+        uid, word_id,
+    )
+    assert uwk_before is not None
+    assert uwk_before["status"] != "known"
+
+    resp = await client.post(
+        f"/api/v1/reading/selections/{sel_id}/review",
+        json={"outcome": "mastered"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "mastered"
+
+    uwk_after = await db_pool.fetchrow(
+        "SELECT status, passive_level, active_level, times_used_correctly "
+        "FROM user_word_knowledge WHERE user_id=$1::uuid AND item_id=$2 AND item_type='word'",
+        uid, word_id,
+    )
+    assert uwk_after["status"] == "known"
+
+
+async def test_review_mastered_does_not_inflate_active(client: AsyncClient, db_pool):
+    """Critical policy: reading 'Mastered' is manual known confidence, NOT
+    active production evidence. active_level must stay 0; times_used_correctly
+    must not bump; an active SRS card that already exists (saving a selection
+    fires status_marked_learning per #0b which creates one) must NOT be
+    advanced as if the user had produced the word."""
+    word_id, word, language = await _get_word(db_pool)
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    doc_id = await _create_doc(db_pool, uid, language)
+
+    save_resp = await client.post(
+        f"/api/v1/books/{doc_id}/selections",
+        json=_sel_body(word),
+        headers=headers,
+    )
+    sel_id = save_resp.json()["selection_id"]
+
+    # Capture the active card baseline (may or may not exist; if it does it
+    # was created at reps=0 by status_marked_learning per #0b).
+    active_before = await db_pool.fetchrow(
+        "SELECT card_id, repetitions, interval_days, ease_factor FROM srs_cards "
+        "WHERE user_id=$1::uuid AND item_id=$2 AND item_type='word' AND direction='active'",
+        uid, word_id,
+    )
+
+    resp = await client.post(
+        f"/api/v1/reading/selections/{sel_id}/review",
+        json={"outcome": "mastered"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+
+    uwk = await db_pool.fetchrow(
+        "SELECT active_level, times_used_correctly FROM user_word_knowledge "
+        "WHERE user_id=$1::uuid AND item_id=$2 AND item_type='word'",
+        uid, word_id,
+    )
+    # status_marked_known has active_delta=0 + times_used_correctly_delta=0.
+    assert uwk["active_level"] == 0
+    assert uwk["times_used_correctly"] == 0
+
+    # status_marked_known has active_srs=None — the active card is neither
+    # created (if missing) nor advanced (if present).
+    active_after = await db_pool.fetchrow(
+        "SELECT card_id, repetitions, interval_days, ease_factor FROM srs_cards "
+        "WHERE user_id=$1::uuid AND item_id=$2 AND item_type='word' AND direction='active'",
+        uid, word_id,
+    )
+    if active_before is None:
+        assert active_after is None, "mastered must not fabricate an active card"
+    else:
+        assert active_after is not None
+        assert active_after["repetitions"]   == active_before["repetitions"]
+        assert active_after["interval_days"] == active_before["interval_days"]
+        assert active_after["ease_factor"]   == active_before["ease_factor"]
+
+
+async def test_review_mastered_advances_passive_card_via_status_marked_known(
+    client: AsyncClient, db_pool,
+):
+    """status_marked_known has passive_srs='correct' — the passive SRS card
+    advances via SM-2 (consistent with the manual Known click in the vocab UI).
+    This is the desired behaviour: the user demonstrated recognition; reward
+    the schedule."""
     word_id, word, language = await _get_word(db_pool)
     headers, uid = await _register_and_login(client, db_pool, _email())
     doc_id = await _create_doc(db_pool, uid, language)
@@ -311,11 +549,43 @@ async def test_review_mastered_does_not_change_srs_card(client: AsyncClient, db_
         headers=headers,
     )
     assert resp.status_code == 200
-    assert resp.json()["status"] == "mastered"
 
     card_after = await _get_passive_srs_card(db_pool, uid, word_id, "word")
-    assert card_after["interval_days"] == card_before["interval_days"]
-    assert card_after["repetitions"]   == card_before["repetitions"]
+    assert card_after is not None
+    assert card_after["repetitions"]   == card_before["repetitions"] + 1
+    assert card_after["interval_days"] > card_before["interval_days"]
+
+
+async def test_review_mastered_unmatched_succeeds(client: AsyncClient, db_pool):
+    """A selection whose canonical has no catalog match (e.g. a multi-word
+    expression not in phrase_table) must still mark mastered successfully —
+    catalog lookup miss is not an error."""
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    doc_id = await _create_doc(db_pool, uid, "de")
+
+    # canonical that won't match word_table or phrase_table
+    nonsense = f"zzz_not_in_catalog_{uuid.uuid4().hex[:8]}"
+    save_resp = await client.post(
+        f"/api/v1/books/{doc_id}/selections",
+        json={
+            "canonical":     nonsense,
+            "surface_text":  nonsense,
+            "sentence_text": f"a sentence with {nonsense} in it.",
+            "anchors":       [],
+            "note":          None,
+        },
+        headers=headers,
+    )
+    assert save_resp.status_code == 201
+    sel_id = save_resp.json()["selection_id"]
+
+    resp = await client.post(
+        f"/api/v1/reading/selections/{sel_id}/review",
+        json={"outcome": "mastered"},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "mastered"
 
 
 async def test_due_selections_includes_newly_saved(client: AsyncClient, db_pool):

@@ -6,6 +6,7 @@ and is actively maintained to stay ahead of YouTube's bot detection.
 It's already a pipeline dependency (used for metadata).
 """
 import json
+import logging
 import os
 import random
 import re
@@ -13,6 +14,8 @@ import sys
 import time
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 import yt_dlp
 
@@ -237,10 +240,9 @@ def fetch_with_retries(
                     break  # skip remaining retries; try next option set (with cookies)
                 if attempt < max_retries - 1:
                     wait = backoff + random.uniform(0, backoff * 0.1)
-                    print(
-                        f"    Transcript fetch attempt {attempt + 1}/{max_retries} "
-                        f"failed for {video_id}: {e}. Retrying in {wait:.1f}s...",
-                        file=sys.stderr,
+                    logger.warning(
+                        "Transcript fetch attempt %d/%d failed for %s: %s. Retrying in %.1fs...",
+                        attempt + 1, max_retries, video_id, e, wait,
                     )
                     time.sleep(wait)
                     backoff *= 2

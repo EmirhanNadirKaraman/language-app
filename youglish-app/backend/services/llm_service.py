@@ -122,15 +122,6 @@ async def guided_open(
     if _MOCK:
         return random.choice(_MOCK_OPENINGS)
 
-    cache_key: str | None = None
-    if pool is not None:
-        cache_key = llm_cache_service.make_cache_key(
-            "guided_open", _MODEL, {"target_word": target_word, "language": language}
-        )
-        cached = await llm_cache_service.get_cached(pool, cache_key)
-        if cached is not None:
-            return cached["opening"]
-
     system = (
         f"You are a warm, engaging {language} conversation partner starting a role-play. "
         f"The hidden pedagogical goal is for the learner to eventually use the word/phrase "
@@ -141,24 +132,29 @@ async def guided_open(
         f"You MUST call the open_conversation tool."
     )
 
-    response = await _client.messages.create(
-        model=_MODEL,
-        max_tokens=256,
-        system=system,
-        tools=[_GUIDED_OPEN_TOOL],
-        tool_choice={"type": "tool", "name": "open_conversation"},
-        messages=[{"role": "user", "content": "Start the conversation."}],
-    )
-
-    tool_block = next(b for b in response.content if b.type == "tool_use")
-    opening = tool_block.input["opening"]
-
-    if pool is not None and cache_key is not None:
-        await llm_cache_service.set_cached(
-            pool, cache_key, "guided_open", _MODEL, {"opening": opening}
+    async def _compute() -> dict:
+        response = await _client.messages.create(
+            model=_MODEL,
+            max_tokens=256,
+            system=system,
+            tools=[_GUIDED_OPEN_TOOL],
+            tool_choice={"type": "tool", "name": "open_conversation"},
+            messages=[{"role": "user", "content": "Start the conversation."}],
         )
+        tool_block = next(b for b in response.content if b.type == "tool_use")
+        return {"opening": tool_block.input["opening"]}
 
-    return opening
+    if pool is None:
+        # No pool → uncacheable single-shot path.
+        return (await _compute())["opening"]
+
+    cache_key = llm_cache_service.make_cache_key(
+        "guided_open", _MODEL, {"target_word": target_word, "language": language}
+    )
+    result = await llm_cache_service.get_or_compute(
+        pool, cache_key, "guided_open", _MODEL, _compute,
+    )
+    return result["opening"]
 
 
 # ---------------------------------------------------------------------------
@@ -218,15 +214,6 @@ async def guided_hints(
     if _MOCK:
         return dict(_MOCK_HINTS)
 
-    cache_key: str | None = None
-    if pool is not None:
-        cache_key = llm_cache_service.make_cache_key(
-            "guided_hints", _MODEL, {"target_word": target_word, "language": language}
-        )
-        cached = await llm_cache_service.get_cached(pool, cache_key)
-        if cached is not None:
-            return cached
-
     system = (
         f'You are creating pedagogical hints for a language learner whose hidden target word/phrase is "{target_word}" in {language}.\n\n'
         f"Generate exactly three hints in order of increasing explicitness:\n"
@@ -237,28 +224,31 @@ async def guided_hints(
         f"You MUST call the generate_hints tool."
     )
 
-    response = await _client.messages.create(
-        model=_MODEL,
-        max_tokens=512,
-        system=system,
-        tools=[_GUIDED_HINTS_TOOL],
-        tool_choice={"type": "tool", "name": "generate_hints"},
-        messages=[{"role": "user", "content": "Generate the hints now."}],
-    )
-
-    tool_block = next(b for b in response.content if b.type == "tool_use")
-    result = {
-        "intent_hint": tool_block.input["intent_hint"],
-        "anchor_hint":  tool_block.input["anchor_hint"],
-        "example":      tool_block.input["example"],
-    }
-
-    if pool is not None and cache_key is not None:
-        await llm_cache_service.set_cached(
-            pool, cache_key, "guided_hints", _MODEL, result
+    async def _compute() -> dict:
+        response = await _client.messages.create(
+            model=_MODEL,
+            max_tokens=512,
+            system=system,
+            tools=[_GUIDED_HINTS_TOOL],
+            tool_choice={"type": "tool", "name": "generate_hints"},
+            messages=[{"role": "user", "content": "Generate the hints now."}],
         )
+        tool_block = next(b for b in response.content if b.type == "tool_use")
+        return {
+            "intent_hint": tool_block.input["intent_hint"],
+            "anchor_hint":  tool_block.input["anchor_hint"],
+            "example":      tool_block.input["example"],
+        }
 
-    return result
+    if pool is None:
+        return await _compute()
+
+    cache_key = llm_cache_service.make_cache_key(
+        "guided_hints", _MODEL, {"target_word": target_word, "language": language}
+    )
+    return await llm_cache_service.get_or_compute(
+        pool, cache_key, "guided_hints", _MODEL, _compute,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -461,16 +451,6 @@ async def prep_item_info(
             ),
         }
 
-    cache_key: str | None = None
-    if pool is not None:
-        cache_key = llm_cache_service.make_cache_key(
-            "prep_item_info", _MODEL,
-            {"display_text": display_text, "item_type": item_type, "language": language},
-        )
-        cached = await llm_cache_service.get_cached(pool, cache_key)
-        if cached is not None:
-            return cached
-
     system = (
         f"You are a concise {language} language learning assistant. "
         f"Provide structured prep information for a {item_type} the learner is about to practise. "
@@ -478,29 +458,35 @@ async def prep_item_info(
         f"You MUST call the item_prep_info tool."
     )
 
-    response = await _client.messages.create(
-        model=_MODEL,
-        max_tokens=512,
-        system=system,
-        tools=[_PREP_INFO_TOOL],
-        tool_choice={"type": "tool", "name": "item_prep_info"},
-        messages=[{
-            "role": "user",
-            "content": f"Provide prep information for the {language} {item_type}: \"{display_text}\"",
-        }],
+    async def _compute() -> dict:
+        response = await _client.messages.create(
+            model=_MODEL,
+            max_tokens=512,
+            system=system,
+            tools=[_PREP_INFO_TOOL],
+            tool_choice={"type": "tool", "name": "item_prep_info"},
+            messages=[{
+                "role": "user",
+                "content": f"Provide prep information for the {language} {item_type}: \"{display_text}\"",
+            }],
+        )
+        tool_block = next(b for b in response.content if b.type == "tool_use")
+        return {
+            "translation":         tool_block.input["translation"],
+            "grammar_structure":   tool_block.input["grammar_structure"],
+            "grammar_explanation": tool_block.input["grammar_explanation"],
+        }
+
+    if pool is None:
+        return await _compute()
+
+    cache_key = llm_cache_service.make_cache_key(
+        "prep_item_info", _MODEL,
+        {"display_text": display_text, "item_type": item_type, "language": language},
     )
-
-    tool_block = next(b for b in response.content if b.type == "tool_use")
-    result = {
-        "translation":         tool_block.input["translation"],
-        "grammar_structure":   tool_block.input["grammar_structure"],
-        "grammar_explanation": tool_block.input["grammar_explanation"],
-    }
-
-    if pool is not None and cache_key is not None:
-        await llm_cache_service.set_cached(pool, cache_key, "prep_item_info", _MODEL, result)
-
-    return result
+    return await llm_cache_service.get_or_compute(
+        pool, cache_key, "prep_item_info", _MODEL, _compute,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -555,16 +541,6 @@ async def prep_generate_examples(
             ],
         }
 
-    cache_key: str | None = None
-    if pool is not None:
-        cache_key = llm_cache_service.make_cache_key(
-            "prep_examples", _MODEL,
-            {"display_text": display_text, "item_type": item_type, "language": language},
-        )
-        cached = await llm_cache_service.get_cached(pool, cache_key)
-        if cached is not None:
-            return cached
-
     system = (
         f"You are a {language} language learning assistant focused on production practice. "
         f"Generate a usage example and two reusable sentence templates for a {language} {item_type}. "
@@ -572,28 +548,34 @@ async def prep_generate_examples(
         f"Favour everyday, naturalistic contexts. You MUST call the item_examples tool."
     )
 
-    response = await _client.messages.create(
-        model=_MODEL,
-        max_tokens=256,
-        system=system,
-        tools=[_PREP_EXAMPLES_TOOL],
-        tool_choice={"type": "tool", "name": "item_examples"},
-        messages=[{
-            "role": "user",
-            "content": f"Generate an example and templates for the {language} {item_type}: \"{display_text}\"",
-        }],
+    async def _compute() -> dict:
+        response = await _client.messages.create(
+            model=_MODEL,
+            max_tokens=256,
+            system=system,
+            tools=[_PREP_EXAMPLES_TOOL],
+            tool_choice={"type": "tool", "name": "item_examples"},
+            messages=[{
+                "role": "user",
+                "content": f"Generate an example and templates for the {language} {item_type}: \"{display_text}\"",
+            }],
+        )
+        tool_block = next(b for b in response.content if b.type == "tool_use")
+        return {
+            "example":   tool_block.input["example"],
+            "templates": tool_block.input["templates"][:2],
+        }
+
+    if pool is None:
+        return await _compute()
+
+    cache_key = llm_cache_service.make_cache_key(
+        "prep_examples", _MODEL,
+        {"display_text": display_text, "item_type": item_type, "language": language},
     )
-
-    tool_block = next(b for b in response.content if b.type == "tool_use")
-    result = {
-        "example":   tool_block.input["example"],
-        "templates": tool_block.input["templates"][:2],
-    }
-
-    if pool is not None and cache_key is not None:
-        await llm_cache_service.set_cached(pool, cache_key, "prep_examples", _MODEL, result)
-
-    return result
+    return await llm_cache_service.get_or_compute(
+        pool, cache_key, "prep_examples", _MODEL, _compute,
+    )
 
 
 async def get_examples_if_cached(
@@ -792,46 +774,40 @@ async def grammar_rule_explanation(
             f"Common mistake: forgetting the reflexive pronoun or using the wrong case."
         )
 
-    cache_key: str | None = None
-    if pool is not None:
-        cache_key = llm_cache_service.make_cache_key(
-            "grammar_rule_explanation", _MODEL, {"slug": slug, "language": language}
-        )
-        cached = await llm_cache_service.get_cached(pool, cache_key)
-        if cached is not None:
-            return cached["long_explanation"]
-
     system = (
         f"You are a concise {language} grammar tutor writing learner-friendly rule explanations. "
         f"Be specific, practical, and include real example sentences. "
         f"You MUST call the grammar_rule_explanation tool."
     )
 
-    response = await _client.messages.create(
-        model=_MODEL,
-        max_tokens=512,
-        system=system,
-        tools=[_GRAMMAR_EXPLAIN_TOOL],
-        tool_choice={"type": "tool", "name": "grammar_rule_explanation"},
-        messages=[{
-            "role": "user",
-            "content": (
-                f"Explain the {language} grammar rule '{title}'.\n"
-                f"Short summary: {short_explanation}"
-            ),
-        }],
-    )
-
-    tool_block = next(b for b in response.content if b.type == "tool_use")
-    long_explanation: str = tool_block.input["long_explanation"]
-
-    if pool is not None and cache_key is not None:
-        await llm_cache_service.set_cached(
-            pool, cache_key, "grammar_rule_explanation", _MODEL,
-            {"long_explanation": long_explanation},
+    async def _compute() -> dict:
+        response = await _client.messages.create(
+            model=_MODEL,
+            max_tokens=512,
+            system=system,
+            tools=[_GRAMMAR_EXPLAIN_TOOL],
+            tool_choice={"type": "tool", "name": "grammar_rule_explanation"},
+            messages=[{
+                "role": "user",
+                "content": (
+                    f"Explain the {language} grammar rule '{title}'.\n"
+                    f"Short summary: {short_explanation}"
+                ),
+            }],
         )
+        tool_block = next(b for b in response.content if b.type == "tool_use")
+        return {"long_explanation": tool_block.input["long_explanation"]}
 
-    return long_explanation
+    if pool is None:
+        return (await _compute())["long_explanation"]
+
+    cache_key = llm_cache_service.make_cache_key(
+        "grammar_rule_explanation", _MODEL, {"slug": slug, "language": language}
+    )
+    result = await llm_cache_service.get_or_compute(
+        pool, cache_key, "grammar_rule_explanation", _MODEL, _compute,
+    )
+    return result["long_explanation"]
 
 
 async def get_grammar_explanation_if_cached(
@@ -1041,34 +1017,30 @@ async def translate_item_gloss(
     if _MOCK:
         return f"[gloss:{text}]"
 
-    cache_key: str | None = None
-    if pool is not None:
-        cache_key = llm_cache_service.make_cache_key(
-            "item_gloss", _MODEL,
-            {"text": text.lower(), "item_type": item_type, "language": language},
+    async def _compute() -> dict:
+        response = await _client.messages.create(
+            model=_MODEL,
+            max_tokens=64,
+            system=(
+                f"You produce concise English glosses for {language}-language learning vocabulary. "
+                f"Keep the gloss minimal (1-4 words for single words, short phrase for multi-word items). "
+                f"You MUST call the item_gloss tool."
+            ),
+            tools=[_GLOSS_TOOL],
+            tool_choice={"type": "tool", "name": "item_gloss"},
+            messages=[{"role": "user", "content": f"Item: {text}\nType: {item_type}"}],
         )
-        cached = await llm_cache_service.get_cached(pool, cache_key)
-        if cached is not None:
-            return cached["gloss"]
+        tool_block = next(b for b in response.content if b.type == "tool_use")
+        return {"gloss": tool_block.input["gloss"]}
 
-    response = await _client.messages.create(
-        model=_MODEL,
-        max_tokens=64,
-        system=(
-            f"You produce concise English glosses for {language}-language learning vocabulary. "
-            f"Keep the gloss minimal (1-4 words for single words, short phrase for multi-word items). "
-            f"You MUST call the item_gloss tool."
-        ),
-        tools=[_GLOSS_TOOL],
-        tool_choice={"type": "tool", "name": "item_gloss"},
-        messages=[{"role": "user", "content": f"Item: {text}\nType: {item_type}"}],
+    if pool is None:
+        return (await _compute())["gloss"]
+
+    cache_key = llm_cache_service.make_cache_key(
+        "item_gloss", _MODEL,
+        {"text": text.lower(), "item_type": item_type, "language": language},
     )
-    tool_block = next(b for b in response.content if b.type == "tool_use")
-    gloss: str = tool_block.input["gloss"]
-
-    if pool is not None and cache_key is not None:
-        await llm_cache_service.set_cached(
-            pool, cache_key, "item_gloss", _MODEL,
-            {"gloss": gloss},
-        )
-    return gloss
+    result = await llm_cache_service.get_or_compute(
+        pool, cache_key, "item_gloss", _MODEL, _compute,
+    )
+    return result["gloss"]

@@ -68,17 +68,23 @@ Remaining items intentionally deferred:
   - **Unbounded growth.** Add periodic job to drop `seen=true AND created_at < NOW() - INTERVAL '30 days'`.
 **Blocks nothing user-visible** (correctness is fixed in 4a). Purely a cost/scale concern.
 
-### 5. 🟠 Reading SRS works but has no frontend, and duplicates main SRS schedule
-**Files:** `youglish-app/backend/services/reading_service.py`, `routers/reading.py`, frontend (missing `ReadingReviewPage`)
-**Problem (correction):** migration 010 isn't a separate `reading_review` table — it adds `review_count` + `next_review_at` columns to `reading_selections`. Backend IS implemented (`record_review`, `get_due_selections`, `POST /reading/selections/{id}/review`). Two real bugs:
-  - **No frontend session UI consumes `GET /api/v1/reading/selections/due`.** The endpoint exists but no page loops through due selections. Only `SelectionReviewPanel` (per-book browsing) is wired.
-  - **Two SRS schedules for the same item.** When `find_catalog_item` matches, both `srs_cards.passive` (SM-2 interval) and `reading_selections.next_review_at` (fixed [1,2,4,7,14,30] days) advance independently for the same word. They diverge after the first review. User sees the same word due in two places, neither aware of the other.
-  - **`mastered` outcome doesn't mark catalog item as `known`.** `reading_service.record_review("mastered")` clears `next_review_at` but fires no progression event, so `user_word_knowledge.status` stays `learning`.
-**Fix:**
-  - Add `ReadingReviewPage.tsx` that consumes the existing due endpoint, mirrors `SRSReviewPage` UX, and posts to `/reading/selections/{id}/review`.
-  - Decide who owns the schedule: drop the main passive card on save when `find_catalog_item` matches, OR drop the reading-selection schedule and route everything through `srs_cards`. The former is simpler given the UUID vs int PK mismatch.
-  - Add `status_marked_known` firing on `record_review("mastered")` when there's a catalog match.
-**Blocks:** book reading actually contributing to long-term retention.
+### 5. ✅ Reading review frontend + mastered → known wired — RESOLVED 2026-05-20
+Two of the three sub-issues closed; the dual-schedule reconciliation intentionally deferred.
+
+**Frontend** — new `ReadingReviewPage.tsx` consumes `GET /api/v1/reading/selections/due`, renders the canonical text + sentence context + doc title + optional note, and posts each outcome to `POST /api/v1/reading/selections/{id}/review`. Action buttons: Still learning / Got it / Mastered. Mobile-safe (44px buttons, fluid padding, action row wraps). Empty state, session-complete state, error surfacing. Entry point: a "Reading Review" button in the `BookLibraryPage` header (only shows when `onOpenReadingReview` prop is provided). Route: `/reading-review`. 9 vitest tests in `ReadingReviewPage.test.tsx`.
+
+**Backend** — `routers/reading.py:review_selection` now fires the catalog progression for `mastered` (in addition to the existing `got_it` → `passive_review_correct` and `still_learning` → `passive_review_incorrect`):
+```python
+elif catalog and body.outcome == "mastered":
+    await progression_service.apply_progression(
+        pool, user_id, item_id, item_type,
+        "status_marked_known",
+        status_override="known",
+    )
+```
+Per the project policy "reading Mastered = manual known confidence, NOT active production": `status_marked_known` has `active_delta=0`, `times_used_correctly_delta=0`, `active_srs=None`. So `active_level` doesn't grow, `times_used_correctly` doesn't bump, and no active SRS card is fabricated. The passive SRS card advances via the rule's `passive_srs="correct"` (consistent with the manual Known click in the vocab UI). 4 new tests in `test_reading_progression.py` lock the contract (plus the pre-existing `test_review_mastered_does_not_change_srs_card` was updated to match the new behaviour).
+
+**Dual schedule** — intentionally NOT reconciled. Reading mode keeps its own `reading_selections.next_review_at` schedule alongside `srs_cards`. They continue to diverge after the first review. The policy decision: reading review queue is its own UX surface (book-context-rich), main SRS queue is vocabulary-context-only. Users see the same word due in two places, but each lives in the queue that triggered it. Reconciling would require either a PK bridge (UUID vs SERIAL) or dropping one side; both are bigger refactors than this card. Re-open as a separate issue if the duplication starts confusing users.
 
 ### 5a. ✅ Insights filter — RESOLVED 2026-05-18
 **File:** `youglish-app/backend/services/usage_events_service.py:59`
@@ -196,10 +202,45 @@ Known limit: in-memory, per-process. Multi-worker deployments need Redis. Docume
 ### 14. ✅ Global frontend 401 handler — RESOLVED 2026-05-19
 New `frontend/src/api/_http.ts` exports a shared `assertOk(res)` that on 401 clears `auth_token` + `auth_email` from localStorage and dispatches a `CustomEvent('auth:expired', { detail: { reason } })` where reason is `'expired'` (when backend sends `detail='token_expired'`) or `'unauthorized'` (generic 401). Layout in `App.tsx` listens for the event and resets React token state + navigates to `/`. `reading.ts` migrated to the shared helper as the first consumer. Other api files can adopt incrementally — even before they do, ANY route that goes through `_http.ts` will trigger the handler.
 
-### 15. 🟡 Print statements instead of logging in scraper/scripts
-**Files:** `subtitle-scraper/pipeline.py`, `subtitle-scraper/backfill_*.py`, `scripts/*`, `ilp/optimal_set_finder.py`
-**Problem:** `print()` everywhere, no log levels, no structured output, hard to ship to a log aggregator.
-**Fix:** Switch to `logging.getLogger(__name__)`. Configure a root logger in each entrypoint. Keep `print()` only for genuinely user-facing CLI output.
+### 15. ✅ Print → logging in scraper/scripts — RESOLVED 2026-05-20
+Triaged 288 `print()` calls across 17 files. **62 prints converted** to `logger` calls across 7 files; **226 prints intentionally retained** across 10 files where stdout output IS the product (each gained a one-line docstring/comment explaining why).
+
+**Converted to logging:**
+
+| File | Prints converted | Notes |
+|---|---|---|
+| `subtitle-scraper/pipeline.py` | 24 | Main cron + content-request subprocess. `basicConfig(INFO)` guarded by `if __name__ == "__main__":`. Exception-handler prints became `logger.exception(...)`. yt-dlp errors became `logger.warning(... exc_info=True)`. |
+| `subtitle-scraper/seed_channels.py` | 8 | Deploy migration script. |
+| `subtitle-scraper/backfill_channel_names.py` | 10 | Per-row progress combined into one `logger.info("[%d/%d] %s -> %s", ...)` line each. |
+| `subtitle-scraper/backfill_video_channels.py` | 9 | Same shape. |
+| `subtitle-scraper/backfill_categories.py` | 8 | Same shape. |
+| `subtitle-scraper/transcript_fetcher.py` | 1 | Library module — no `basicConfig`, caller wires the root logger. |
+| `subtitle-scraper/channel_finder.py` | 2 of 6 | The 2 library-side prints (channels-not-found warning) converted; the 4 inside `if __name__ == "__main__":` block were left as CLI summary output (stdout is the product for the standalone run). |
+
+**Intentionally retained — stdout IS the product:**
+
+| File | Prints kept | Reason (documented in-file) |
+|---|---|---|
+| `subtitle-scraper/phrase_finder.py` | 13 | Library functions emit nothing; all 13 prints live in `main()` — a dev demo run via `python phrase_finder.py`. |
+| `subtitle-scraper/debug_transcript.py` | 31 | Interactive debug tool — diagnostic data to stdout is the product. |
+| `subtitle-scraper/profile_pipeline.py` | 27 | Profiler emits timing/coverage tables. |
+| `subtitle-scraper/profile_full_pipeline.py` | 23 | Same. |
+| `subtitle-scraper/merge_channels.py` | 1 | Result of the merge to stdout. |
+| `subtitle-scraper/channel_finder.py` | 4 (CLI block) | CLI summary on `python channel_finder.py`. |
+| `scripts/b1_word_finder.py` | 3 | Dev throwaway — `print(d)` for inspection. |
+| `scripts/known_words_fixer.py` | 1 | Same. |
+| `scripts/percentage_finder.py` | 46 | Vocab-coverage report tables to stdout. |
+| `scripts/validate_tier_lemmas.py` | 20 | Diagnostic mismatch report. |
+| `ilp/optimal_set_finder.py` | 57 | ILP solver progress + final coverage tables. |
+
+**Conventions used for converted sites:**
+  - `logger.info(...)` — normal progress (loaded N rows, processed X, done).
+  - `logger.warning(... exc_info=True)` — recoverable failures (yt-dlp metadata error, missing spaCy model).
+  - `logger.exception(...)` — inside `except:` blocks where the traceback matters.
+  - All entry-point scripts call `logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")` inside their `if __name__ == "__main__":` guard. Library modules (pipeline.py library functions, transcript_fetcher.py, phrase_finder.py, channel_finder.py library half) export `logger = logging.getLogger(__name__)` and let the caller wire the root logger.
+  - Message text preserved as closely as practical — `[request] processed video: %s (%s)` reads identically to the previous f-string. No behaviour changes; no new dependencies; no schema/config touched.
+
+**Validation:** `python -m compileall -q subtitle-scraper scripts ilp` clean. Backend `pytest -n auto --tb=no -q` → 445 passed, 2 skipped (matcher_service imports `subtitle-scraper/phrase_finder.py` via `os.chdir` hack; no regression).
 
 ### 16. ✅ Lifespan broad excepts — RESOLVED 2026-05-19
 `main.py` lifespan's three seed paths (phrase, grammar, content-request resume) now narrow to known types first (`asyncpg.PostgresError`, `FileNotFoundError`, `ImportError`, `OSError` as appropriate per site) and log them as a WARNING with `exc_info=True`. A defensive `except Exception:` remains as a final guard per site — intentionally broad because **startup must NEVER crash on a seed failure** — but now logged via `logger.exception()` so the full trace lands in production logs. Module-level `logger = logging.getLogger(__name__)` added; the per-site `import logging` repeats are gone.
@@ -213,14 +254,85 @@ New `frontend/src/api/_http.ts` exports a shared `assertOk(res)` that on 401 cle
 
 ## P3 — Architectural debt. Doesn't break things, but every new feature pays the tax.
 
-### 17. 🟡 Root pipeline modules vs `src/app/` duplication
-**Files:** root `pipeline.py`, `eligibility.py`, `exposure_counter.py`, `learning_units.py`, `onboarding.py`, `subtitle_*.py`, `utterance_*.py`, `user_knowledge.py`, `word_knowledge.py` — and their twins under `src/app/`
-**Problem:** Two copies of essentially the same logic, in different shapes. Pipeline tests run against root; `src/app/` is unused. Anyone editing one will forget the other.
-**Fix (pick one):**
-- (a) Finish the refactor: make `src/app/` the source of truth, change root files to thin `from app.x import *` shims, update `subtitle-scraper/pipeline.py` imports, delete shims after one release.
-- (b) Abort the refactor: `git rm -r src/app/`, document root as the home, update `conftest.py` to drop `src` from sys.path.
-**Recommendation:** (b). The refactor is not load-bearing and bit-rots while incomplete.
-**Blocks:** restructuring pipeline modules without 2x the churn.
+### 17. 🟡 #17-runtime-test-alignment — root pipeline vs `src/app/` duplication
+
+**Original framing was wrong.** `src/app/` was tagged "orphan refactor with zero callers." A 2026-05-20 inspection found the real picture:
+
+- **Runtime** (the code that actually ships) lives in root `pipeline.py`, `eligibility.py`, `exposure_counter.py`, `exposure_service.py`, `learning_units.py`, `onboarding.py`, `subtitle_cleaner.py`, `subtitle_merger.py`, `subtitle_segmenter.py`, `utterance_quality_filter.py`, `utterance_unit_extractor.py`, `user_knowledge.py`, `word_knowledge.py`, `pipeline_diagnostics.py`, `validate_tier_lemmas.py`. Used by `subtitle-scraper/profile_full_pipeline.py` and `subtitle-scraper/profile_pipeline.py`. **Zero modern test coverage** — `tests/legacy/` doesn't import them; nothing else does either.
+- **`src/app/{exposure,extraction,learning,pipeline,subtitles}/`** is a partial refactor (≈1,065 lines vs 3,114 in the runtime modules — ~34% of the logic ported). **Zero runtime callers.** The root `conftest.py` injects `src/` onto `sys.path` so root-level `tests/` can import from it.
+- **`tests/{exposure,learning,pipeline,subtitles}/` runs 537 tests against `src/app/`.** Every collected pipeline test currently exercises the refactor, not the runtime.
+
+**Implication:** the project ships untested runtime code and tests an unused refactor. Deleting `src/app/` is fast (one Tier-1 commit) but vaporises the entire pipeline test suite. Finishing the refactor is huge work (≈2,050 lines to port + scraper imports to flip). The pragmatic middle is salvaging the highest-value tests onto the runtime so the runtime gains coverage, then aborting the refactor.
+
+**Three options:**
+
+- **(A) B-min deletion** — `git rm -r src/app/` + `git rm -r tests/{exposure,learning,pipeline,subtitles}/` + remove `sys.path.insert(..., "src")` from root `conftest.py`. ~30 min. Net: −1,065 LOC + −537 tests. Runtime keeps its current zero coverage. Aligned with the old TODO recommendation (b) but doesn't account for the lost tests.
+- **(B) Selective salvage (recommended)** — keep the top-N behavioural tests, port them to import the runtime modules, then do (A) on the leftovers. Pre-flight: build an inventory (below) + pick the first batch to port. ~½ day for the first batch + same again later. Runtime gains real coverage in the parts the refactor managed to cover. Pre-port-batches don't delete anything; each merged batch reduces the cleanup blast radius.
+- **(C) Finish the refactor** — port the missing ~2,050 lines from runtime into `src/app/`, flip `subtitle-scraper/` imports to `app.*`, delete runtime root modules. Days. Reverses the standing recommendation. Only worth it if `src/app/` is materially better-structured than the runtime, which the inspection didn't establish.
+
+**Recommendation:** (B). Don't delete anything yet. Step 1 is the inventory + top-20 picks below; step 2 is one PR per batch that ports tests onto runtime imports; step 3 is `git rm` once the salvage is harvested.
+
+#### Inventory — test directories ↔ src/app modules ↔ runtime root modules
+
+| Test directory | File | Tests | Lines | src/app module(s) tested | Closest runtime root module | Salvage value |
+|---|---|---|---|---|---|---|
+| `tests/subtitles/` | `test_subtitle_cleaner.py`        |  78 | 603 | `app.subtitles.cleaning.SubtitleTextCleaner` | `subtitle_cleaner.py` | **HIGH** — pure string transforms; runtime API likely matches one-to-one |
+| `tests/subtitles/` | `test_subtitle_merger.py`         |  67 | 643 | `app.subtitles.merging.SubtitleMerger`, `app.subtitles.models.{SubtitleFragment,MergedSubtitleWindow}` | `subtitle_merger.py` | **HIGH** — fragment/window merge invariants, time-bound logic |
+| `tests/subtitles/` | `test_subtitle_ingestion.py`      |  44 | 422 | `app.subtitles.ingestion.parse_srt` | `pipeline.py` (parse_srt lives there) | **HIGH** — SRT parser behaviour (formatting preservation), pure input→output |
+| `tests/subtitles/` | `test_multi_speaker_guard.py`     |  33 | 317 | `app.subtitles.merging` (dash-prefix guard) | `subtitle_merger.py` | **HIGH** — heuristic flag, easy to lock with table-driven tests |
+| `tests/subtitles/` | `test_noise_filtering.py`         |  33 | 255 | `app.subtitles.cleaning` (symbol filters) | `subtitle_cleaner.py` | **HIGH** — pure transform |
+| `tests/subtitles/` | `test_quality_filter_metrics.py`  |  43 | 371 | `app.subtitles.quality.UtteranceQualityEvaluator` | `utterance_quality_filter.py` | MEDIUM — metrics counter API; needs runtime parity check |
+| `tests/learning/`  | `test_word_knowledge.py`          |  59 | 539 | `app.learning.knowledge.UserKnowledgeStore`, `ExposurePolicy` | `user_knowledge.py` | **HIGH** — i+1 dedup invariant; the load-bearing learning rule |
+| `tests/learning/`  | `test_onboarding.py`              |  48 | 385 | `app.learning.onboarding.VocabularyOnboarding`, `LevelTier` | `onboarding.py` | **HIGH** — tier monotonicity (A1 ⊆ A2 ⊆ B1) |
+| `tests/exposure/`  | `test_exposure_integration.py`    |  29 | 534 | `app.exposure.counter.QualifiedExposureCounter`, `app.exposure.service.ExposureService`, `app.exposure.models.{CountingPolicy,DuplicateRule}` | `exposure_counter.py`, `exposure_service.py` | MEDIUM — counter + store integration; depends on runtime ExposureService API matching |
+| `tests/pipeline/`  | `test_pipeline.py`                |  53 | 993 | `app.subtitles.{merging,segmentation,quality}`, `app.extraction.extractor`, `app.learning.{eligibility,knowledge,units}` | `pipeline.py` + most root modules | MEDIUM — wide-spanning integration; some tests double the per-component coverage above |
+| `tests/pipeline/`  | `test_pipeline_diagnostics.py`    |  39 | 625 | `app.pipeline.diagnostics.PipelineRunDiagnostics` | `pipeline_diagnostics.py` | MEDIUM — counter/rate computations; pure math, but depends on runtime diagnostics object having the same fields |
+| `tests/pipeline/`  | `test_pipeline_smoke.py`          |  11 | 274 | `app.pipeline.runner.GermanSubtitlePipeline`, `app.learning.{onboarding,knowledge}` | `pipeline.py` (GermanSubtitlePipeline) | **LOW** — end-to-end with real spaCy; tightly bound to refactor class shape; better-rebuilt against the runtime pipeline once the unit tests pass |
+
+**Totals:** 537 tests, 5,961 lines. ~7 files / ~358 tests rated HIGH-salvage. ~4 files / ~168 tests rated MEDIUM. 1 file / 11 tests rated LOW.
+
+#### Top 20 tests to port first
+
+First batch — pure behavioural locks on runtime modules that currently have no coverage. Each is small (≤30 lines), table-driven, and exercises a single transform. Should fit in one PR.
+
+| # | nodeid | Locks behaviour of | Why first |
+|---|---|---|---|
+|  1 | `tests/subtitles/test_subtitle_cleaner.py::TestStripPositioning::test_positioning_tag_removed` | `subtitle_cleaner.py: SubtitleTextCleaner.clean` (position tags) | Tag stripping is touched by every downstream stage. Easiest fixture. |
+|  2 | `tests/subtitles/test_subtitle_cleaner.py::TestStripPositioning::test_bold_tag_removed` | same | HTML-style tag handling |
+|  3 | `tests/subtitles/test_subtitle_cleaner.py::TestStripPositioning::test_italic_tag_removed` | same | HTML-style tag handling |
+|  4 | `tests/subtitles/test_subtitle_cleaner.py::TestStripPositioning::test_position_with_coordinates_removed` | same | YouTube-style `{\an8}` coordinate tags |
+|  5 | `tests/subtitles/test_subtitle_ingestion.py::test_italic_tag_preserved_in_fragment_text` | `pipeline.py: parse_srt` (formatting preservation) | SRT parser invariant: don't strip mid-fragment |
+|  6 | `tests/subtitles/test_subtitle_ingestion.py::test_bold_tag_preserved_in_fragment_text` | same | same |
+|  7 | `tests/subtitles/test_subtitle_ingestion.py::test_font_colour_tag_text_content_survives` | same | edge case the cleaner relies on |
+|  8 | `tests/subtitles/test_subtitle_ingestion.py::test_nested_italic_and_bold_both_preserved` | same | nested tags |
+|  9 | `tests/subtitles/test_subtitle_merger.py::test_merged_text_is_space_joined` | `subtitle_merger.py: SubtitleMerger.merge` | Merger output shape |
+| 10 | `tests/subtitles/test_subtitle_merger.py::test_start_time_comes_from_first_fragment` | same | Time bound contract |
+| 11 | `tests/subtitles/test_subtitle_merger.py::test_end_time_comes_from_last_fragment` | same | Time bound contract |
+| 12 | `tests/subtitles/test_subtitle_merger.py::test_original_fragments_preserved_in_order` | same | Stability under merge |
+| 13 | `tests/subtitles/test_multi_speaker_guard.py::test_dash_prefix_overrides_soft_signal` | `subtitle_merger.py` (multi-speaker guard) | Heuristic flag; runtime correctness depends on this |
+| 14 | `tests/subtitles/test_multi_speaker_guard.py::test_dash_prefix_overrides_tiny_gap_unconditional_merge` | same | Same guard, different branch |
+| 15 | `tests/subtitles/test_multi_speaker_guard.py::test_en_dash_prefix_blocked` | same | Unicode dash handling |
+| 16 | `tests/subtitles/test_multi_speaker_guard.py::test_em_dash_prefix_blocked` | same | Unicode dash handling |
+| 17 | `tests/subtitles/test_noise_filtering.py::test_standalone_musical_note` | `subtitle_cleaner.py` (symbol filter) | Pure character-set test |
+| 18 | `tests/subtitles/test_noise_filtering.py::test_zero_width_format_character` | same | Pure character-set test |
+| 19 | `tests/learning/test_word_knowledge.py::test_second_exposure_same_content_is_rejected` | `user_knowledge.py: UserKnowledgeStore` (i+1 dedup invariant) | Load-bearing for the entire learning loop |
+| 20 | `tests/learning/test_onboarding.py::test_b1_is_superset_of_a2` | `onboarding.py: VocabularyOnboarding` (tier monotonicity) | Load-bearing for tier semantics |
+
+Coverage of the batch: 8 cleaner + 4 merger + 4 guard + 2 noise + 1 knowledge + 1 onboarding. Hits the most-used runtime helpers (`parse_srt`, `SubtitleTextCleaner`, `SubtitleMerger`, multi-speaker guard) plus the two correctness invariants the learning loop depends on.
+
+**Per-test porting recipe** (for when migration is approved):
+1. Change the import in the ported copy from `app.subtitles.cleaning` to `subtitle_cleaner` (etc.).
+2. Re-resolve any class/function rename diffs between the refactor and the runtime (verify by grepping the runtime for the symbol name).
+3. Run the single test against the runtime; expect either green (pure port) or a runtime-only behaviour difference (in which case adjust the assert or drop the test, don't change the runtime).
+4. Once all 20 are ported and green, drop the refactor copies from `tests/`.
+
+#### Out of scope for this card
+
+- **#3 (`os.chdir` import hacks)** remains separate. The two surviving uses live in **runtime code** (`youglish-app/backend/services/matcher_service.py:23` and `subtitle-scraper/pipeline.py:24`). Neither lives under `src/app/`. Deleting `src/app/` does not help #3 at all — that's its own fix.
+- Don't change `subtitle-scraper/` imports.
+- Don't touch `tests/legacy/` (already `collect_ignore_glob`-skipped per root `conftest.py`).
+
+**Status:** Plan agreed (B-min ruled out; B-redirect deferred until salvage batch lands). Awaiting approval to begin batch 1 (the 20 tests above).
 
 ### 18. 🟡 Hardcoded language config in scraper
 **File:** `subtitle-scraper/pipeline.py:36–60` (`LANG_MODEL_MAP`, `LANG_TRANSCRIPT_CODES`, `NO_MORPH_LANGS`)
@@ -361,11 +473,47 @@ New `components/ErrorBoundary.tsx`. Wraps `<Outlet />` in `App.tsx` (navbar + La
 **Problem:** Bare `except Exception` after `JSONDecodeError`. Hides DB errors, permission errors, type errors.
 **Fix:** Catch only `json.JSONDecodeError` and `asyncpg.PostgresError`. Let everything else propagate.
 
-### 24. 🟡 LLM cache concurrent-miss thundering herd
-**File:** `youglish-app/backend/services/llm_cache_service.py:86–97`
-**Problem:** If N requests for the same prompt arrive in parallel, all miss the cache and all call Anthropic. `INSERT … ON CONFLICT DO NOTHING` saves storage but not compute.
-**Fix:** Use `pg_advisory_lock(hash(cache_key))` around compute-and-insert, OR an in-memory `asyncio.Lock` keyed by `cache_key`. The latter is simpler and good enough for single-process.
-**Blocks:** cost predictability during traffic spikes.
+### 24. ✅ LLM cache thundering-herd guard — RESOLVED 2026-05-20
+New `llm_cache_service.get_or_compute(pool, cache_key, prompt_key, model, compute, *, ttl_seconds=None)` helper. In-process `asyncio.Lock` per `cache_key` (kept in a module-level dict guarded by an outer Lock so two coroutines see the same Lock object). Flow:
+
+1. Fast path — `get_cached` without any lock; cache hits skip locking entirely.
+2. On miss: `await _get_lock(cache_key)` then `async with lock:`.
+3. **Double-check** inside the lock — another coroutine may have filled the entry while we waited.
+4. Still missing → run `compute()`, then `set_cached(...)`, then release.
+
+Lock cleanup: deliberately NOT done. The set of distinct cache_keys is bounded by the `llm_cache` table itself, and `asyncio.Lock` objects are ~100 bytes — trade memory for simplicity. `reset_for_tests()` exposed for the test suite.
+
+Behaviour guaranteed by 6 new tests in `test_llm_cache.py` (driven with `asyncio.Event` to force deterministic concurrency, no real LLM calls):
+  - cache hit ⇒ `compute()` never invoked;
+  - 10 concurrent same-key callers ⇒ exactly 1 `compute()` invocation, all 10 receive the same dict;
+  - 2 concurrent different-key callers run in parallel (no cross-key blocking — proven by mutual-event-wait that would deadlock if locking serialised them);
+  - `compute()` raises ⇒ lock released, no entry written, retry path works;
+  - second waiter's `compute()` is short-circuited by the double-check (proves the bypass, not just the count).
+
+**Call-site migration — RESOLVED 2026-05-20 in #24-followup.** All 9 cached LLM paths now route through `get_or_compute`:
+
+| Path | File:Function | Prompt key |
+|---|---|---|
+| Guided chat opener | `llm_service:guided_open` | `guided_open` |
+| Guided chat hints | `llm_service:guided_hints` | `guided_hints` |
+| Prep item info | `llm_service:prep_item_info` | `prep_item_info` |
+| Prep examples | `llm_service:prep_generate_examples` | `prep_examples` |
+| Grammar rule explanation | `llm_service:grammar_rule_explanation` | `grammar_rule_explanation` |
+| SRS gloss (passive/active prompt text) | `llm_service:translate_item_gloss` | `item_gloss` |
+| Reading translate | `reading_llm_service:translate_sentence` | `reading_translate` |
+| Reading explain | `reading_llm_service:explain_in_context` | `reading_explain` |
+| Book OCR repair | `book_llm_service:repair_block` | `book_ocr_repair` |
+
+Intentionally untouched (per spec — high-cardinality user input or per-message context that should not be cached):
+  - `llm_service:guided_evaluate` (uncached)
+  - `llm_service:guided_summarize` (uncached — session-specific)
+  - `llm_service:evaluate_and_reply` (free-chat per-message)
+  - `llm_service:evaluate_production` (explicit "Not cached — input is user-supplied and high-cardinality" — regression-guarded by `test_evaluate_production_remains_uncached`)
+  - `llm_service:get_examples_if_cached` / `get_grammar_explanation_if_cached` (read-only cache peek used by routers; no LLM call to serialise)
+
+Regression-guarded by 6 new tests in `tests/test_llm_cache_migration.py`: concurrent same-key callers prove exactly one provider invocation for `translate_item_gloss`, `reading_translate`, `reading_explain`, `book_repair`; `evaluate_production` proven still-uncached; cache-hit second call skips provider.
+
+**Known limitation.** In-process per-process locks. Multi-worker deployments (gunicorn `--workers N`, multi-pod K8s) won't coordinate across processes — Worker A and Worker B can each see a miss and each call the provider. Same scope as `services/rate_limiter.py`; same eventual fix (Redis or `pg_advisory_xact_lock`). Documented in the module docstring.
 
 ### 25. 🟢 Word-status data duplicated across services
 **Files:** several services do their own `SELECT … FROM user_word_knowledge WHERE …`
@@ -573,10 +721,12 @@ Closes the PWA stage: Lighthouse PWA audit's "no maskable/png icon" warning is g
 **Problem:** Mostly commented-out Panda-CSS skeleton and Vite template leftovers.
 **Fix:** Delete the dead bits; keep only what's used.
 
-### 29. 🟢 Add an end-to-end test
-**Files:** none yet
-**Problem:** No test covers register → search → mark word → SRS due → review → progression. Each piece works but the seams aren't verified.
-**Fix:** One pytest-asyncio test against a throwaway Postgres + httpx AsyncClient that walks the full loop.
+### 29. ✅ Backend end-to-end progression loop test — RESOLVED 2026-05-19
+New file `tests/test_e2e_learning_loop.py` with two tests:
+  - `test_e2e_learning_loop_golden_path` walks the full HTTP loop: register → mark Learning → /srs/due → passive correct review → active produce (exact-match fast path) → repeat to mastery → confirm /srs/due filters known → manual demote known → learning → manual demote learning → unknown. Each step asserts both the API response and the persisted `user_word_knowledge` + `srs_cards` state, locking #0a-2, #0b, Hole 9, and Hole 26 against regression. ~7s on local DB.
+  - `test_e2e_demote_unknown_does_not_fabricate_missing_active_card` mirrors the Hole 26 confidence-click path: known via manual click only (no active card created), then demote to unknown — asserts no active SRS card is fabricated.
+
+LLM is mocked via `llm_service._MOCK = True`. The active production exact-match fast path means the loop never makes an LLM call for evaluation either.
 
 ### 30. 🟢 Documentation / ERD
 **Files:** none

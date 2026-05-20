@@ -1,3 +1,8 @@
+# NB: This module's library functions emit no output. The 13 print() calls
+# below all live in main() and report results to stdout when the file is run
+# as a script (`python phrase_finder.py`) — stdout IS the product for that
+# CLI demo, intentionally left as print rather than logging.
+
 import spacy
 import csv
 import os

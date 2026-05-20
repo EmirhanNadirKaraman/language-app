@@ -1,4 +1,7 @@
-with open('data/final_result.txt', 'r') as top_4000_words: 
+# Dev throwaway: prints a dict to stdout for inspection. Stdout IS the
+# product; print() left intentionally (not converted to logging).
+
+with open('data/final_result.txt', 'r') as top_4000_words:
     top_4000_words = top_4000_words.readlines()
     d = dict()
 

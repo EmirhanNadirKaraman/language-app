@@ -1,6 +1,9 @@
 """
 Merges channels from channels.json and subscribed_channels.txt into merged_channels.json.
 Channels from subscribed_channels.txt are assumed to be German.
+
+CLI tool — its one print() reports the result on stdout, which IS the product
+(intentionally left as print, not logging).
 """
 
 import json

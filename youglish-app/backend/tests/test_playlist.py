@@ -34,6 +34,7 @@ from backend.services.playlist_service import (
     generate_playlist,
     greedy_cover,
 )
+from ._email_helper import make_test_email
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +265,7 @@ async def test_generate_playlist_unsupported_item_type(db_pool):
 # ---------------------------------------------------------------------------
 
 async def _auth_token(client) -> str:
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     await client.post("/api/v1/auth/register", json={"email": email, "password": "password123"})
     resp = await client.post("/api/v1/auth/login", json={"email": email, "password": "password123"})
     return resp.json()["access_token"]

@@ -11,6 +11,7 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 from httpx import AsyncClient
+from ._email_helper import make_test_email
 
 REGISTER = "/api/v1/auth/register"
 LOGIN    = "/api/v1/auth/login"
@@ -27,7 +28,7 @@ _MOCK_EVAL = {
 
 
 def make_email() -> str:
-    return f"test+{uuid.uuid4().hex[:10]}@example.com"
+    return make_test_email()
 
 
 async def _register_and_login(client: AsyncClient, email: str) -> dict:

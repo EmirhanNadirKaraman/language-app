@@ -151,13 +151,24 @@ async def save_selection(
     )
 
     # Feed the main progression system if this selection maps to a catalog item.
-    # Equivalent to the user marking the word/phrase as 'learning' from the vocab view:
-    # creates a passive SRS card and increments passive_level.
+    # Saving a selection means "I want to learn this" — equivalent to clicking
+    # 'Learning' in the vocab view. status_override='learning' is what makes
+    # that explicit: user_word_knowledge.status flips to 'learning' atomically
+    # alongside the rule's level/SRS deltas (per the #2 atomicity fix).
+    #
+    # Transaction note: the reading_selections INSERT (reading_service.save_selection)
+    # and the catalog apply_progression run in SEPARATE transactions on the same
+    # pool. Making them one would require apply_progression to accept a
+    # connection-or-pool argument; out of scope for this card. The failure
+    # mode is unchanged from before: if apply_progression errors, the reading
+    # selection persists without catalog state — same as today.
     catalog = await reading_service.find_catalog_item(pool, doc_id, body.canonical)
     if catalog:
         item_id, item_type = catalog
         await progression_service.apply_progression(
-            pool, str(user["user_id"]), item_id, item_type, "status_marked_learning",
+            pool, str(user["user_id"]), item_id, item_type,
+            "status_marked_learning",
+            status_override="learning",
         )
 
     return _row_to_selection(row)
@@ -267,22 +278,38 @@ async def review_selection(
     if not row:
         raise HTTPException(status_code=404, detail="Selection not found")
 
-    # Mirror the review outcome onto the catalog item's passive SRS card if one exists.
-    # 'mastered' carries no passive signal — the reading SRS simply exits rotation.
-    _review_event = {
-        "got_it":        "passive_review_correct",
-        "still_learning": "passive_review_incorrect",
-    }.get(body.outcome)
-
-    if _review_event:
+    # Mirror the review outcome onto the catalog item if one exists.
+    #
+    # got_it / still_learning  →  passive review pass/fail on the main SRS card
+    # mastered                 →  status_marked_known with status_override='known'
+    #                             (Hole 24 / #5 fix): reading 'Mastered' is the
+    #                             same shape as manual Known confidence — passive
+    #                             credit only. The rule has active_delta=0 and
+    #                             active_srs=None, so active mastery is NOT
+    #                             fabricated.
+    catalog = None
+    if body.outcome in ("got_it", "still_learning", "mastered"):
         catalog = await reading_service.find_catalog_item(
             pool, str(row["doc_id"]), row["canonical"],
         )
-        if catalog:
-            item_id, item_type = catalog
-            await progression_service.apply_progression(
-                pool, str(user["user_id"]), item_id, item_type, _review_event,
-            )
+
+    if catalog and body.outcome == "got_it":
+        item_id, item_type = catalog
+        await progression_service.apply_progression(
+            pool, str(user["user_id"]), item_id, item_type, "passive_review_correct",
+        )
+    elif catalog and body.outcome == "still_learning":
+        item_id, item_type = catalog
+        await progression_service.apply_progression(
+            pool, str(user["user_id"]), item_id, item_type, "passive_review_incorrect",
+        )
+    elif catalog and body.outcome == "mastered":
+        item_id, item_type = catalog
+        await progression_service.apply_progression(
+            pool, str(user["user_id"]), item_id, item_type,
+            "status_marked_known",
+            status_override="known",
+        )
 
     return _row_to_selection(row)
 

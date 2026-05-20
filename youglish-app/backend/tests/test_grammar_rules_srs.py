@@ -23,6 +23,7 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from ._email_helper import make_test_email
 
 REGISTER = "/api/v1/auth/register"
 LOGIN    = "/api/v1/auth/login"
@@ -34,7 +35,7 @@ SRS_DUE  = "/api/v1/srs/due"
 # ---------------------------------------------------------------------------
 
 def _email() -> str:
-    return f"test+{uuid.uuid4().hex[:10]}@example.com"
+    return make_test_email()
 
 
 async def _register_and_login(client: AsyncClient, db_pool, email: str) -> tuple[dict, str]:
@@ -236,7 +237,7 @@ async def test_enrich_grammar_rules_returns_metadata(db_pool):
     rule_id, _, title = await _get_german_rule(db_pool)
     uid = await db_pool.fetchval(
         "INSERT INTO users (email, password_hash) VALUES ($1, 'x') RETURNING user_id",
-        f"test+{__import__('uuid').uuid4().hex[:10]}@example.com",
+        make_test_email(),
     )
     uid = str(uid)
     # Track the rule so passive_level / status are non-default.
@@ -262,7 +263,7 @@ async def test_enrich_grammar_rules_omits_unknown_ids(db_pool):
 
     uid = await db_pool.fetchval(
         "INSERT INTO users (email, password_hash) VALUES ($1, 'x') RETURNING user_id",
-        f"test+{__import__('uuid').uuid4().hex[:10]}@example.com",
+        make_test_email(),
     )
     uid = str(uid)
 

@@ -29,6 +29,7 @@ from backend.services.progression_service import (
     apply_progression,
     compute_delta,
 )
+from ._email_helper import make_test_email
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +50,7 @@ async def _get_word_id(pool, offset: int = 0) -> int:
 
 async def _make_user(pool) -> str:
     from backend.services.auth_service import register_user
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user = await register_user(pool, email, "password123")
     return str(user["user_id"])
 

@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import logging
 import os
 import sys
 import time
@@ -23,6 +24,8 @@ import yt_dlp
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -64,8 +67,8 @@ def fetch_category(video_id: str) -> str:
             genre = (info.get("genre") or "").strip()
             if genre:
                 return genre
-    except Exception as e:
-        print(f"  [yt-dlp] Error for {video_id}: {e}")
+    except Exception:
+        logger.warning("[yt-dlp] Error fetching category for %s", video_id, exc_info=True)
     return "other"
 
 
@@ -105,21 +108,20 @@ def main() -> None:
     total = len(rows)
 
     if total == 0:
-        print("No videos with category='other' found. Nothing to do.")
+        logger.info("No videos with category='other' found. Nothing to do.")
         conn.close()
         return
 
-    print(f"Found {total} video(s) with category='other'.")
+    logger.info("Found %d video(s) with category='other'.", total)
     if args.dry_run:
-        print("DRY RUN — no changes will be written.\n")
+        logger.info("DRY RUN — no changes will be written.")
 
     updated = 0
     skipped = 0
 
     for i, (video_id,) in enumerate(rows, start=1):
-        print(f"[{i}/{total}] {video_id} ...", end=" ", flush=True)
         category = fetch_category(video_id)
-        print(category)
+        logger.info("[%d/%d] %s -> %s", i, total, video_id, category)
 
         if args.dry_run:
             continue
@@ -140,10 +142,11 @@ def main() -> None:
     conn.close()
 
     if not args.dry_run:
-        print(f"\nDone. Updated: {updated}, still 'other': {skipped}")
+        logger.info("Done. Updated: %d, still 'other': %d", updated, skipped)
     else:
-        print("\nDry run complete.")
+        logger.info("Dry run complete.")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     main()

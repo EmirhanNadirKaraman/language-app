@@ -1,6 +1,9 @@
 """
 Profiler for the full subtitle scraper pipeline (with real DB I/O).
 
+Stdout is the product: every print() emits a timing/throughput row that the
+user reads to compare runs. Intentionally left as print(), not logging.
+
 Instruments pipeline.py to measure actual performance including:
 - Time per video (fetch, NLP, phrase extraction, DB writes)
 - Time per populate() call

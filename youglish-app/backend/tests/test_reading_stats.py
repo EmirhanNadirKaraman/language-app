@@ -11,6 +11,7 @@ import uuid
 import asyncpg
 import pytest
 from httpx import AsyncClient
+from ._email_helper import make_test_email
 
 REGISTER = "/api/v1/auth/register"
 LOGIN    = "/api/v1/auth/login"
@@ -39,7 +40,7 @@ async def conn(db_pool):
 # ---------------------------------------------------------------------------
 
 def make_email() -> str:
-    return f"test+{uuid.uuid4().hex[:10]}@example.com"
+    return make_test_email()
 
 
 async def _token(client: AsyncClient) -> str:

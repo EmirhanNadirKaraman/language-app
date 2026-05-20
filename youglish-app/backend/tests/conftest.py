@@ -3,12 +3,14 @@ Test fixtures.
 
 Run tests from youglish-app/:
     cd youglish-app
-    pytest
+    pytest                 # serial
+    pytest -n auto         # parallel via pytest-xdist
 
 The tests hit the real development database. Each test uses emails in the
-pattern  test+<random>@example.com  and the autouse `cleanup` fixture deletes
-them all after each test, so tests stay independent without needing a separate
-test database.
+pattern  test+{worker_id}_{random}@example.com  (built by `make_test_email()`
+in `_email_helper.py`). The autouse `cleanup` fixture deletes only rows
+matching THIS worker's pattern, so parallel workers can't trample each other's
+in-flight users.
 """
 import os
 from pathlib import Path
@@ -17,6 +19,8 @@ import asyncpg
 import pytest
 from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
+
+from ._email_helper import cleanup_pattern
 
 # .env is four levels up from this file:
 # tests/ → backend/ → youglish-app/ → sentence-to-phrase-matcher/
@@ -61,7 +65,13 @@ async def cleanup(db_pool):
     rate-limiter state so per-user counters from one test don't carry into
     the next."""
     yield
-    await db_pool.execute("DELETE FROM users WHERE email LIKE 'test+%@example.com'")
+    # Per-worker scoped delete — under pytest-xdist each worker only touches
+    # the rows whose email carries its own worker tag. Serial runs collapse to
+    # the 'main' tag.
+    await db_pool.execute(
+        "DELETE FROM users WHERE email LIKE $1",
+        cleanup_pattern(),
+    )
     # Reset in-process LLM rate limiter (#12). Importing here keeps the
     # fixture cheap when the limiter module isn't loaded.
     from backend.services import rate_limiter

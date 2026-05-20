@@ -6,11 +6,12 @@ Happy paths and the two main failure modes: duplicate email and wrong password.
 import uuid
 
 from httpx import AsyncClient
+from ._email_helper import make_test_email
 
 
 def make_email() -> str:
     """Unique email that the cleanup fixture will delete after the test."""
-    return f"test+{uuid.uuid4().hex[:10]}@example.com"
+    return make_test_email()
 
 
 REGISTER = "/api/v1/auth/register"

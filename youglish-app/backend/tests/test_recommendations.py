@@ -53,6 +53,7 @@ from backend.services.recommendation_service import (
     score_sentence,
     score_video,
 )
+from ._email_helper import cleanup_pattern, make_test_email
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +247,7 @@ async def _create_user(pool) -> str:
         VALUES ($1, 'x')
         RETURNING user_id
         """,
-        f"test+{uuid.uuid4().hex[:12]}@example.com",
+        make_test_email(),
     )
     return str(row["user_id"])
 
@@ -399,7 +400,7 @@ async def test_recommend_videos_target_item_count_matches_db(db_pool):
 # ---------------------------------------------------------------------------
 
 async def _auth_token(client) -> str:
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     await client.post("/api/v1/auth/register", json={"email": email, "password": "password123"})
     resp = await client.post("/api/v1/auth/login", json={"email": email, "password": "password123"})
     return resp.json()["access_token"]
@@ -746,7 +747,7 @@ async def test_items_phrase_type_returns_empty(client, db_pool):
 
 async def _make_user(db_pool) -> str:
     from backend.services.auth_service import register_user
-    email = f"test+{uuid.uuid4().hex[:10]}@example.com"
+    email = make_test_email()
     user = await register_user(db_pool, email, "password123")
     return str(user["user_id"])
 
@@ -845,7 +846,7 @@ async def test_recommend_items_returns_phrase_enrichment(db_pool, client):
 
     token = await _auth_token(client)
     uid = await db_pool.fetchval(
-        "SELECT user_id FROM users WHERE email LIKE 'test+%@example.com' ORDER BY user_id DESC LIMIT 1"
+        "SELECT user_id FROM users WHERE email LIKE $1 ORDER BY user_id DESC LIMIT 1", cleanup_pattern()
     )
     await db_pool.execute(
         "INSERT INTO user_word_knowledge (user_id, item_id, item_type, status) "
@@ -881,7 +882,7 @@ async def test_recommend_items_returns_grammar_rule_enrichment(db_pool, client):
 
     token = await _auth_token(client)
     uid = await db_pool.fetchval(
-        "SELECT user_id FROM users WHERE email LIKE 'test+%@example.com' ORDER BY user_id DESC LIMIT 1"
+        "SELECT user_id FROM users WHERE email LIKE $1 ORDER BY user_id DESC LIMIT 1", cleanup_pattern()
     )
     await db_pool.execute(
         "INSERT INTO user_word_knowledge (user_id, item_id, item_type, status) "
