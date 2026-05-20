@@ -153,15 +153,15 @@ UPDATE user_word_knowledge uwk SET
 **Fix:** Promote `followed_channels`, `followed_genres`, `excluded_categories` into proper join tables (`user_followed_channel`, `user_followed_genre`). Migrate existing JSON rows. Keep `settings` JSONB for genuinely freeform prefs (colour scheme overrides, etc.).
 **Blocks:** efficient recommendation filtering, audit/admin views on what users follow.
 
-### 7. 🟠 Channel flat files vs. DB
-**Files:** `subtitle-scraper/channels.json`, `merged_channels.json`, `subscribed_channels.txt`, `seed_channels.py`, `pipeline.py`
-**Problem:** Both flat files and `channel` table coexist. New channels added today may go to either depending on which path is touched.
-**Fix:**
-1. Run `seed_channels.py --dry-run` then for real to confirm DB has everything.
-2. `git rm` the three flat files.
-3. Make `pipeline.py:load_channels()` DB-only (remove file fallbacks).
-4. Add `subtitle-scraper/add_channel.py` CLI or wire it into the existing `content-requests` flow.
-**Blocks:** any "manage channels via UI" feature, multi-machine deploys.
+### 7. ✅ Channel flat files vs. DB — RESOLVED 2026-05-20
+- Runtime was already DB-only (`pipeline.py:load_channels(cursor)` queries `channel` table; no file fallback existed).
+- Seed data consolidated to `subtitle-scraper/seed_data/channels.json` (183 entries, ⊇ old `subscribed_channels.txt` set — verified zero IDs missing). `seed_channels.py` rewritten to read only this file, drop the legacy double-pass (merged + subscribed).
+- `merge_channels.py` deleted (inputs + output all gone).
+- `channel_finder.py` no longer writes `subscribed_channels.txt`; discovered IDs print to stdout for piping into the content-requests endpoint or seed file.
+- Old flat files removed: `channels.json`, `merged_channels.json`, `subscribed_channels.txt`.
+- Pipeline docstring scrubbed of flat-file references.
+- Tests: `tests/pipeline/test_channel_loading.py` covers (a) `load_channels` returns DB rows, (b) no `open()` of legacy filenames anywhere in `subtitle-scraper/`.
+- Deploy note: on a fresh DB, run `python subtitle-scraper/seed_channels.py` after migrations to populate `channel` (idempotent — safe to re-run after schema changes too).
 
 ### 8. ✅ books.py LLM repair exception specificity — RESOLVED 2026-05-19
 `routers/books.py:359` (batch repair loop) now catches `(anthropic.APIError, asyncpg.PostgresError)` as the expected failure mode (logged at WARNING). A second narrower `except Exception:` block remains as a defensive top-level guard so a bug in `repair_block_by_id` doesn't lose all already-repaired blocks in the batch — that one is logged via `logger.exception()` to capture the full trace.

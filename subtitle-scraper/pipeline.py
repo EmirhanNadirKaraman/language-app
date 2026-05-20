@@ -1,9 +1,9 @@
 """
-Pipeline that merges channels from channels.json and subscribed_channels.txt,
-fetches video transcripts, and inserts them into the database.
+Pipeline that loads active channels from the `channel` table, fetches
+video transcripts, and inserts them into the database.
 
-Channels in channels.json have a known language.
-Channels in subscribed_channels.txt are language-detected automatically.
+Channel language (when known) drives transcript-code preference; rows with
+NULL language fall back to auto-detection.
 """
 
 import json

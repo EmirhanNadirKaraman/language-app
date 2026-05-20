@@ -198,12 +198,13 @@ Pytest tests for pipeline modules. Mostly hermetic (no DB).
 | `pipeline.py` | yt-dlp scraper orchestrator. `load_channels` (DB), `populate`, `insert_phrases`, `_notify_user`, `_mark_request`. Run modes: full, `--requests-only`. |
 | `transcript_fetcher.py` | yt-dlp wrapper. JSON3 + WebVTT parsing. Cache under `transcript_cache/`. |
 | `phrase_finder.py` | German phrase extraction. Loads `data/final_result.txt` + spaCy at import. Currently has a bug (Doc vs str) breaking matcher tests — see TESTS.md. |
-| `seed_channels.py` | One-time flat-files → `channel` table migration. |
+| `seed_channels.py` | Bootstrap upsert of `seed_data/channels.json` → `channel` table. Idempotent. |
 | `backfill_video_channels.py`, `backfill_channel_names.py`, `backfill_categories.py` | One-off backfills. |
-| `channel_finder.py`, `merge_channels.py` | Channel utilities. |
+| `channel_finder.py` | YouTube subscription / CSV channel discovery. Prints IDs to stdout. |
+| `seed_data/channels.json` | Bundled bootstrap seed for the `channel` table. Read by `seed_channels.py`. |
 | `debug_transcript.py` | Single-video transcript debug. |
 | `profile_pipeline.py`, `profile_full_pipeline.py` | Profiling. |
-| `channels.json`, `merged_channels.json`, `subscribed_channels.txt` | **Flat-file channel lists** — TODO #7. Delete once DB-only. |
+| `top-1000-most-subscribed-youtube-channels-in-germany.csv` | Input for `channel_finder.py` CSV mode. |
 | `transcript_cache/` | Cached transcripts (gitignored). |
 
 ---

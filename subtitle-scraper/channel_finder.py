@@ -85,6 +85,7 @@ if __name__ == "__main__":
     combined = list(dict.fromkeys(subscribed + csv_ids))  # deduplicate, preserve order
     print(f"Total unique channels: {len(combined)}")
 
-    with open("subscribed_channels.txt", "w") as f:
-        f.write("\n".join(combined))
-    print("Written to subscribed_channels.txt")
+    # Discovered IDs go to stdout — pipe into seed_data/channels.json or feed
+    # the /api/v1/content-requests endpoint to insert them into the `channel` table.
+    for channel_id in combined:
+        print(channel_id)

@@ -1,11 +1,13 @@
 """
 seed_channels.py
 
-One-time script to populate the `channel` table from the existing flat files:
-  - merged_channels.json  — full channel list with id, name, language
-  - subscribed_channels.txt — raw channel IDs (no name/language yet)
+Populate the `channel` table from the bundled seed file:
+  - seed_data/channels.json — list of {id, name, language} entries.
 
-Run from the subtitle-scraper directory after migration 015 has been applied:
+The DB is the runtime source of truth (`pipeline.py:load_channels` reads it
+directly). This script is the bootstrap path: run once on a fresh deployment,
+or re-run idempotently to upsert newly-added seed entries.
+
     python seed_channels.py
     python seed_channels.py --dry-run
 """
@@ -23,6 +25,8 @@ logger = logging.getLogger(__name__)
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
+SEED_PATH = Path(__file__).parent / "seed_data" / "channels.json"
+
 
 def connect():
     return psycopg2.connect(
@@ -34,95 +38,69 @@ def connect():
     )
 
 
-def load_merged_channels() -> list[dict]:
-    path = Path(__file__).parent / "merged_channels.json"
+def load_seed_channels(path: Path = SEED_PATH) -> list[dict]:
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    # Flat list: [{id, name, language}, ...]
     if isinstance(data, list):
         return data
-    # Dict keyed by language: {lang: [{id, name, language}, ...]}
+    # Legacy dict-keyed-by-language shape — flatten for safety.
     result = []
     for entries in data.values():
         result.extend(entries)
     return result
 
 
-def load_subscribed_ids() -> list[str]:
-    path = Path(__file__).parent / "subscribed_channels.txt"
-    if not path.exists():
-        return []
-    return [line.strip() for line in path.read_text().splitlines() if line.strip()]
-
-
 def seed(dry_run: bool = False) -> None:
+    channels = load_seed_channels()
+    logger.info("seed_data/channels.json: %d channels", len(channels))
+
+    if dry_run:
+        for ch in channels:
+            logger.info(
+                "[dry] upsert channel %r (%r, %s)",
+                ch.get("id"), ch.get("name"), ch.get("language"),
+            )
+        logger.info("Dry run complete — nothing written.")
+        return
+
     conn = connect()
     cursor = conn.cursor()
 
-    # ── merged_channels.json ──────────────────────────────────────────────────
-    merged = load_merged_channels()
-    logger.info("merged_channels.json: %d channels", len(merged))
-
-    merged_inserted = 0
-    merged_skipped = 0
-    for ch in merged:
-        channel_id   = ch.get("id", "").strip()
-        channel_name = (ch.get("name") or "").strip()
-        language     = ch.get("language") or None
+    inserted = 0
+    skipped = 0
+    for ch in channels:
+        channel_id = (ch.get("id") or "").strip()
         if not channel_id:
             continue
-        if not dry_run:
-            cursor.execute(
-                """
-                INSERT INTO channel (youtube_channel_id, channel_name, language)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (youtube_channel_id) DO UPDATE
-                    SET channel_name = EXCLUDED.channel_name,
-                        language     = COALESCE(channel.language, EXCLUDED.language)
-                """,
-                (channel_id, channel_name, language),
-            )
-            if cursor.rowcount:
-                merged_inserted += 1
-            else:
-                merged_skipped += 1
+        channel_name = (ch.get("name") or "").strip()
+        language = ch.get("language") or None
+        cursor.execute(
+            """
+            INSERT INTO channel (youtube_channel_id, channel_name, language)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (youtube_channel_id) DO UPDATE
+                SET channel_name = CASE
+                        WHEN channel.channel_name = '' THEN EXCLUDED.channel_name
+                        ELSE channel.channel_name
+                    END,
+                    language = COALESCE(channel.language, EXCLUDED.language)
+            """,
+            (channel_id, channel_name, language),
+        )
+        if cursor.rowcount:
+            inserted += 1
         else:
-            logger.info("[dry] upsert channel %r (%r, %s)", channel_id, channel_name, language)
+            skipped += 1
 
-    # ── subscribed_channels.txt ───────────────────────────────────────────────
-    subscribed = load_subscribed_ids()
-    logger.info("subscribed_channels.txt: %d channel IDs", len(subscribed))
-
-    sub_inserted = 0
-    for channel_id in subscribed:
-        if not dry_run:
-            cursor.execute(
-                """
-                INSERT INTO channel (youtube_channel_id)
-                VALUES (%s)
-                ON CONFLICT (youtube_channel_id) DO NOTHING
-                """,
-                (channel_id,),
-            )
-            if cursor.rowcount:
-                sub_inserted += 1
-        else:
-            logger.info("[dry] insert channel_id %r (name/language unknown)", channel_id)
-
-    if not dry_run:
-        conn.commit()
-        logger.info("Done.")
-        logger.info("  merged_channels: %d upserted, %d already present", merged_inserted, merged_skipped)
-        logger.info("  subscribed_only: %d new rows (no name/language yet)", sub_inserted)
-    else:
-        logger.info("Dry run complete — nothing written.")
+    conn.commit()
+    logger.info("Done. %d upserted, %d already present", inserted, skipped)
 
     cursor.close()
     conn.close()
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Seed channel table from flat files.")
+    parser = argparse.ArgumentParser(description="Seed channel table from bundled seed file.")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     seed(dry_run=args.dry_run)

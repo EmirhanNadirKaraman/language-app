@@ -233,7 +233,7 @@ Read this before assuming anything about how an event flows through `progression
 - ~~`srs_service.py` is dead code.~~ Resolved 2026-05-19 — file deleted along with the three dead endpoints. Only `review_service.py` + `progression_service._update_srs` remain.
 - **`matcher_service.py` uses `os.chdir()`** at *module import time* (not per-request) to load `subtitle-scraper/phrase_finder.py`. The `try/finally` restores cwd + sys.path, so concurrent-request impact is nil. Still fragile — move `phrase_finder.py` into a real package eventually.
 - **`subtitle-scraper/pipeline.py` does the same chdir hack** at startup. Same trade-off.
-- **Channels live in flat files** (`channels.json`, `merged_channels.json`, `subscribed_channels.txt`) AND in the `channel` table. The DB is authoritative; `seed_channels.py` migrates. Delete the flat files once confirmed in DB.
+- **Channels live in the `channel` table only** (since 2026-05-20, #7). `subtitle-scraper/seed_data/channels.json` is the bootstrap seed for fresh deployments; `seed_channels.py` upserts it into the DB (idempotent). Runtime (`pipeline.py:load_channels`) is DB-only — no file fallback. Old flat files at the scraper root (`channels.json`, `merged_channels.json`, `subscribed_channels.txt`) and `merge_channels.py` are gone.
 - **Channel preferences** still in `users.settings` JSONB. One of two remaining "data-in-JSON" problems.
 - **`apply_progression` IS transactional** and now writes status too (resolved 2026-05-19). The router calls `apply_progression(..., status_override=body.status)` once — status + level deltas + SRS card moves all happen inside one transaction. `word_service.upsert_word_status` is gone; `progression_service` is the single writer to `user_word_knowledge`.
 - **LLM rate limiting** (since 2026-05-19, #12). `services/rate_limiter.py` — in-memory sliding window, 30 req/min + 400 req/hour per user. Wired via `core/deps.rate_limit_llm` into all 10 LLM-backed routes. `GET /srs/due` exempt (cached glosses). 429 → `detail="rate_limit_minute"` or `"rate_limit_hour"` with `Retry-After`. **Multi-worker deploy needs Redis backend** — limiter is in-process today.
@@ -268,7 +268,7 @@ npm run test         # vitest
 ### Subtitle scraper (one-off / cron)
 ```bash
 cd subtitle-scraper
-python seed_channels.py            # one-time migration
+python seed_channels.py            # bootstrap channel table from seed_data/channels.json
 python pipeline.py                  # full run
 python pipeline.py --requests-only  # consume content_request queue
 ```
