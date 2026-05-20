@@ -2,37 +2,25 @@
 Thin async wrapper around phrase_finder.extract_german_logic.
 
 phrase_finder.py lives in subtitle-scraper/ and loads both the spaCy model
-and the verb dictionary at module-import time (module-level globals). This
-file ensures those one-time loads happen safely by:
-  1. Temporarily changing CWD to the project root so the relative path
-     "data/final_result.txt" inside phrase_finder resolves correctly.
-  2. Adding subtitle-scraper/ to sys.path for the import.
-  3. Restoring both after the import completes.
+and the verb dictionary at module-import time (module-level globals). It
+resolves its data path from `__file__`, so importing it only requires
+adding subtitle-scraper/ to sys.path — no cwd mutation.
 
-After that, `_pf` is a normal module reference; the model and dictionary
-stay resident for the lifetime of the process.
+`_pf` is a normal module reference; the model and dictionary stay resident
+for the lifetime of the process.
 """
 import asyncio
-import os
 import sys
 from pathlib import Path
 
 import asyncpg
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
-_SCRAPER_PATH = str(_PROJECT_ROOT / "subtitle-scraper")
+_SCRAPER_PATH = str(Path(__file__).resolve().parents[3] / "subtitle-scraper")
 
-_orig_cwd = os.getcwd()
-os.chdir(_PROJECT_ROOT)
-sys.path.insert(0, _SCRAPER_PATH)
-try:
-    import phrase_finder as _pf
-finally:
-    os.chdir(_orig_cwd)
-    try:
-        sys.path.remove(_SCRAPER_PATH)
-    except ValueError:
-        pass
+if _SCRAPER_PATH not in sys.path:
+    sys.path.insert(0, _SCRAPER_PATH)
+
+import phrase_finder as _pf
 
 
 def _extract(sentence: str) -> list[dict]:

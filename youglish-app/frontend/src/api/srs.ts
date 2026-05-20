@@ -1,3 +1,4 @@
+import { apiUrl } from './_baseUrl';
 import type { SRSReviewCard, SRSProductionResult } from '../types';
 
 function authHeaders(token: string): HeadersInit {
@@ -9,7 +10,7 @@ export async function getDueCards(
     language: string,
     limit = 20,
 ): Promise<SRSReviewCard[]> {
-    const url = `/api/v1/srs/due?language=${encodeURIComponent(language)}&limit=${limit}`;
+    const url = apiUrl(`/api/v1/srs/due?language=${encodeURIComponent(language)}&limit=${limit}`);
     const res = await fetch(url, { headers: authHeaders(token) });
     if (!res.ok) throw new Error('Failed to fetch due cards');
     return res.json() as Promise<SRSReviewCard[]>;
@@ -20,12 +21,28 @@ export async function submitReviewAnswer(
     cardId: number,
     correct: boolean,
 ): Promise<void> {
-    const res = await fetch(`/api/v1/srs/review/${cardId}`, {
+    const res = await fetch(apiUrl(`/api/v1/srs/review/${cardId}`), {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ correct }),
     });
     if (!res.ok) throw new Error('Failed to submit review answer');
+}
+
+/**
+ * Defer a card by 1 day. W5 / Hole 14: skipping is NOT learning evidence —
+ * the backend touches `due_date` only. Returns the new due_date.
+ */
+export async function skipCard(
+    token: string,
+    cardId: number,
+): Promise<{ card_id: number; due_date: string }> {
+    const res = await fetch(apiUrl(`/api/v1/srs/review/${cardId}/skip`), {
+        method: 'POST',
+        headers: authHeaders(token),
+    });
+    if (!res.ok) throw new Error(`Failed to skip card (${res.status})`);
+    return res.json() as Promise<{ card_id: number; due_date: string }>;
 }
 
 /**
@@ -38,7 +55,7 @@ export async function submitProductionAnswer(
     cardId: number,
     answer: string,
 ): Promise<SRSProductionResult> {
-    const res = await fetch(`/api/v1/srs/review/${cardId}/produce`, {
+    const res = await fetch(apiUrl(`/api/v1/srs/review/${cardId}/produce`), {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ answer }),

@@ -1,3 +1,5 @@
+import { apiUrl } from './_baseUrl';
+
 function extractDetail(detail: unknown, fallback: string): string {
     if (!detail) return fallback;
     if (typeof detail === 'string') return detail || fallback;
@@ -14,7 +16,7 @@ function extractDetail(detail: unknown, fallback: string): string {
 }
 
 export async function login(email: string, password: string): Promise<string> {
-    const res = await fetch('/api/v1/auth/login', {
+    const res = await fetch(apiUrl('/api/v1/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -28,7 +30,7 @@ export async function login(email: string, password: string): Promise<string> {
 }
 
 export async function register(email: string, password: string): Promise<void> {
-    const res = await fetch('/api/v1/auth/register', {
+    const res = await fetch(apiUrl('/api/v1/auth/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

@@ -1,5 +1,9 @@
 # TODO.md
 
+> **For the current ROI-ranked plan, see [`docs/ROADMAP.md`](./ROADMAP.md).**
+> This file remains the per-item history (resolved + open), indexed by number;
+> ROADMAP.md is the live priority view re-ranked on 2026-05-20.
+
 Bugs and pending work, ordered so that earlier items unblock later items. "Blocks: …" lists downstream work that depends on the fix.
 
 Status legend: 🔴 will fail / data risk · 🟠 correctness / reliability · 🟡 tech debt · 🟢 polish
@@ -45,11 +49,19 @@ File `services/srs_service.py` deleted along with the three legacy router endpoi
 ### 2. ✅ Atomicity gap in `routers/words.py` status update — RESOLVED 2026-05-19
 Implemented Approach A: `progression_service.apply_progression` gained a keyword-only `status_override: str | None = None` parameter. When provided, the status flip happens inside the existing transaction alongside level deltas, SRS card writes, and auto-promotion. The router now makes a single `apply_progression(..., status_override=body.status)` call. `word_service.upsert_word_status` and its private validation constants were deleted (no other callers). `WordStatusUpdate.status` was tightened to `Literal["unknown","learning","known"]` so Pydantic returns 422 for bad values.
 
-### 3. 🟡 Replace `os.chdir()` import hacks (downgraded: module-level, not per-request)
-**Files:** `youglish-app/backend/services/matcher_service.py:22–35`, `subtitle-scraper/pipeline.py:24–30`
-**Problem:** Both mutate process-global `os.getcwd()` + `sys.path` to load `phrase_finder.py`. The mutation is **module-level** (runs once on import) and `try/finally` restores both, so concurrent-request impact is minimal. Still ugly: any future import-time exception inside `phrase_finder` could land the process with the wrong cwd if `finally` doesn't fully execute, and the pattern blocks moving `phrase_finder.py` somewhere sensible.
-**Fix:** `importlib.util.spec_from_file_location("phrase_finder", str(_PROJECT_ROOT / "subtitle-scraper" / "phrase_finder.py"))`. Cleaner: move `phrase_finder.py` to a real package under `src/app/extraction/`.
-**Blocks:** restructuring `subtitle-scraper/` directory.
+### 3. ✅ `os.chdir()` import hacks removed — RESOLVED 2026-05-20
+Root cause was `phrase_finder.py:42` loading `"data/final_result.txt"` via a cwd-relative path. Fixed by resolving the path from `__file__` (`Path(__file__).resolve().parent.parent / "data" / "final_result.txt"`). With that one-line change, every chdir site became unnecessary.
+
+**Sites cleaned (5):**
+- `youglish-app/backend/services/matcher_service.py` — chdir block replaced with `sys.path.insert(0, scraper_dir)` + import
+- `subtitle-scraper/pipeline.py` — same
+- `subtitle-scraper/profile_pipeline.py` — same
+- `subtitle-scraper/profile_full_pipeline.py` — same
+- `tests/test_scraper_channels.py` — fixture simplified
+
+Grep verification: `grep -R "os\.chdir" --include="*.py" .` → 0 hits in production or test code (excluding caches).
+
+Tests: `tests/test_matcher.py` 6/6, `tests/test_scraper_channels.py` 5/5, full root suite 542 passed, backend suite 445 passed / 2 skipped (pre-existing, unrelated).
 
 ---
 

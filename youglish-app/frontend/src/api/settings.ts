@@ -1,4 +1,7 @@
+import { apiUrl } from './_baseUrl';
 import { assertOkJson } from './_http';
+
+export type ThemeMode = 'system' | 'light' | 'dark';
 
 export interface UserPreferences {
     liked_genres: string[];
@@ -13,6 +16,9 @@ export interface UserPreferences {
     learning_word_color: string;
     unknown_word_color: string;
     reminders_enabled: boolean;
+    theme_mode: ThemeMode;
+    // dark_mode is kept on the wire for legacy compatibility; theme_mode is
+    // the source of truth. Read either, but write theme_mode in new code.
     dark_mode: boolean;
     auto_mark_known: boolean;
 }
@@ -35,6 +41,7 @@ export const PREFERENCE_DEFAULTS: UserPreferences = {
     learning_word_color: '#f57c00',
     unknown_word_color: '#d32f2f',
     reminders_enabled: true,
+    theme_mode: 'system',
     dark_mode: false,
     auto_mark_known: false,
 };
@@ -48,7 +55,7 @@ function authHeaders(token: string): HeadersInit {
 // listens for). Non-401 errors surface as readable messages for the caller.
 
 export async function getPreferences(token: string): Promise<UserPreferences> {
-    const res = await fetch('/api/v1/settings/preferences', { headers: authHeaders(token) });
+    const res = await fetch(apiUrl('/api/v1/settings/preferences'), { headers: authHeaders(token) });
     return assertOkJson<UserPreferences>(res, 'Failed to fetch preferences');
 }
 
@@ -56,7 +63,7 @@ export async function updatePreferences(
     token: string,
     update: UserPreferencesUpdate,
 ): Promise<UserPreferences> {
-    const res = await fetch('/api/v1/settings/preferences', {
+    const res = await fetch(apiUrl('/api/v1/settings/preferences'), {
         method: 'PUT',
         headers: authHeaders(token),
         body: JSON.stringify(update),
@@ -70,7 +77,7 @@ export async function updateChannelPreference(
     channelName: string,
     action: ChannelAction,
 ): Promise<UserPreferences> {
-    const res = await fetch('/api/v1/settings/channel-preference', {
+    const res = await fetch(apiUrl('/api/v1/settings/channel-preference'), {
         method: 'PUT',
         headers: authHeaders(token),
         body: JSON.stringify({ channel_id: channelId, channel_name: channelName, action }),
@@ -83,7 +90,7 @@ export async function updateGenrePreference(
     genre: string,
     action: GenreAction,
 ): Promise<UserPreferences> {
-    const res = await fetch('/api/v1/settings/genre-preference', {
+    const res = await fetch(apiUrl('/api/v1/settings/genre-preference'), {
         method: 'PUT',
         headers: authHeaders(token),
         body: JSON.stringify({ genre, action }),

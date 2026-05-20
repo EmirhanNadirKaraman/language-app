@@ -28,6 +28,7 @@ from .routers.videos import router as videos_router
 from .routers.words import router as words_router
 from .routers.content_requests import router as content_requests_router
 from .routers.notifications import router as notifications_router
+from .routers.errors import router as errors_router
 
 
 @asynccontextmanager
@@ -132,6 +133,7 @@ app.include_router(reading_router,         prefix="/api/v1")    # /api/v1/books/
 app.include_router(reminders_router,       prefix="/api/v1")    # /api/v1/reminders/summary
 app.include_router(content_requests_router, prefix="/api/v1")  # /api/v1/content-requests
 app.include_router(notifications_router,    prefix="/api/v1")  # /api/v1/notifications/stream
+app.include_router(errors_router,           prefix="/api/v1")  # /api/v1/errors/client
 
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():

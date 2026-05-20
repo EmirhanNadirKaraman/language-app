@@ -38,7 +38,7 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
         hasNextMatch,
     } = usePlayerSentences({ result, query, onPrev, onNext });
 
-    const { selected, state, selectWord, updateStatus, dismiss, refreshKey, toggleWordStatus } = useWordStatus(token, result.language);
+    const { selected, state, selectWord, selectCandidate, updateStatus, learnAnyway, dismiss, refreshKey, toggleWordStatus } = useWordStatus(token, result.language);
     const wordStatuses = useWordColors(result.video_id, token, refreshKey);
     const [view, setView] = useState<'player' | 'transcript'>('player');
     const [startTimeOverride, setStartTimeOverride] = useState<number | null>(null);
@@ -115,7 +115,7 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
                     <SubtitleDisplay
                         text={displayContent}
                         highlightTerms={highlightTerms}
-                        onWordClick={token ? (word) => { playerRef.current?.pauseVideo(); selectWord(word); } : undefined}
+                        onWordClick={token ? (word) => { playerRef.current?.pauseVideo(); selectWord(word, current?.sentence_id); } : undefined}
                         onWordRightClick={token ? (word) => { toggleWordStatus(word); } : undefined}
                         wordStatuses={wordStatuses}
                         wordColors={wordColors}
@@ -129,7 +129,7 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
                     activeSentenceIdx={sentenceIdx}
                     highlightTerms={highlightTerms}
                     wordStatuses={wordStatuses}
-                    onWordClick={token ? (word) => { playerRef.current?.pauseVideo(); selectWord(word); } : () => {}}
+                    onWordClick={token ? (word, sentenceId) => { playerRef.current?.pauseVideo(); selectWord(word, sentenceId); } : () => {}}
                     onWordRightClick={token ? (word) => { toggleWordStatus(word); } : () => {}}
                     wordColors={wordColors}
                     onSentenceClick={(idx) => {
@@ -149,6 +149,10 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
                     loading={state.loading}
                     saving={state.saving}
                     onSelect={updateStatus}
+                    onLearnAnyway={learnAnyway}
+                    learnAnywayError={state.learnAnywayError}
+                    candidates={state.candidates}
+                    onSelectCandidate={selectCandidate}
                     onDismiss={dismiss}
                     passiveMax={passiveMax}
                     activeMax={activeMax}

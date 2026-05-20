@@ -280,3 +280,151 @@ async def test_submit_answer_for_another_users_card_returns_404(client: AsyncCli
     resp = await client.post(f"/api/v1/srs/review/{card_id}", json={"correct": True}, headers=headers_b)
 
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# W5 / Hole 14 — POST /srs/review/{card_id}/skip
+# ---------------------------------------------------------------------------
+
+SKIP_URL = "/api/v1/srs/review/{card_id}/skip"
+
+
+async def test_skip_moves_due_date_into_the_future(client: AsyncClient, db_pool):
+    word_id, _, language = await _get_word(db_pool)
+    headers, uid = await _register_and_get_user(client, db_pool, _email())
+    card_id = await _mark_learning_and_get_card_id(client, headers, language, word_id)
+
+    before = await _get_srs_card(db_pool, uid, word_id, "word", "passive")
+    resp = await client.post(SKIP_URL.format(card_id=card_id), headers=headers)
+    assert resp.status_code == 200
+
+    after = await _get_srs_card(db_pool, uid, word_id, "word", "passive")
+    assert after["due_date"] > before["due_date"]
+    # 1-day defer (review_service.SKIP_DEFER_DAYS). Use a wide window for clock drift.
+    from datetime import timedelta
+    delta = after["due_date"] - before["due_date"]
+    assert timedelta(hours=23) <= delta <= timedelta(hours=25)
+
+
+async def test_skip_does_not_change_repetitions(client: AsyncClient, db_pool):
+    word_id, _, language = await _get_word(db_pool)
+    headers, uid = await _register_and_get_user(client, db_pool, _email())
+    card_id = await _mark_learning_and_get_card_id(client, headers, language, word_id)
+    before = await _get_srs_card(db_pool, uid, word_id, "word", "passive")
+
+    await client.post(SKIP_URL.format(card_id=card_id), headers=headers)
+    after = await _get_srs_card(db_pool, uid, word_id, "word", "passive")
+
+    assert after["repetitions"] == before["repetitions"]
+
+
+async def test_skip_does_not_change_interval_days(client: AsyncClient, db_pool):
+    word_id, _, language = await _get_word(db_pool)
+    headers, uid = await _register_and_get_user(client, db_pool, _email())
+    card_id = await _mark_learning_and_get_card_id(client, headers, language, word_id)
+    before = await _get_srs_card(db_pool, uid, word_id, "word", "passive")
+
+    await client.post(SKIP_URL.format(card_id=card_id), headers=headers)
+    after = await _get_srs_card(db_pool, uid, word_id, "word", "passive")
+
+    assert after["interval_days"] == before["interval_days"]
+
+
+async def test_skip_does_not_change_ease_factor(client: AsyncClient, db_pool):
+    word_id, _, language = await _get_word(db_pool)
+    headers, uid = await _register_and_get_user(client, db_pool, _email())
+    card_id = await _mark_learning_and_get_card_id(client, headers, language, word_id)
+    before = await _get_srs_card(db_pool, uid, word_id, "word", "passive")
+
+    await client.post(SKIP_URL.format(card_id=card_id), headers=headers)
+    after = await _get_srs_card(db_pool, uid, word_id, "word", "passive")
+
+    assert after["ease_factor"] == before["ease_factor"]
+
+
+async def test_skip_does_not_change_levels_or_times_used_correctly(client: AsyncClient, db_pool):
+    """Skip is scheduling, not evidence — never touches user_word_knowledge fields."""
+    word_id, _, language = await _get_word(db_pool)
+    headers, uid = await _register_and_get_user(client, db_pool, _email())
+    card_id = await _mark_learning_and_get_card_id(client, headers, language, word_id)
+
+    before = await db_pool.fetchrow(
+        """
+        SELECT passive_level, active_level, times_used_correctly, status
+          FROM user_word_knowledge
+         WHERE user_id = $1::uuid AND item_id = $2 AND item_type = 'word'
+        """,
+        uid, word_id,
+    )
+    await client.post(SKIP_URL.format(card_id=card_id), headers=headers)
+    after = await db_pool.fetchrow(
+        """
+        SELECT passive_level, active_level, times_used_correctly, status
+          FROM user_word_knowledge
+         WHERE user_id = $1::uuid AND item_id = $2 AND item_type = 'word'
+        """,
+        uid, word_id,
+    )
+    assert after["passive_level"] == before["passive_level"]
+    assert after["active_level"] == before["active_level"]
+    assert after["times_used_correctly"] == before["times_used_correctly"]
+    assert after["status"] == before["status"]
+
+
+async def test_skipped_card_no_longer_appears_in_due_immediately(client: AsyncClient, db_pool):
+    word_id, _, language = await _get_word(db_pool)
+    headers, _ = await _register_and_get_user(client, db_pool, _email())
+    card_id = await _mark_learning_and_get_card_id(client, headers, language, word_id)
+
+    # Before skip: card is due now.
+    due_before = await client.get(
+        f"/api/v1/srs/due?language={language}&limit=50",
+        headers=headers,
+    )
+    assert any(c["card_id"] == card_id for c in due_before.json())
+
+    await client.post(SKIP_URL.format(card_id=card_id), headers=headers)
+
+    due_after = await client.get(
+        f"/api/v1/srs/due?language={language}&limit=50",
+        headers=headers,
+    )
+    assert not any(c["card_id"] == card_id for c in due_after.json()), (
+        "skipped card must not surface in /srs/due immediately"
+    )
+
+
+async def test_skip_other_users_card_returns_404(client: AsyncClient, db_pool):
+    word_id, _, language = await _get_word(db_pool)
+    headers_a, _ = await _register_and_get_user(client, db_pool, _email())
+    headers_b, _ = await _register_and_get_user(client, db_pool, _email())
+    card_id = await _mark_learning_and_get_card_id(client, headers_a, language, word_id)
+
+    resp = await client.post(SKIP_URL.format(card_id=card_id), headers=headers_b)
+    assert resp.status_code == 404
+
+
+async def test_skip_missing_card_returns_404(client: AsyncClient, db_pool):
+    headers, _ = await _register_and_get_user(client, db_pool, _email())
+    resp = await client.post(SKIP_URL.format(card_id=999999), headers=headers)
+    assert resp.status_code == 404
+
+
+async def test_skip_does_not_emit_usage_event(client: AsyncClient, db_pool):
+    """Regression: skip must not write to word_usage_events (it's not evidence)."""
+    word_id, _, language = await _get_word(db_pool)
+    headers, uid = await _register_and_get_user(client, db_pool, _email())
+    card_id = await _mark_learning_and_get_card_id(client, headers, language, word_id)
+
+    # Baseline count BEFORE skip (status_marked_learning has already fired one
+    # status_change event when we marked the word learning).
+    count_before = await db_pool.fetchval(
+        "SELECT COUNT(*) FROM word_usage_events WHERE user_id = $1::uuid",
+        uid,
+    )
+    await client.post(SKIP_URL.format(card_id=card_id), headers=headers)
+    count_after = await db_pool.fetchval(
+        "SELECT COUNT(*) FROM word_usage_events WHERE user_id = $1::uuid",
+        uid,
+    )
+    assert count_after == count_before, "skip must not generate analytics events"

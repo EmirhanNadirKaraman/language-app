@@ -33,11 +33,28 @@ export interface WordLookupResult {
   word_id: number;
   word: string;
   lemma: string;
+  // POS tag from spaCy (NOUN, VERB, X, …). Optional for back-compat with
+  // older test fixtures; backend always populates since W3 (Hole 2).
+  pos?: string;
   current_status: string | null;
   passive_level: number;
   active_level: number;
   passive_due: string | null;
   active_due: string | null;
+}
+
+/**
+ * Discriminated response from `/words/by-text` (W3 / Hole 2).
+ * - "not_found":  the catalog has no row for this surface form
+ * - "single":     exactly one row — `item` is set
+ * - "ambiguous":  multiple plausible rows — `candidates[]` is populated
+ *                 (sorted: exact case-insensitive match first, then lemma,
+ *                 then word_id)
+ */
+export interface WordLookupResponse {
+  status: 'not_found' | 'single' | 'ambiguous';
+  item: WordLookupResult | null;
+  candidates: WordLookupResult[];
 }
 
 export interface Correction {

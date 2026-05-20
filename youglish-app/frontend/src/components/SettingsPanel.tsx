@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { UserPreferences, UserPreferencesUpdate } from '../api/settings';
+import type { ThemeMode, UserPreferences, UserPreferencesUpdate } from '../api/settings';
 import { fetchCategories } from '../api/search';
 
 interface Props {
@@ -177,7 +177,7 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
     const [learningColor, setLearningColor]       = useState(prefs.learning_word_color);
     const [unknownColor, setUnknownColor]         = useState(prefs.unknown_word_color);
     const [remindersEnabled, setRemindersEnabled] = useState(prefs.reminders_enabled);
-    const [darkMode, setDarkMode]                 = useState(prefs.dark_mode);
+    const [themeMode, setThemeMode]               = useState<ThemeMode>(prefs.theme_mode);
     const [autoMarkKnown, setAutoMarkKnown]       = useState(prefs.auto_mark_known);
     const [saved, setSaved]       = useState(false);
     const [saveError, setSaveError] = useState(false);
@@ -205,7 +205,7 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
         setLearningColor(prefs.learning_word_color);
         setUnknownColor(prefs.unknown_word_color);
         setRemindersEnabled(prefs.reminders_enabled);
-        setDarkMode(prefs.dark_mode);
+        setThemeMode(prefs.theme_mode);
         setAutoMarkKnown(prefs.auto_mark_known);
         const t = setTimeout(() => { syncingFromProps.current = false; }, 0);
         return () => clearTimeout(t);
@@ -224,7 +224,7 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
             learning_word_color:    learningColor,
             unknown_word_color:     unknownColor,
             reminders_enabled:      remindersEnabled,
-            dark_mode:              darkMode,
+            theme_mode:             themeMode,
             auto_mark_known:        autoMarkKnown,
         };
         pendingSave.current = values;
@@ -241,7 +241,7 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
         }, 600);
         return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [likedGenres, likedChannels, passiveReps, activeReps, knownColor, learningColor, unknownColor, remindersEnabled, darkMode, autoMarkKnown]);
+    }, [likedGenres, likedChannels, passiveReps, activeReps, knownColor, learningColor, unknownColor, remindersEnabled, themeMode, autoMarkKnown]);
 
     // Flush any pending save when the panel closes (timer was cancelled by cleanup above)
     useEffect(() => {
@@ -410,23 +410,42 @@ export function SettingsPanel({ prefs, onSave, onClose }: Props) {
             <p style={{ ...sectionHeader, margin: '18px 0 10px' }}>
                 Appearance
             </p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
-                <input id="dark-mode-toggle" type="checkbox" checked={darkMode}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px', flexWrap: 'wrap' }}>
+                <label htmlFor="theme-mode-select" style={checkboxLabel}>
+                    Theme
+                </label>
+                <select
+                    id="theme-mode-select"
+                    data-testid="theme-mode-select"
+                    value={themeMode}
                     onChange={e => {
-                        const next = e.target.checked;
-                        setDarkMode(next);
+                        const next = e.target.value as ThemeMode;
+                        setThemeMode(next);
                         // Apply data-theme immediately so the UI flips without
                         // waiting for the 600ms auto-save → prefs round-trip.
-                        // App.tsx Layout will re-apply the same value once prefs
-                        // updates; it's idempotent.
+                        // App.tsx Layout's useResolvedTheme effect will re-apply
+                        // the same value once prefs updates; idempotent.
+                        // For "system", we resolve via prefers-color-scheme so
+                        // the optimistic flip matches what Layout will compute.
                         if (typeof document !== 'undefined') {
-                            document.documentElement.dataset.theme = next ? 'dark' : 'light';
+                            let resolved: 'light' | 'dark';
+                            if (next === 'light') resolved = 'light';
+                            else if (next === 'dark') resolved = 'dark';
+                            else {
+                                const mql = typeof window !== 'undefined' && window.matchMedia
+                                    ? window.matchMedia('(prefers-color-scheme: dark)')
+                                    : null;
+                                resolved = mql?.matches ? 'dark' : 'light';
+                            }
+                            document.documentElement.dataset.theme = resolved;
                         }
                     }}
-                    style={{ width: '16px', height: '16px', cursor: 'pointer' }} />
-                <label htmlFor="dark-mode-toggle" style={checkboxLabel}>
-                    Dark mode
-                </label>
+                    style={{ ...input, minWidth: '140px', flex: '0 1 auto' }}
+                >
+                    <option value="system">System</option>
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                </select>
             </div>
 
             <div style={{ height: '20px' }}>

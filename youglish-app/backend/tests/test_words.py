@@ -181,10 +181,16 @@ async def test_by_text_returns_progress_fields_for_unknown_word(client: AsyncCli
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert data["passive_level"] == 0
-    assert data["active_level"] == 0
-    assert data["passive_due"] is None
-    assert data["active_due"] is None
+    # W3: response is a discriminated shape. Real word_table data has
+    # genuinely ambiguous surface forms; either single or ambiguous is fine
+    # — pick the first available candidate to inspect its progress fields.
+    assert data["status"] in {"single", "ambiguous"}
+    item = data["item"] or (data["candidates"][0] if data["candidates"] else None)
+    assert item is not None
+    assert item["passive_level"] == 0
+    assert item["active_level"] == 0
+    assert item["passive_due"] is None
+    assert item["active_due"] is None
 
 
 async def test_by_text_returns_nonzero_levels_after_status_update(client: AsyncClient, db_pool):
@@ -196,7 +202,11 @@ async def test_by_text_returns_nonzero_levels_after_status_update(client: AsyncC
     # First get the word_id
     lookup = await client.get(BY_TEXT, params={"word": word, "language": language}, headers=headers)
     assert lookup.status_code == 200
-    word_id = lookup.json()["word_id"]
+    body = lookup.json()
+    # Tolerate either single or ambiguous — pick the first match either way.
+    item = body["item"] or (body["candidates"][0] if body["candidates"] else None)
+    assert item is not None
+    word_id = item["word_id"]
 
     # Mark it as learning (fires status_marked_learning → passive_delta=1)
     await client.put(
@@ -208,13 +218,15 @@ async def test_by_text_returns_nonzero_levels_after_status_update(client: AsyncC
     # Re-fetch and check levels advanced
     resp = await client.get(BY_TEXT, params={"word": word, "language": language}, headers=headers)
     assert resp.status_code == 200
-    data = resp.json()
-    assert data["passive_level"] > 0
-    assert data["current_status"] == "learning"
+    body = resp.json()
+    item = body["item"] or (body["candidates"][0] if body["candidates"] else None)
+    assert item is not None
+    assert item["passive_level"] > 0
+    assert item["current_status"] == "learning"
 
 
-async def test_by_text_returns_null_for_unknown_word_not_in_db(client: AsyncClient):
-    """A word that doesn't exist in word_table returns null."""
+async def test_by_text_returns_not_found_for_unknown_word_not_in_db(client: AsyncClient):
+    """A word that doesn't exist in word_table returns status='not_found'."""
     token = await _registered_token(client)
 
     resp = await client.get(
@@ -223,7 +235,10 @@ async def test_by_text_returns_null_for_unknown_word_not_in_db(client: AsyncClie
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 200
-    assert resp.json() is None
+    body = resp.json()
+    assert body["status"] == "not_found"
+    assert body["item"] is None
+    assert body["candidates"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -259,7 +274,10 @@ async def test_put_known_writes_status_known(client: AsyncClient, db_pool):
 
     # Round-trip via /by-text to confirm persisted state.
     lookup = await client.get(BY_TEXT, params={"word": word, "language": language}, headers=headers)
-    assert lookup.json()["current_status"] == "known"
+    body = lookup.json()
+    item = body["item"] or (body["candidates"][0] if body["candidates"] else None)
+    assert item is not None
+    assert item["current_status"] == "known"
 
 
 async def test_put_known_does_not_create_active_srs_card(client: AsyncClient, db_pool):
@@ -349,3 +367,260 @@ async def test_put_known_after_learning_does_not_advance_active_card(client: Asy
     assert after["interval_days"] == before["interval_days"]
     assert after["ease_factor"]   == before["ease_factor"]
     assert after["due_date"]      == before["due_date"]
+
+
+# ---------------------------------------------------------------------------
+# W2 / Hole 1 — POST /words/learn-anyway
+# ---------------------------------------------------------------------------
+
+LEARN_ANYWAY = "/api/v1/words/learn-anyway"
+
+
+def _unique_text() -> str:
+    """A surface form guaranteed not to clash with any existing word_table row."""
+    return f"ζtest_{uuid.uuid4().hex[:8]}"
+
+
+async def _user_id_for(db_pool, token: str) -> str:
+    """Resolve the user_id from an auth token (looks up by the most recent
+    cleanup-patterned email — works because each test makes a fresh user)."""
+    row = await db_pool.fetchrow(
+        """
+        SELECT user_id FROM users
+         WHERE email LIKE $1
+         ORDER BY created_at DESC LIMIT 1
+        """,
+        cleanup_pattern(),
+    )
+    assert row is not None, "no user found via cleanup pattern"
+    return str(row["user_id"])
+
+
+async def test_learn_anyway_creates_word_table_row(client: AsyncClient, db_pool):
+    token = await _registered_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    text = _unique_text()
+
+    resp = await client.post(LEARN_ANYWAY, json={"text": text, "language": "de"}, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["word"].lower() == text.lower()
+    assert body["current_status"] == "learning"
+
+    # Row exists in word_table with pos='X' sparse placeholder.
+    row = await db_pool.fetchrow(
+        "SELECT word, language, pos, lemma FROM word_table WHERE word = $1 AND language = $2",
+        text, "de",
+    )
+    assert row is not None
+    assert row["pos"] == "X"
+    assert row["lemma"] == text
+
+
+async def test_learn_anyway_does_not_duplicate_existing_word(client: AsyncClient, db_pool):
+    token = await _registered_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    text = _unique_text()
+
+    r1 = await client.post(LEARN_ANYWAY, json={"text": text, "language": "de"}, headers=headers)
+    r2 = await client.post(LEARN_ANYWAY, json={"text": text, "language": "de"}, headers=headers)
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r1.json()["word_id"] == r2.json()["word_id"], "idempotent: same word_id on re-call"
+
+    count = await db_pool.fetchval(
+        "SELECT COUNT(*) FROM word_table WHERE word = $1 AND language = $2",
+        text, "de",
+    )
+    assert count == 1
+
+
+async def test_learn_anyway_creates_user_word_knowledge_learning(client: AsyncClient, db_pool):
+    token = await _registered_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    text = _unique_text()
+
+    resp = await client.post(LEARN_ANYWAY, json={"text": text, "language": "de"}, headers=headers)
+    assert resp.status_code == 200
+    word_id = resp.json()["word_id"]
+    uid = await _user_id_for(db_pool, token)
+
+    row = await db_pool.fetchrow(
+        """
+        SELECT status, passive_level, active_level, times_used_correctly
+          FROM user_word_knowledge
+         WHERE user_id = $1::uuid AND item_id = $2 AND item_type = 'word'
+        """,
+        uid, word_id,
+    )
+    assert row is not None
+    assert row["status"] == "learning"
+    # exposure-only: active_level and times_used_correctly stay at 0
+    assert row["active_level"] == 0
+    assert row["times_used_correctly"] == 0
+
+
+async def test_learn_anyway_creates_both_srs_cards(client: AsyncClient, db_pool):
+    """status_marked_learning creates passive AND active cards (#0b)."""
+    token = await _registered_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    text = _unique_text()
+
+    resp = await client.post(LEARN_ANYWAY, json={"text": text, "language": "de"}, headers=headers)
+    word_id = resp.json()["word_id"]
+    uid = await _user_id_for(db_pool, token)
+
+    directions = await db_pool.fetch(
+        """
+        SELECT direction FROM srs_cards
+         WHERE user_id = $1::uuid AND item_id = $2 AND item_type = 'word'
+         ORDER BY direction
+        """,
+        uid, word_id,
+    )
+    assert {d["direction"] for d in directions} == {"passive", "active"}
+
+
+async def test_learn_anyway_requires_auth(client: AsyncClient):
+    resp = await client.post(LEARN_ANYWAY, json={"text": "auto", "language": "de"})
+    assert resp.status_code == 403
+
+
+async def test_learn_anyway_empty_text_returns_422(client: AsyncClient):
+    token = await _registered_token(client)
+    resp = await client.post(LEARN_ANYWAY,
+                             json={"text": "", "language": "de"},
+                             headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 422
+
+
+async def test_learn_anyway_whitespace_only_text_returns_422(client: AsyncClient):
+    """Pydantic min_length=1 catches '' but not '   '; service-level strip catches the rest."""
+    token = await _registered_token(client)
+    # whitespace-only after strip; Pydantic min_length=1 still passes "   "
+    resp = await client.post(LEARN_ANYWAY,
+                             json={"text": "   ", "language": "de"},
+                             headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 422
+
+
+async def test_learn_anyway_over_max_length_returns_422(client: AsyncClient):
+    token = await _registered_token(client)
+    resp = await client.post(LEARN_ANYWAY,
+                             json={"text": "x" * 200, "language": "de"},
+                             headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# W3 / Hole 2 — disambiguation of ambiguous surface forms
+# ---------------------------------------------------------------------------
+
+async def _create_ambiguous_word(db_pool, surface: str = None) -> tuple[str, list[int]]:
+    """Create 2 word_table rows sharing (word, language) but with different
+    POS — simulates the "die Bank" (bench / financial institution) case.
+    Returns (surface, [word_id_noun, word_id_verb]). UNIQUE(word, language, pos)
+    allows the two rows."""
+    if surface is None:
+        surface = f"Bnk_{uuid.uuid4().hex[:8]}"
+    rows = []
+    for pos, tag, lemma in [("NOUN", "NN", surface), ("VERB", "VVFIN", f"{surface.lower()}_v")]:
+        row = await db_pool.fetchrow(
+            """
+            INSERT INTO word_table (word, language, pos, tag, lemma)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (word, language, pos) DO NOTHING
+            RETURNING word_id
+            """,
+            surface, "de", pos, tag, lemma,
+        )
+        if row is None:
+            row = await db_pool.fetchrow(
+                "SELECT word_id FROM word_table WHERE word = $1 AND language = 'de' AND pos = $2",
+                surface, pos,
+            )
+        rows.append(row["word_id"])
+    return surface, rows
+
+
+async def test_by_text_single_match_returns_single_status(client: AsyncClient, db_pool):
+    """Existing single-match behaviour preserved (back-compat for unambiguous words)."""
+    word, language = await _get_word_text_and_language(db_pool)
+    token = await _registered_token(client)
+    resp = await client.get(BY_TEXT, params={"word": word, "language": language},
+                            headers={"Authorization": f"Bearer {token}"})
+    body = resp.json()
+    # Most existing word_table rows are non-ambiguous; either single or
+    # ambiguous is acceptable here, but item must be set when single.
+    assert body["status"] in {"single", "ambiguous"}
+    if body["status"] == "single":
+        assert body["item"] is not None
+        assert len(body["candidates"]) == 1
+
+
+async def test_by_text_ambiguous_returns_all_candidates_not_arbitrary_pick(client: AsyncClient, db_pool):
+    """Hole 2 regression guard: multi-match must surface ALL candidates."""
+    surface, word_ids = await _create_ambiguous_word(db_pool)
+    token = await _registered_token(client)
+    resp = await client.get(BY_TEXT, params={"word": surface, "language": "de"},
+                            headers={"Authorization": f"Bearer {token}"})
+    body = resp.json()
+    assert body["status"] == "ambiguous"
+    assert body["item"] is None, "must NOT pick one arbitrary winner"
+    candidate_ids = {c["word_id"] for c in body["candidates"]}
+    assert candidate_ids == set(word_ids)
+
+
+async def test_by_text_candidates_include_user_progress_fields(client: AsyncClient, db_pool):
+    """Candidates carry per-user current_status / passive_level (UI needs to show them)."""
+    surface, word_ids = await _create_ambiguous_word(db_pool)
+    token = await _registered_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Mark the first row as learning so its current_status differs.
+    await client.put(f"/api/v1/words/word/{word_ids[0]}/status",
+                     json={"status": "learning"}, headers=headers)
+
+    resp = await client.get(BY_TEXT, params={"word": surface, "language": "de"}, headers=headers)
+    body = resp.json()
+    by_id = {c["word_id"]: c for c in body["candidates"]}
+    assert by_id[word_ids[0]]["current_status"] == "learning"
+    assert by_id[word_ids[1]]["current_status"] is None
+
+
+async def test_by_text_candidates_sorted_deterministically(client: AsyncClient, db_pool):
+    """Sort: exact case-insensitive word match first, then lemma asc, then word_id."""
+    surface, word_ids = await _create_ambiguous_word(db_pool)
+    token = await _registered_token(client)
+    resp = await client.get(BY_TEXT, params={"word": surface, "language": "de"},
+                            headers={"Authorization": f"Bearer {token}"})
+    body = resp.json()
+    candidates = body["candidates"]
+    # Both rows have word == surface, so the case-insensitive tier is tied;
+    # within tie, sorted by lemma asc. NOUN lemma == surface, VERB lemma
+    # == surface.lower() + '_v' — _v sorts after the bare surface for ASCII,
+    # so NOUN comes first. Stable, predictable.
+    assert candidates[0]["pos"] == "NOUN"
+    assert candidates[1]["pos"] == "VERB"
+
+
+async def test_by_text_candidates_include_pos_field(client: AsyncClient, db_pool):
+    """W3 added `pos` to the WordLookupResult shape."""
+    surface, _ = await _create_ambiguous_word(db_pool)
+    token = await _registered_token(client)
+    resp = await client.get(BY_TEXT, params={"word": surface, "language": "de"},
+                            headers={"Authorization": f"Bearer {token}"})
+    candidates = resp.json()["candidates"]
+    poss = {c["pos"] for c in candidates}
+    assert poss == {"NOUN", "VERB"}
+
+
+async def test_learn_anyway_still_works_after_lookup_refactor(client: AsyncClient, db_pool):
+    """W2 path still works: learn-anyway creates a row + flips status to learning."""
+    token = await _registered_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    text = _unique_text()
+    resp = await client.post(LEARN_ANYWAY, json={"text": text, "language": "de"}, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["current_status"] == "learning"
+    assert body["pos"] == "X"  # sparse placeholder retained

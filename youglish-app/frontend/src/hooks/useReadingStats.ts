@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiUrl } from '../api/_baseUrl';
 
 export interface ReadingStats {
     video_id: string;
@@ -22,7 +23,7 @@ export function useReadingStats(videoId: string | null, token: string | null, re
 
         let cancelled = false;
 
-        fetch(`/api/v1/videos/${videoId}/reading-stats`, {
+        fetch(apiUrl(`/api/v1/videos/${videoId}/reading-stats`), {
             headers: { Authorization: `Bearer ${token}` },
         })
             .then(res => (res.ok ? res.json() : null))

@@ -18,13 +18,14 @@ async def record_event(
     context: str,
     outcome: str,
     metadata: dict | None = None,
+    sentence_id: int | None = None,
 ) -> None:
     import json
     await pool.execute(
         """
         INSERT INTO word_usage_events
-               (user_id, item_id, item_type, context, outcome, metadata)
-        VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb)
+               (user_id, item_id, item_type, context, outcome, metadata, sentence_id)
+        VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7)
         """,
         user_id,
         item_id,
@@ -32,7 +33,42 @@ async def record_event(
         context,
         outcome,
         json.dumps(metadata) if metadata is not None else None,
+        sentence_id,
     )
+
+
+async def record_transcript_click_event(
+    pool: asyncpg.Pool,
+    user_id: str,
+    item_id: int,
+    item_type: str,
+    sentence_id: int,
+) -> bool:
+    """
+    Atomic insert for transcript-click exposure events. Returns True if a new
+    row was inserted, False if a row for (user, item, item_type, sentence_id,
+    UTC day) already existed (dedup).
+
+    Unique partial index `uq_word_usage_events_transcript_dedup` enforces the
+    dedup contract — see migration 026. Same word clicked twice in the same
+    sentence on the same day is a no-op the second time.
+    """
+    row = await pool.fetchrow(
+        """
+        INSERT INTO word_usage_events
+               (user_id, item_id, item_type, context, outcome, sentence_id)
+        VALUES ($1::uuid, $2, $3, 'transcript', 'seen', $4)
+        ON CONFLICT (user_id, item_id, item_type, sentence_id, event_day)
+            WHERE context = 'transcript' AND sentence_id IS NOT NULL
+        DO NOTHING
+        RETURNING event_id
+        """,
+        user_id,
+        item_id,
+        item_type,
+        sentence_id,
+    )
+    return row is not None
 
 
 # ---------------------------------------------------------------------------

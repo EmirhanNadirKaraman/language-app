@@ -179,3 +179,148 @@ async def test_transcript_click_requires_auth(client: AsyncClient, db_pool):
     resp = await client.post(f"/api/v1/words/word/{word_id}/transcript-click")
 
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Per-sentence dedup (T1.1) — sentence_id present in the body
+# ---------------------------------------------------------------------------
+
+async def _get_two_sentences(db_pool) -> tuple[int, int]:
+    rows = await db_pool.fetch("SELECT sentence_id FROM sentence ORDER BY sentence_id LIMIT 2")
+    if len(rows) < 2:
+        pytest.skip("sentence table has fewer than 2 rows — run the subtitle pipeline first")
+    return rows[0]["sentence_id"], rows[1]["sentence_id"]
+
+
+async def _get_two_words(db_pool) -> tuple[int, int]:
+    rows = await db_pool.fetch("SELECT word_id FROM word_table ORDER BY word_id LIMIT 2")
+    if len(rows) < 2:
+        pytest.skip("word_table has fewer than 2 rows — run the subtitle pipeline first")
+    return rows[0]["word_id"], rows[1]["word_id"]
+
+
+async def test_first_transcript_click_with_sentence_applies_progression(client, db_pool):
+    """First click with sentence_id increments passive_level + times_seen."""
+    word_id = await _get_word(db_pool)
+    sid, _ = await _get_two_sentences(db_pool)
+    headers, uid = await _register_and_login(client, db_pool, _email())
+
+    resp = await client.post(
+        f"/api/v1/words/word/{word_id}/transcript-click",
+        headers=headers,
+        json={"sentence_id": sid},
+    )
+
+    assert resp.status_code == 204
+    row = await _get_knowledge(db_pool, uid, word_id)
+    assert row["passive_level"] == 1
+    assert row["times_seen"] == 1
+
+
+async def test_duplicate_transcript_click_same_sentence_is_noop(client, db_pool):
+    """
+    Second click on same (word, sentence, user, day) must NOT inflate
+    passive_level or times_seen. This is the core T1.1 guarantee.
+    """
+    word_id = await _get_word(db_pool)
+    sid, _ = await _get_two_sentences(db_pool)
+    headers, uid = await _register_and_login(client, db_pool, _email())
+
+    body = {"sentence_id": sid}
+    r1 = await client.post(f"/api/v1/words/word/{word_id}/transcript-click", headers=headers, json=body)
+    r2 = await client.post(f"/api/v1/words/word/{word_id}/transcript-click", headers=headers, json=body)
+
+    assert r1.status_code == 204
+    # Duplicate returns 204 too — caller can't tell first from repeat.
+    assert r2.status_code == 204
+    row = await _get_knowledge(db_pool, uid, word_id)
+    assert row["passive_level"] == 1, "duplicate click must not inflate passive_level"
+    assert row["times_seen"] == 1, "duplicate click must not inflate times_seen"
+
+
+async def test_different_sentence_same_word_still_counts(client, db_pool):
+    """Same word in a different sentence — dedup scope does not apply."""
+    word_id = await _get_word(db_pool)
+    sid1, sid2 = await _get_two_sentences(db_pool)
+    headers, uid = await _register_and_login(client, db_pool, _email())
+
+    await client.post(f"/api/v1/words/word/{word_id}/transcript-click",
+                     headers=headers, json={"sentence_id": sid1})
+    await client.post(f"/api/v1/words/word/{word_id}/transcript-click",
+                     headers=headers, json={"sentence_id": sid2})
+
+    row = await _get_knowledge(db_pool, uid, word_id)
+    assert row["passive_level"] == 2
+
+
+async def test_different_user_same_word_and_sentence_still_counts(client, db_pool):
+    """Dedup is scoped per-user. User B's first click should fire progression."""
+    word_id = await _get_word(db_pool)
+    sid, _ = await _get_two_sentences(db_pool)
+    headers_a, uid_a = await _register_and_login(client, db_pool, _email())
+    headers_b, uid_b = await _register_and_login(client, db_pool, _email())
+
+    body = {"sentence_id": sid}
+    await client.post(f"/api/v1/words/word/{word_id}/transcript-click", headers=headers_a, json=body)
+    await client.post(f"/api/v1/words/word/{word_id}/transcript-click", headers=headers_b, json=body)
+
+    row_a = await _get_knowledge(db_pool, uid_a, word_id)
+    row_b = await _get_knowledge(db_pool, uid_b, word_id)
+    assert row_a["passive_level"] == 1
+    assert row_b["passive_level"] == 1
+
+
+async def test_different_word_same_sentence_still_counts(client, db_pool):
+    """Dedup is per (user, item). A different word in the same sentence still counts."""
+    word_a, word_b = await _get_two_words(db_pool)
+    sid, _ = await _get_two_sentences(db_pool)
+    headers, uid = await _register_and_login(client, db_pool, _email())
+
+    body = {"sentence_id": sid}
+    await client.post(f"/api/v1/words/word/{word_a}/transcript-click", headers=headers, json=body)
+    await client.post(f"/api/v1/words/word/{word_b}/transcript-click", headers=headers, json=body)
+
+    row_a = await _get_knowledge(db_pool, uid, word_a)
+    row_b = await _get_knowledge(db_pool, uid, word_b)
+    assert row_a["passive_level"] == 1
+    assert row_b["passive_level"] == 1
+
+
+async def test_duplicate_click_does_not_inflate_srs_card(client, db_pool):
+    """
+    A duplicate click must not advance the SRS card either — second click is
+    a no-op end-to-end, not just on level counters.
+    """
+    word_id = await _get_word(db_pool)
+    sid, _ = await _get_two_sentences(db_pool)
+    headers, uid = await _register_and_login(client, db_pool, _email())
+
+    body = {"sentence_id": sid}
+    await client.post(f"/api/v1/words/word/{word_id}/transcript-click", headers=headers, json=body)
+    card_after_first = await _get_passive_srs_card(db_pool, uid, word_id)
+
+    await client.post(f"/api/v1/words/word/{word_id}/transcript-click", headers=headers, json=body)
+    card_after_second = await _get_passive_srs_card(db_pool, uid, word_id)
+
+    assert card_after_second == card_after_first
+
+
+async def test_duplicate_click_does_not_double_record_usage_event(client, db_pool):
+    """The word_usage_events row is what the unique index enforces."""
+    word_id = await _get_word(db_pool)
+    sid, _ = await _get_two_sentences(db_pool)
+    headers, uid = await _register_and_login(client, db_pool, _email())
+
+    body = {"sentence_id": sid}
+    await client.post(f"/api/v1/words/word/{word_id}/transcript-click", headers=headers, json=body)
+    await client.post(f"/api/v1/words/word/{word_id}/transcript-click", headers=headers, json=body)
+
+    count = await db_pool.fetchval(
+        """
+        SELECT COUNT(*) FROM word_usage_events
+         WHERE user_id = $1::uuid AND item_id = $2 AND item_type = 'word'
+           AND context = 'transcript' AND sentence_id = $3
+        """,
+        uid, word_id, sid,
+    )
+    assert count == 1

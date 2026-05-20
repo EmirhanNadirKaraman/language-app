@@ -159,11 +159,40 @@ class WordLookupResult(BaseModel):
     word_id: int
     word: str
     lemma: str
+    # `pos` is the spaCy universal POS tag (NOUN, VERB, X, …) — added for
+    # W3 (Hole 2) so the disambiguation UI can label competing meanings.
+    # Defaults to empty so legacy callers that ignored POS still validate.
+    pos: str = ""
     current_status: str | None = None
     passive_level: int = 0
     active_level: int = 0
     passive_due: datetime | None = None
     active_due: datetime | None = None
+
+
+class WordLookupResponse(BaseModel):
+    """
+    Discriminated response for `/words/by-text` (W3 / Hole 2).
+
+    - status="not_found":  item=None,           candidates=[]
+    - status="single":     item=<single match>, candidates=[same one item]
+    - status="ambiguous":  item=None,           candidates=[2..N best matches]
+
+    The shape collapses to single/null for non-interactive callers via the
+    `item` field (use `item or (candidates[0] if candidates else None)`);
+    the interactive picker reads `candidates` to render the disambiguation.
+    """
+    status: Literal["not_found", "single", "ambiguous"]
+    item: WordLookupResult | None = None
+    candidates: list[WordLookupResult] = []
+
+
+class WordLearnAnywayRequest(BaseModel):
+    # W2 / Hole 1: user adopts a word not in word_table. Length cap is
+    # generous — German has long compounds (Donaudampfschifffahrtsgesellschaftskapitän
+    # is 42 chars) but anything above ~80 is almost certainly a paste mistake.
+    text:     str = Field(..., min_length=1, max_length=80)
+    language: str = Field(..., min_length=2, max_length=8)
 
 
 # ---------------------------------------------------------------------------
@@ -507,6 +536,7 @@ class UserPreferences(BaseModel):
     learning_word_color:    str              = "#f57c00"
     unknown_word_color:     str              = "#d32f2f"
     reminders_enabled:      bool             = True
+    theme_mode:             Literal["system", "light", "dark"] = "system"
     dark_mode:              bool             = False
     auto_mark_known:        bool             = False
 
@@ -526,6 +556,7 @@ class UserPreferencesUpdate(BaseModel):
     learning_word_color:    str | None = None
     unknown_word_color:     str | None = None
     reminders_enabled:      bool | None = None
+    theme_mode:             Literal["system", "light", "dark"] | None = None
     dark_mode:              bool | None = None
     auto_mark_known:        bool | None = None
     liked_genres:           list[str] | None = None  # alias for liked_categories (frontend compat)
@@ -734,6 +765,13 @@ class SRSProductionResponse(BaseModel):
     expected:  str    # the target_text the user should have produced
     submitted: str    # echoed back; useful for the feedback panel
     feedback:  str    # one-sentence explanation
+
+
+class SRSSkipResponse(BaseModel):
+    # W5 / Hole 14: skip defers a card by `review_service.SKIP_DEFER_DAYS`.
+    # No body — the deferred due_date is the only state change.
+    card_id:  int
+    due_date: datetime
 
 
 class TranslateRequest(BaseModel):

@@ -1,3 +1,4 @@
+import { apiUrl } from './_baseUrl';
 function authHeaders(token: string): HeadersInit {
     return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
@@ -17,7 +18,7 @@ export async function submitContentRequest(
     requestType: 'channel' | 'video',
     contentId: string,
 ): Promise<ContentRequest> {
-    const res = await fetch('/api/v1/content-requests', {
+    const res = await fetch(apiUrl('/api/v1/content-requests'), {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ request_type: requestType, content_id: contentId }),
@@ -30,7 +31,7 @@ export async function submitContentRequest(
 }
 
 export async function listContentRequests(token: string): Promise<ContentRequest[]> {
-    const res = await fetch('/api/v1/content-requests', { headers: authHeaders(token) });
+    const res = await fetch(apiUrl('/api/v1/content-requests'), { headers: authHeaders(token) });
     if (!res.ok) throw new Error('Failed to fetch requests');
     return res.json();
 }

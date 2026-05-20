@@ -14,11 +14,28 @@ interface Props {
     saving: boolean;
     onSelect: (wordId: number, status: string) => void;
     onDismiss: () => void;
+    // W2 (Hole 1): optional "Learn this anyway" action. When provided AND
+    // lookup is null AND candidates is empty after loading, a button is
+    // rendered that adopts the clicked word into the catalog.
+    onLearnAnyway?: () => void;
+    learnAnywayError?: string | null;
+    // W3 (Hole 2): when the surface form matches multiple word_table rows,
+    // render a candidate picker. Clicking a candidate calls onSelectCandidate
+    // which promotes it to `lookup` upstream. Empty array = unambiguous flow.
+    candidates?: WordLookupResult[];
+    onSelectCandidate?: (candidate: WordLookupResult) => void;
     passiveMax?: number;
     activeMax?: number;
 }
 
-export function WordStatusPicker({ word, lookup, loading, saving, onSelect, onDismiss, passiveMax = PASSIVE_MAX, activeMax = ACTIVE_MAX }: Props) {
+export function WordStatusPicker({
+    word, lookup, loading, saving,
+    onSelect, onDismiss,
+    onLearnAnyway, learnAnywayError,
+    candidates = [], onSelectCandidate,
+    passiveMax = PASSIVE_MAX, activeMax = ACTIVE_MAX,
+}: Props) {
+    const hasCandidates = candidates.length > 0 && !!onSelectCandidate;
     return (
         <div style={{
             display: 'flex',
@@ -37,8 +54,86 @@ export function WordStatusPicker({ word, lookup, loading, saving, onSelect, onDi
                 <span style={{ color: 'var(--color-text-subtle)', fontSize: '13px' }}>Looking up…</span>
             )}
 
-            {!loading && !lookup && (
-                <span style={{ color: 'var(--color-text-subtle)', fontSize: '13px' }}>Not in vocabulary</span>
+            {!loading && !lookup && hasCandidates && (
+                <div
+                    data-testid="candidate-chooser"
+                    style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        flexWrap: 'wrap', flexBasis: '100%',
+                    }}
+                >
+                    <span style={{ color: 'var(--color-text-subtle)', fontSize: '13px' }}>
+                        Which meaning?
+                    </span>
+                    {candidates.map((c) => (
+                        <button
+                            key={c.word_id}
+                            data-testid="candidate-button"
+                            disabled={saving}
+                            onClick={() => onSelectCandidate?.(c)}
+                            style={{
+                                minHeight: '36px',
+                                padding: '6px 12px',
+                                borderRadius: '12px',
+                                border: '1px solid var(--color-border-accent)',
+                                background: 'var(--color-surface)',
+                                color: 'var(--color-text)',
+                                fontSize: '13px',
+                                cursor: saving ? 'not-allowed' : 'pointer',
+                                touchAction: 'manipulation',
+                                display: 'flex', alignItems: 'baseline', gap: '6px',
+                                maxWidth: '100%',
+                                overflowWrap: 'anywhere',
+                            }}
+                        >
+                            <span style={{ fontWeight: 600 }}>{c.lemma}</span>
+                            {c.pos && (
+                                <span style={{ color: 'var(--color-text-subtle)', fontSize: '11px' }}>
+                                    {c.pos}
+                                </span>
+                            )}
+                            {c.current_status && (
+                                <span style={{ color: 'var(--color-text-muted)', fontSize: '11px' }}>
+                                    · {c.current_status}
+                                </span>
+                            )}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {!loading && !lookup && !hasCandidates && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                    <span style={{ color: 'var(--color-text-subtle)', fontSize: '13px' }}>
+                        {onLearnAnyway ? 'Not in vocabulary yet' : 'Not in vocabulary'}
+                    </span>
+                    {onLearnAnyway && (
+                        <button
+                            data-testid="learn-anyway"
+                            disabled={saving}
+                            onClick={onLearnAnyway}
+                            style={{
+                                minHeight: '36px',
+                                padding: '6px 12px',
+                                borderRadius: '12px',
+                                border: '1px solid var(--color-primary)',
+                                background: saving ? 'var(--color-surface-muted)' : 'var(--color-primary-soft)',
+                                color: 'var(--color-primary-on-soft)',
+                                fontSize: '13px',
+                                fontWeight: 600,
+                                cursor: saving ? 'not-allowed' : 'pointer',
+                                touchAction: 'manipulation',
+                            }}
+                        >
+                            {saving ? 'Adding…' : 'Learn this anyway'}
+                        </button>
+                    )}
+                    {learnAnywayError && (
+                        <span data-testid="learn-anyway-error" style={{ color: 'var(--color-danger)', fontSize: '12px' }}>
+                            {learnAnywayError}
+                        </span>
+                    )}
+                </div>
             )}
 
             {!loading && lookup && (

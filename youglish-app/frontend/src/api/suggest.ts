@@ -1,3 +1,4 @@
+import { apiUrl } from './_baseUrl';
 import type { Suggestion } from '../types';
 
 export async function fetchSuggestions(
@@ -7,7 +8,7 @@ export async function fetchSuggestions(
 ): Promise<Suggestion[]> {
   const params = new URLSearchParams({ q: query });
   if (language) params.set('language', language);
-  const res = await fetch(`/api/suggest?${params}`, { signal });
+  const res = await fetch(apiUrl(`/api/suggest?${params}`), { signal });
   if (!res.ok) throw new Error(`Suggest failed: ${res.status}`);
   return res.json();
 }

@@ -1,3 +1,4 @@
+import { apiUrl } from './_baseUrl';
 import type { ReadingSelection, ReadingSelectionAnchor, DueSelectionItem } from '../types';
 import { assertOk } from './_http';
 
@@ -38,7 +39,7 @@ export async function saveSelection(
     note?: string;
   },
 ): Promise<ReadingSelection> {
-  const res = await fetch(`/api/v1/books/${docId}/selections`, {
+  const res = await fetch(apiUrl(`/api/v1/books/${docId}/selections`), {
     method: 'POST',
     headers: jsonHeaders(token),
     body: JSON.stringify(body),
@@ -65,7 +66,7 @@ export async function patchSelection(
   selectionId: string,
   patch: { note?: string | null; status?: string },
 ): Promise<ReadingSelection> {
-  const res = await fetch(`/api/v1/reading/selections/${selectionId}`, {
+  const res = await fetch(apiUrl(`/api/v1/reading/selections/${selectionId}`), {
     method: 'PATCH',
     headers: jsonHeaders(token),
     body: JSON.stringify(patch),
@@ -78,7 +79,7 @@ export async function deleteSelection(
   token: string,
   selectionId: string,
 ): Promise<void> {
-  const res = await fetch(`/api/v1/reading/selections/${selectionId}`, {
+  const res = await fetch(apiUrl(`/api/v1/reading/selections/${selectionId}`), {
     method: 'DELETE',
     headers: authHeaders(token),
   });
@@ -92,7 +93,7 @@ export async function translateSentence(
   sentence: string,
   language: string,
 ): Promise<string> {
-  const res = await fetch('/api/v1/reading/translate', {
+  const res = await fetch(apiUrl('/api/v1/reading/translate'), {
     method: 'POST',
     headers: jsonHeaders(token),
     body: JSON.stringify({ sentence, language }),
@@ -108,7 +109,7 @@ export async function explainInContext(
   sentence: string,
   language: string,
 ): Promise<string> {
-  const res = await fetch('/api/v1/reading/explain', {
+  const res = await fetch(apiUrl('/api/v1/reading/explain'), {
     method: 'POST',
     headers: jsonHeaders(token),
     body: JSON.stringify({ selection, sentence, language }),
@@ -124,7 +125,7 @@ export async function listAllSelections(
   token: string,
   docId: string,
 ): Promise<ReadingSelection[]> {
-  const res = await fetch(`/api/v1/books/${docId}/selections`, {
+  const res = await fetch(apiUrl(`/api/v1/books/${docId}/selections`), {
     headers: authHeaders(token),
   });
   await assertOk(res);
@@ -138,7 +139,7 @@ export async function recordReview(
   selectionId: string,
   outcome: 'got_it' | 'still_learning' | 'mastered',
 ): Promise<ReadingSelection> {
-  const res = await fetch(`/api/v1/reading/selections/${selectionId}/review`, {
+  const res = await fetch(apiUrl(`/api/v1/reading/selections/${selectionId}/review`), {
     method: 'POST',
     headers: jsonHeaders(token),
     body: JSON.stringify({ outcome }),
@@ -151,7 +152,7 @@ export async function getDueSelections(
   token: string,
   limit = 30,
 ): Promise<DueSelectionItem[]> {
-  const res = await fetch(`/api/v1/reading/selections/due?limit=${limit}`, {
+  const res = await fetch(apiUrl(`/api/v1/reading/selections/due?limit=${limit}`), {
     headers: authHeaders(token),
   });
   await assertOk(res);

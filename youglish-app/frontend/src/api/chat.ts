@@ -1,3 +1,4 @@
+import { apiUrl } from './_baseUrl';
 import type { ChatMessage, ChatSession, GuidedSession, GuidedSessionSummary } from '../types';
 
 function authHeaders(token: string): HeadersInit {
@@ -17,7 +18,7 @@ async function checkOk(res: Response): Promise<void> {
 }
 
 export async function createSession(token: string): Promise<ChatSession> {
-    const res = await fetch('/api/v1/chat/sessions', {
+    const res = await fetch(apiUrl('/api/v1/chat/sessions'), {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ session_type: 'free' }),
@@ -35,7 +36,7 @@ export async function createGuidedSession(
     const body: Record<string, unknown> = { language };
     if (targetItemId !== undefined) body.target_item_id = targetItemId;
     if (targetItemType !== undefined) body.target_item_type = targetItemType;
-    const res = await fetch('/api/v1/chat/guided-sessions', {
+    const res = await fetch(apiUrl('/api/v1/chat/guided-sessions'), {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify(body),
@@ -45,7 +46,7 @@ export async function createGuidedSession(
 }
 
 export async function getMessages(token: string, sessionId: string): Promise<ChatMessage[]> {
-    const res = await fetch(`/api/v1/chat/sessions/${sessionId}/messages`, {
+    const res = await fetch(apiUrl(`/api/v1/chat/sessions/${sessionId}/messages`), {
         headers: authHeaders(token),
     });
     await checkOk(res);
@@ -57,7 +58,7 @@ export async function sendMessage(
     sessionId: string,
     content: string,
 ): Promise<{ user_message: ChatMessage; assistant_message: ChatMessage }> {
-    const res = await fetch(`/api/v1/chat/sessions/${sessionId}/messages`, {
+    const res = await fetch(apiUrl(`/api/v1/chat/sessions/${sessionId}/messages`), {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ content }),
@@ -71,7 +72,7 @@ export async function completeGuidedSession(
     sessionId: string,
     hintLevel: number,
 ): Promise<GuidedSessionSummary> {
-    const res = await fetch(`/api/v1/chat/guided-sessions/${sessionId}/complete`, {
+    const res = await fetch(apiUrl(`/api/v1/chat/guided-sessions/${sessionId}/complete`), {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ hint_level: hintLevel }),

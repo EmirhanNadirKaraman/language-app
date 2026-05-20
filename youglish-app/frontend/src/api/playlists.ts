@@ -1,3 +1,4 @@
+import { apiUrl } from './_baseUrl';
 import type { PlaylistResult } from '../types';
 
 export async function generatePlaylist(
@@ -6,7 +7,7 @@ export async function generatePlaylist(
     language: string,
     maxVideos: number,
 ): Promise<PlaylistResult> {
-    const res = await fetch('/api/v1/playlists/generate', {
+    const res = await fetch(apiUrl('/api/v1/playlists/generate'), {
         method: 'POST',
         headers: {
             Authorization: `Bearer ${token}`,

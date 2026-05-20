@@ -3,6 +3,7 @@ import {
   getPage, listPages, patchBlock, repairBlock, batchRepairPage, deletePage, patchPageSentenceCount,
 } from '../api/books';
 import { getPageWordStatuses, getPageSelections, listAllSelections, translateSentence } from '../api/reading';
+import { apiUrl } from '../api/_baseUrl';
 import type { BookDocument, BookPageDetail, BookBlock, ReadingSelection } from '../types';
 import { SelectionPanel } from './SelectionPanel';
 import type { SelectedToken } from './SelectionPanel';
@@ -565,7 +566,7 @@ export function BookReaderPage({ token, doc, onClose, autoMarkKnown }: Props) {
     if (imagePageRef.current === actualPageNumber) return;
     imagePageRef.current = actualPageNumber;
     try {
-      const res = await fetch(`/api/v1/books/${doc.doc_id}/pages/${actualPageNumber}/image`, {
+      const res = await fetch(apiUrl(`/api/v1/books/${doc.doc_id}/pages/${actualPageNumber}/image`), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return;

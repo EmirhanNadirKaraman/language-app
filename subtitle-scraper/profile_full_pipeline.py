@@ -32,18 +32,15 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-# Fix CWD for phrase_finder
-_cwd = os.getcwd()
-os.chdir(Path(__file__).parent.parent)
-sys.path.insert(0, str(Path(__file__).parent))
+_SCRAPER_DIR = str(Path(__file__).resolve().parent)
+if _SCRAPER_DIR not in sys.path:
+    sys.path.insert(0, _SCRAPER_DIR)
 
 import pipeline
 from pipeline import (
     connect, load_channels, process_pending_requests, _scan_channel_videos,
     _process_channel_request, _process_video_request, populate, insert_phrases,
 )
-
-os.chdir(_cwd)
 
 # Profiling state
 profile_stats = {

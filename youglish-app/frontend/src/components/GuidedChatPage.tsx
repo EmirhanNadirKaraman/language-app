@@ -4,7 +4,7 @@ import { useGuidedChat } from '../hooks/useGuidedChat';
 import { ChatWindow } from './ChatWindow';
 import { MessageInput } from './MessageInput';
 import { SessionSummaryCard } from './SessionSummaryCard';
-import { lookupWord } from '../api/words';
+import { lookupWord, pickSingleOrFirst } from '../api/words';
 import { formatDueDate, progressDots, PASSIVE_MAX, ACTIVE_MAX } from '../utils/progressUtils';
 
 interface Props {
@@ -32,7 +32,11 @@ export function GuidedChatPage({ result, token, targetItemId, targetItemType, on
 
     useEffect(() => {
         if (!session?.target_word) return;
-        lookupWord(token, session.target_word, result.language).then(setTargetLookup);
+        // The backend already picked the canonical target item; just resolve
+        // the surface form to a row for display. Any match works.
+        lookupWord(token, session.target_word, result.language)
+            .then(pickSingleOrFirst)
+            .then(setTargetLookup);
     }, [session?.target_word, token, result.language]);
 
     return (

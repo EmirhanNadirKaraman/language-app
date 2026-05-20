@@ -37,10 +37,9 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-# Fix CWD for phrase_finder's relative data path
-_cwd = os.getcwd()
-os.chdir(Path(__file__).parent.parent)
-sys.path.insert(0, str(Path(__file__).parent))
+_SCRAPER_DIR = str(Path(__file__).resolve().parent)
+if _SCRAPER_DIR not in sys.path:
+    sys.path.insert(0, _SCRAPER_DIR)
 from pipeline import (
     LANG_MODEL_MAP,
     connect,
@@ -49,7 +48,6 @@ from pipeline import (
     insert_phrases,
     clean_sentence,
 )
-os.chdir(_cwd)
 
 import spacy
 

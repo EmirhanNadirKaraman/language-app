@@ -8,6 +8,7 @@ from ..models.schemas import (
     SRSProductionRequest,
     SRSProductionResponse,
     SRSReviewCard,
+    SRSSkipResponse,
 )
 from ..services import review_service
 
@@ -85,3 +86,26 @@ async def submit_production_answer(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
         raise
     return SRSProductionResponse(**result)
+
+
+@router.post("/review/{card_id}/skip", response_model=SRSSkipResponse)
+async def skip_card(
+    card_id: int = Path(..., ge=1),
+    current_user: dict = Depends(get_current_user),
+    pool=Depends(get_pool),
+):
+    """
+    Defer an SRS card by `review_service.SKIP_DEFER_DAYS` (1 day).
+
+    W5 / Hole 14: "Skip" used to advance only the local UI index, so the
+    same card reappeared in the next /srs/due fetch. Now it moves the
+    server-side due_date forward — same card won't surface until tomorrow.
+    Skip is NOT learning evidence: it does not change levels, interval,
+    ease, repetitions, status, or fire usage events.
+    """
+    try:
+        return await review_service.skip_card(
+            pool, str(current_user["user_id"]), card_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))

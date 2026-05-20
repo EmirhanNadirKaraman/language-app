@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { apiUrl } from '../api/_baseUrl';
 
 export interface AppNotification {
     id: string;
@@ -16,7 +17,7 @@ export function useNotifications(token: string | null) {
 
         async function connect() {
             try {
-                const res = await fetch('/api/v1/notifications/stream', {
+                const res = await fetch(apiUrl('/api/v1/notifications/stream'), {
                     headers: { Authorization: `Bearer ${token}` },
                 });
                 if (!res.ok || !res.body) return;

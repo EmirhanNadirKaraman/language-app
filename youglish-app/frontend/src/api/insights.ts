@@ -1,3 +1,4 @@
+import { apiUrl } from './_baseUrl';
 import type {
     InsightCardsResponse,
     PrepViewData,
@@ -15,7 +16,7 @@ export async function fetchInsightCards(
     language: string,
 ): Promise<InsightCardsResponse> {
     const params = new URLSearchParams({ language });
-    const res = await fetch(`/api/v1/insights/cards?${params}`, {
+    const res = await fetch(apiUrl(`/api/v1/insights/cards?${params}`), {
         headers: authHeaders(token),
     });
     if (!res.ok) throw new Error('Failed to fetch insight cards');
@@ -33,7 +34,7 @@ export async function fetchPrepData(
         item_type: itemType,
         language,
     });
-    const res = await fetch(`/api/v1/insights/prep?${params}`, {
+    const res = await fetch(apiUrl(`/api/v1/insights/prep?${params}`), {
         headers: authHeaders(token),
     });
     if (!res.ok) throw new Error('Failed to fetch prep data');
@@ -46,7 +47,7 @@ export async function generateExamples(
     itemType: string,
     language: string,
 ): Promise<GenerateExamplesResponse> {
-    const res = await fetch('/api/v1/insights/prep/generate-examples', {
+    const res = await fetch(apiUrl('/api/v1/insights/prep/generate-examples'), {
         method: 'POST',
         headers: authHeaders(token),
         body: JSON.stringify({ item_id: itemId, item_type: itemType, language }),
@@ -61,7 +62,7 @@ export async function fetchGrammarRule(
     language: string,
 ): Promise<GrammarRuleDetail> {
     const params = new URLSearchParams({ language });
-    const res = await fetch(`/api/v1/insights/grammar/${slug}?${params}`, {
+    const res = await fetch(apiUrl(`/api/v1/insights/grammar/${slug}?${params}`), {
         headers: authHeaders(token),
     });
     if (!res.ok) throw new Error('Failed to fetch grammar rule');
@@ -74,7 +75,7 @@ export async function generateGrammarExplanation(
     language: string,
 ): Promise<GrammarRuleExplainResponse> {
     const params = new URLSearchParams({ language });
-    const res = await fetch(`/api/v1/insights/grammar/${slug}/explain?${params}`, {
+    const res = await fetch(apiUrl(`/api/v1/insights/grammar/${slug}/explain?${params}`), {
         method: 'POST',
         headers: authHeaders(token),
     });

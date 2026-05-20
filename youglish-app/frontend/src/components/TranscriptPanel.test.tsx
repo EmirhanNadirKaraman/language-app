@@ -82,11 +82,13 @@ describe('TranscriptPanel', () => {
         expect(onSentenceClick).not.toHaveBeenCalled();
     });
 
-    it('calls onWordClick when a word is left-clicked', () => {
+    it('calls onWordClick with word + sentence_id when a word is left-clicked', () => {
         const onWordClick = vi.fn();
         render(<TranscriptPanel {...DEFAULT_PROPS} onWordClick={onWordClick} />);
         fireEvent.click(screen.getByText('world'));
-        expect(onWordClick).toHaveBeenCalledWith('world');
+        // 'world' lives in the first sentence (sentence_id: 1) — see SENTENCES.
+        // Panel must pass the owning sentence so the backend can dedup per-sentence.
+        expect(onWordClick).toHaveBeenCalledWith('world', 1);
     });
 
     it('calls onWordRightClick on context menu and suppresses browser default', () => {

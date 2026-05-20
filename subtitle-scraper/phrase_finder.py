@@ -7,6 +7,9 @@ import spacy
 import csv
 import os
 from functools import lru_cache
+from pathlib import Path
+
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 # Load German model
 nlp = spacy.load("de_core_news_sm")
@@ -39,7 +42,7 @@ def load_verb_dictionary(file_path):
 
 _ARTICLES = {'der', 'die', 'das', 'den', 'dem', 'des', 'ein', 'eine', 'einen', 'einem', 'einer', 'eines'}
 
-verb_blueprint_map = load_verb_dictionary("data/final_result.txt")
+verb_blueprint_map = load_verb_dictionary(_DATA_DIR / "final_result.txt")
 
 def generate_trigrams(word):
     """

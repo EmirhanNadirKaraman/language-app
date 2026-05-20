@@ -24,13 +24,11 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-# phrase_finder.py loads data/final_result.txt relative to CWD — point it at the project root
-_cwd = os.getcwd()
-os.chdir(Path(__file__).parent.parent)
-sys.path.insert(0, str(Path(__file__).parent))
+_SCRAPER_DIR = str(Path(__file__).resolve().parent)
+if _SCRAPER_DIR not in sys.path:
+    sys.path.insert(0, _SCRAPER_DIR)
 from phrase_finder import extract_german_logic
 from transcript_fetcher import fetch_with_retries
-os.chdir(_cwd)
 
 
 # VIDEOS_PER_CHANNEL = 5

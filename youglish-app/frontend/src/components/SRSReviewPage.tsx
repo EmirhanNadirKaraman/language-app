@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { SRSReviewCard, SRSProductionResult } from '../types';
-import { getDueCards, submitReviewAnswer, submitProductionAnswer } from '../api/srs';
+import { getDueCards, skipCard, submitReviewAnswer, submitProductionAnswer } from '../api/srs';
 
 const LANGUAGES = [
     { code: 'de', label: 'German' },
@@ -35,7 +35,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
     const [reviewed, setReviewed]   = useState(0); // how many answered this session
 
     // Feedback state: shown after answering, before advancing to the next card.
-    // For passive cards: self-graded, shows answer_text on reveal.
+    // For passive cards: prompt = English gloss, reveal shows German answer_text. Self-graded.
     // For active cards: production result from the LLM evaluator.
     type Feedback = {
         correct:    boolean;
@@ -134,8 +134,29 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
         }
     }
 
-    // Passive direction: existing self-graded flow. Reveal the English gloss,
-    // then user clicks "I knew it" / "I didn't know it".
+    /**
+     * W5 / Hole 14: Skip persists the deferral to the backend (`due_date`
+     * pushed +1 day) before advancing the local index. Without this the
+     * same card reappeared on next refresh because the local skip was
+     * UI-only.
+     */
+    async function handleSkip() {
+        if (!current || !token || submitting) return;
+        setSubmitting(true);
+        setError(null);
+        try {
+            await skipCard(token, current.card_id);
+            advance();
+        } catch {
+            setError('Failed to skip. Try again.');
+        } finally {
+            setSubmitting(false);
+        }
+    }
+
+    // Passive direction (T1.2 / Hole 12): English gloss is on the front
+    // (current.prompt_text); reveal shows the German display_text. User then
+    // self-grades "I knew it" / "I didn't know it".
     function renderPassiveControls() {
         if (!current) return null;
         if (!revealed) {
@@ -457,7 +478,10 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                                 }}
                             >
                                 <span style={{ color: 'var(--color-text-subtle)', marginRight: '6px' }}>
-                                    {feedback.direction === 'active' ? 'Target:' : 'Means:'}
+                                    {/* T1.2: both directions now reveal the German answer.
+                                        Passive = the German you should have recalled,
+                                        Active  = the German you should have produced. */}
+                                    Target:
                                 </span>
                                 <span style={{ fontWeight: 700, color: 'var(--color-text-strong)' }}>{feedback.answerText}</span>
                             </div>
@@ -549,7 +573,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                             {/* Instruction */}
                             <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>
                                 {current.direction === 'passive'
-                                    ? 'Do you recognise and understand this?'
+                                    ? 'Recall the German. Reveal, then self-grade.'
                                     : 'Type the German for this item.'}
                             </p>
 
@@ -567,17 +591,26 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                         </div>
                     )}
 
-                    {/* Skip — only shown on the card face, not during feedback */}
+                    {/* Skip — only shown on the card face, not during feedback.
+                        W5 / Hole 14: defers the card on the server (+1 day)
+                        instead of just advancing the local index. */}
                     {!feedback && (
                         <div style={{ textAlign: 'right', marginTop: '8px' }}>
                             <button
-                                onClick={advance}
+                                data-testid="srs-skip"
+                                disabled={submitting}
+                                onClick={handleSkip}
                                 style={{
-                                    background: 'none', border: 'none', color: 'var(--color-text-subtle)',
-                                    fontSize: '12px', cursor: 'pointer',
+                                    background: 'none', border: 'none',
+                                    color: 'var(--color-text-subtle)',
+                                    fontSize: '12px',
+                                    minHeight: '32px',
+                                    padding: '4px 8px',
+                                    cursor: submitting ? 'not-allowed' : 'pointer',
+                                    touchAction: 'manipulation',
                                 }}
                             >
-                                Skip →
+                                {submitting ? 'Skipping…' : 'Skip →'}
                             </button>
                         </div>
                     )}

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import type { PlaylistResult, PlaylistVideo, SearchResult, Suggestion } from '../types';
 import { fetchItemRecommendations } from '../api/recommendations';
-import { lookupWord } from '../api/words';
+import { lookupWord, pickSingleOrFirst } from '../api/words';
 import { fetchSuggestions } from '../api/suggest';
 import { generatePlaylist } from '../api/playlists';
 import { formatDuration } from '../utils/recommendationUtils';
@@ -87,7 +87,10 @@ export function PlaylistPanel({ token, language, onLanguageChange, onWatch, onCl
         setAddLoading(true);
         setAddError(null);
         try {
-            const res = await lookupWord(token, text, language);
+            // Non-interactive: any plausible match is fine for the playlist
+            // builder. The picker UI handles ambiguity elsewhere.
+            const resp = await lookupWord(token, text, language);
+            const res = pickSingleOrFirst(resp);
             if (!res) {
                 setAddError(`"${text}" not found in vocabulary`);
             } else {

@@ -1,3 +1,4 @@
+import { apiUrl } from './_baseUrl';
 export interface ReminderSummary {
     srs_due_count: number;
     reading_due_count: number;
@@ -7,7 +8,7 @@ export interface ReminderSummary {
 }
 
 export async function getReminderSummary(token: string): Promise<ReminderSummary> {
-    const res = await fetch('/api/v1/reminders/summary', {
+    const res = await fetch(apiUrl('/api/v1/reminders/summary'), {
         headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) throw new Error('Failed to fetch reminder summary');

@@ -9,7 +9,6 @@ Pins two invariants after the 2026-05-20 flat-file removal (TODO #7):
 from __future__ import annotations
 
 import importlib
-import os
 import re
 import sys
 from pathlib import Path
@@ -22,18 +21,23 @@ LEGACY_FILES = ("channels.json", "merged_channels.json", "subscribed_channels.tx
 
 @pytest.fixture(scope="module")
 def pipeline_module():
-    """Import subtitle-scraper/pipeline.py without running its main()."""
-    cwd = os.getcwd()
-    os.chdir(SCRAPER_DIR.parent)
-    sys.path.insert(0, str(SCRAPER_DIR))
+    """Import subtitle-scraper/pipeline.py without running its main().
+
+    phrase_finder resolves its data path from __file__, so no cwd hack is
+    needed — adding the scraper dir to sys.path is enough.
+    """
+    scraper = str(SCRAPER_DIR)
+    if scraper not in sys.path:
+        sys.path.insert(0, scraper)
     try:
-        if "pipeline" in sys.modules:
-            del sys.modules["pipeline"]
+        sys.modules.pop("pipeline", None)
         module = importlib.import_module("pipeline")
         yield module
     finally:
-        sys.path.remove(str(SCRAPER_DIR))
-        os.chdir(cwd)
+        try:
+            sys.path.remove(scraper)
+        except ValueError:
+            pass
         sys.modules.pop("pipeline", None)
 
 

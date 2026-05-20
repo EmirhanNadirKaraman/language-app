@@ -138,12 +138,18 @@ async def get_due_cards(
         gloss = card.pop("_gloss")
         card.pop("grammar_explanation", None)
         display = card["display_text"]
-        if card["direction"] == "passive":
-            card["prompt_text"] = display
-            card["answer_text"] = gloss
-        else:  # active
-            card["prompt_text"] = gloss
-            card["answer_text"] = display
+        # T1.2 (Hole 12 fix, 2026-05-20): passive cards now show the English
+        # gloss as the prompt and the German display_text as the answer —
+        # same mapping as active. The two directions only differ in grading:
+        # passive is reveal + self-grade, active requires typed input.
+        # Showing the German up front (the pre-T1.2 passive shape) made the
+        # passive loop pure self-report; flipping turns it into a real recall
+        # cue.
+        #
+        # Grammar rules (passive-only): display_text = title, gloss =
+        # short_explanation. So prompt = short_explanation, answer = title.
+        card["prompt_text"] = gloss
+        card["answer_text"] = display
         out.append(card)
     return out
 
@@ -201,6 +207,47 @@ async def submit_answer(
     )
 
     return {"card_id": card_id, "success": True}
+
+
+# ---------------------------------------------------------------------------
+# Skip — W5 / Hole 14
+# ---------------------------------------------------------------------------
+
+# "Skip" defers a card by this many days. 1 day = "not now, ask me tomorrow",
+# matches the SM-2 incorrect-branch interval but without any penalty.
+SKIP_DEFER_DAYS = 1
+
+
+async def skip_card(
+    pool: asyncpg.Pool,
+    user_id: str,
+    card_id: int,
+) -> dict:
+    """
+    Defer an SRS card by `SKIP_DEFER_DAYS`. Touches `due_date` only.
+
+    Crucially, skip is NOT learning evidence:
+      - does not call apply_progression
+      - does not change repetitions, interval_days, ease_factor
+      - does not change passive_level, active_level, times_used_correctly
+      - does not promote or demote status
+
+    Ownership/404 contract matches submit_answer: a card belonging to another
+    user (or missing) raises ValueError, which the router maps to 404.
+    """
+    row = await pool.fetchrow(
+        f"""
+        UPDATE srs_cards
+           SET due_date = NOW() + INTERVAL '{SKIP_DEFER_DAYS} day'
+         WHERE card_id = $1
+           AND user_id = $2::uuid
+         RETURNING card_id, due_date
+        """,
+        card_id, user_id,
+    )
+    if row is None:
+        raise ValueError(f"SRS card {card_id} not found for this user")
+    return {"card_id": row["card_id"], "due_date": row["due_date"]}
 
 
 # ---------------------------------------------------------------------------

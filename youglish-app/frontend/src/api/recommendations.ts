@@ -1,3 +1,4 @@
+import { apiUrl } from './_baseUrl';
 import type {
     FollowedChannelVideosResponse,
     ItemRecommendationsResponse,
@@ -20,7 +21,7 @@ export async function fetchItemRecommendations(
         item_type: itemType,
         limit: String(limit),
     });
-    const res = await fetch(`/api/v1/recommendations/items?${params}`, {
+    const res = await fetch(apiUrl(`/api/v1/recommendations/items?${params}`), {
         headers: authHeaders(token),
     });
     if (!res.ok) throw new Error('Failed to fetch item recommendations');
@@ -33,7 +34,7 @@ export async function fetchVideoRecommendations(
     limit = 5,
 ): Promise<VideoRecommendationsResponse> {
     const params = new URLSearchParams({ language, limit: String(limit) });
-    const res = await fetch(`/api/v1/recommendations/videos?${params}`, {
+    const res = await fetch(apiUrl(`/api/v1/recommendations/videos?${params}`), {
         headers: authHeaders(token),
     });
     if (!res.ok) throw new Error('Failed to fetch video recommendations');
@@ -46,7 +47,7 @@ export async function fetchSentenceRecommendations(
     limit = 8,
 ): Promise<SentenceRecommendationsResponse> {
     const params = new URLSearchParams({ language, limit: String(limit) });
-    const res = await fetch(`/api/v1/recommendations/sentences?${params}`, {
+    const res = await fetch(apiUrl(`/api/v1/recommendations/sentences?${params}`), {
         headers: authHeaders(token),
     });
     if (!res.ok) throw new Error('Failed to fetch sentence recommendations');
@@ -59,7 +60,7 @@ export async function fetchFollowedChannelVideos(
     limit = 10,
 ): Promise<FollowedChannelVideosResponse> {
     const params = new URLSearchParams({ language, limit: String(limit) });
-    const res = await fetch(`/api/v1/recommendations/followed-channel-videos?${params}`, {
+    const res = await fetch(apiUrl(`/api/v1/recommendations/followed-channel-videos?${params}`), {
         headers: authHeaders(token),
     });
     if (!res.ok) throw new Error('Failed to fetch followed channel videos');

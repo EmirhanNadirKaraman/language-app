@@ -19,6 +19,7 @@ import { useNotifications } from './hooks/useNotifications';
 import { useSearch } from './hooks/useSearch';
 import { useReminders } from './hooks/useReminders';
 import { usePreferences } from './hooks/usePreferences';
+import { useResolvedTheme } from './hooks/useResolvedTheme';
 import { useViewport } from './hooks/useViewport';
 import { getToken } from './auth';
 import { AUTH_EXPIRED_EVENT } from './api/_http';
@@ -48,16 +49,19 @@ function Layout() {
   const { summary: reminderSummary, showBanner: showReminderBanner, dismissBanner } =
     useReminders(token, prefs.reminders_enabled);
   const navigate = useNavigate();
-  const darkMode = prefs.dark_mode;
+  // T1.3: theme_mode (system|light|dark) is the source of truth; the
+  // resolver follows `prefers-color-scheme` when mode === 'system' so iOS /
+  // macOS dark switches at runtime without re-saving.
+  const resolvedTheme = useResolvedTheme(prefs.theme_mode);
   const { isMobile } = useViewport();
 
   // Apply theme via the [data-theme] attribute on <html>. CSS variables in
   // index.css flip when this changes, so component inline styles using
   // `var(--color-*)` auto-update without React re-renders. (#20)
   useEffect(() => {
-    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+    document.documentElement.dataset.theme = resolvedTheme;
     return () => { delete document.documentElement.dataset.theme; };
-  }, [darkMode]);
+  }, [resolvedTheme]);
 
   // Centralised auth-expiry handler: api/_http.ts dispatches AUTH_EXPIRED_EVENT
   // whenever any request returns 401 (including the new detail='token_expired'

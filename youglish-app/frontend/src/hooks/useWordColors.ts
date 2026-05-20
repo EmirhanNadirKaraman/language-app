@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiUrl } from '../api/_baseUrl';
 
 export function useWordColors(
     videoId: string | null,
@@ -11,7 +12,7 @@ export function useWordColors(
         if (!videoId || !token) { setStatuses({}); return; }
         let cancelled = false;
 
-        fetch(`/api/v1/videos/${videoId}/word-colors`, {
+        fetch(apiUrl(`/api/v1/videos/${videoId}/word-colors`), {
             headers: { Authorization: `Bearer ${token}` },
         })
             .then(res => (res.ok ? res.json() : {}))

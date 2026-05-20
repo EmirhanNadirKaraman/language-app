@@ -9,7 +9,7 @@
  * Active-card setup short-circuits getDueCards so we don't hit the backend.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { SRSReviewPage } from './SRSReviewPage';
 import type { SRSReviewCard } from '../types';
@@ -108,5 +108,49 @@ describe('SRSReviewPage mobile (#27e)', () => {
         const close = screen.getByTestId('srs-close') as HTMLElement;
         expect(close.style.minWidth).toBe('44px');
         expect(close.style.minHeight).toBe('44px');
+    });
+});
+
+// W5 / Hole 14 — Skip defers the card on the server
+describe('SRSReviewPage Skip (W5 / Hole 14)', () => {
+    it('calls POST /skip and advances to the next card on success', async () => {
+        const skip = vi.spyOn(srsApi, 'skipCard').mockResolvedValue({
+            card_id: 2, due_date: new Date(Date.now() + 86_400_000).toISOString(),
+        } as never);
+        const passiveA: SRSReviewCard = { ...PASSIVE_CARD, card_id: 2 };
+        const passiveB: SRSReviewCard = {
+            ...PASSIVE_CARD, card_id: 3,
+            display_text: 'Haus', prompt_text: 'house',
+        };
+        await renderWithCards([passiveA, passiveB]);
+
+        // First card front shows the passive prompt (PASSIVE_CARD.prompt_text === 'Auto').
+        expect(screen.getByText('Auto')).toBeInTheDocument();
+
+        const skipBtn = screen.getByTestId('srs-skip');
+        fireEvent.click(skipBtn);
+
+        await waitFor(() => expect(skip).toHaveBeenCalledWith('fake-token', 2));
+        // Advanced to next card — its prompt should be visible now.
+        await waitFor(() => expect(screen.getByText('house')).toBeInTheDocument());
+    });
+
+    it('shows an error message on skip failure and stays on the current card', async () => {
+        vi.spyOn(srsApi, 'skipCard').mockRejectedValue(new Error('500'));
+        await renderWithCards([PASSIVE_CARD]);
+
+        const skipBtn = screen.getByTestId('srs-skip');
+        fireEvent.click(skipBtn);
+
+        await waitFor(() => expect(screen.getByText(/Failed to skip/)).toBeInTheDocument());
+        // Card front still visible — we did NOT advance.
+        expect(screen.getByText('Auto')).toBeInTheDocument();
+    });
+
+    it('skip button has mobile-safe minHeight and touchAction', async () => {
+        await renderWithCards([PASSIVE_CARD]);
+        const skipBtn = screen.getByTestId('srs-skip') as HTMLElement;
+        expect(skipBtn.style.minHeight).toBe('32px');
+        expect(skipBtn.style.touchAction).toBe('manipulation');
     });
 });

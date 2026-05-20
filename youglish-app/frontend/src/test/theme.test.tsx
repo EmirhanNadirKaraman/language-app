@@ -116,8 +116,33 @@ describe('Components use CSS variables (#20)', () => {
     });
 });
 
-describe('Theme attribute (#20)', () => {
-    it('SettingsPanel dark-mode toggle flips document.documentElement.dataset.theme', async () => {
+describe('Theme attribute (#20 + T1.3 tristate)', () => {
+    it('SettingsPanel renders System / Light / Dark options (T1.3)', async () => {
+        const { SettingsPanel } = await import('../components/SettingsPanel');
+        const { PREFERENCE_DEFAULTS } = await import('../api/settings');
+        const searchApi = await import('../api/search');
+        vi.spyOn(searchApi, 'fetchCategories').mockResolvedValue([]);
+
+        render(
+            <SettingsPanel
+                prefs={PREFERENCE_DEFAULTS}
+                onSave={vi.fn().mockResolvedValue(undefined)}
+                onClose={() => {}}
+            />,
+        );
+        const select = screen.getByTestId('theme-mode-select') as HTMLSelectElement;
+        const values = Array.from(select.options).map(o => o.value);
+        expect(values).toEqual(['system', 'light', 'dark']);
+        expect(select.value).toBe('system');
+
+        // 16px font on the select itself — iOS focus-zoom guard.
+        const fontSize = window.getComputedStyle(select).fontSize || select.style.fontSize;
+        expect(fontSize).toBe('16px');
+
+        vi.restoreAllMocks();
+    });
+
+    it('SettingsPanel theme select flips document.documentElement.dataset.theme', async () => {
         // Inline import to avoid pulling in SettingsPanel's network deps at top level.
         const { SettingsPanel } = await import('../components/SettingsPanel');
         const { PREFERENCE_DEFAULTS } = await import('../api/settings');
@@ -134,10 +159,10 @@ describe('Theme attribute (#20)', () => {
                 onClose={() => {}}
             />,
         );
-        const toggle = screen.getByLabelText('Dark mode') as HTMLInputElement;
-        fireEvent.click(toggle);
+        const select = screen.getByTestId('theme-mode-select') as HTMLSelectElement;
+        fireEvent.change(select, { target: { value: 'dark' } });
         expect(document.documentElement.dataset.theme).toBe('dark');
-        fireEvent.click(toggle);
+        fireEvent.change(select, { target: { value: 'light' } });
         expect(document.documentElement.dataset.theme).toBe('light');
 
         vi.restoreAllMocks();

@@ -17,8 +17,8 @@ Active review loop → Mastery
 
 The scraper inserts surface forms (not just lemmas) into `word_table` ([subtitle-scraper/pipeline.py:341](../subtitle-scraper/pipeline.py)) so common inflections are usually present, but:
 
-🕳 **HOLE 1 (UX dead-end).** Clicking a never-scraped word leaves the user with no path forward. There is no "I want to learn this anyway" affordance. The user must paste it into AddContent → wait for the scraper. Most users won't.
-🕳 **HOLE 2 (ambiguity).** `LIMIT 1` on `ILIKE` picks an arbitrary row when two `word_table` entries share the surface but differ in POS/lemma (German is full of this: *die Bank* the bench vs. the bank). The user might mark the wrong meaning.
+✅ **HOLE 1 (RESOLVED 2026-05-20, W2).** New `POST /api/v1/words/learn-anyway` (body `{text, language}`) creates a sparse `word_table` row (`pos='X'`, `lemma=text`) and atomically marks the user's relationship as `'learning'` via `apply_progression(..., status_marked_learning, status_override='learning')`. Idempotent on the `(word, language, pos)` unique key. Frontend `WordStatusPicker` shows "Not in vocabulary yet" + "Learn this anyway" button when the lookup returns null; on click `useWordStatus.learnAnyway` re-runs the lookup so the picker re-renders with the new `'learning'` state. Both passive and active SRS cards are created (#0b rule).
+✅ **HOLE 2 (RESOLVED 2026-05-20, W3).** `GET /api/v1/words/by-text` now returns `{status, item, candidates[]}`. Multi-row surface forms surface all candidates (cap 10, sorted: exact case-insensitive `word` match first, then lemma asc, then word_id asc). Each candidate carries `pos` plus the user's per-row `current_status` / `passive_level` / `active_level` / due-dates so the picker can label competing meanings. `WordStatusPicker` renders a chooser; `useWordStatus.selectCandidate(c)` promotes the chosen item to `lookup` and fires the deferred `recordTranscriptClick` against the now-known `word_id` — exposure never attaches to the wrong meaning. Non-interactive callers use the new `pickSingleOrFirst()` helper for back-compat.
 
 ---
 
@@ -34,9 +34,9 @@ Backend: `routers/words.py:34` calls **awaited** `progression_service.apply_prog
 - `passive_srs = "create"` — inserts an `srs_cards` row with direction=passive, due_date=NOW, interval=1day, ease=2.5, repetitions=0 (no-op if already exists).
 - Active card is **not** created.
 
-🕳 **HOLE 3 (silent state divergence).** `record_transcript_click` is fired from `useWordStatus` with no `await`/no error handling on the frontend side. If the call fails (network, auth), the user sees no feedback; the click counter on the backend silently misses.
+✅ **HOLE 3 (RESOLVED 2026-05-20, T1.1).** `recordTranscriptClick` now throws on non-2xx and `useWordStatus.selectWord` surfaces the failure via `console.warn('recordTranscriptClick failed', err)`. Still non-blocking for the picker UI, but no longer silently swallowed.
 
-🕳 **HOLE 4 (deduplication).** Every click within the same video session increments `passive_level`. A user dragging the seek bar through a sentence can artificially inflate passive_level by clicking the same word 10 times. No per-session debouncing.
+✅ **HOLE 4 (RESOLVED 2026-05-20, T1.1).** Frontend now sends `sentence_id` on every transcript click (`PlayerView` from `sentences[sentenceIdx].sentence_id`, `TranscriptPanel` from the clicked row). Backend dedups via `INSERT … ON CONFLICT DO NOTHING` against unique partial index `uq_word_usage_events_transcript_dedup` on `(user_id, item_id, item_type, sentence_id, event_day)` (migration 026, with `event_day` a UTC-date generated column). Same word, same sentence, same day → 204 no-op. Different sentence / different day / different user / different word still counts.
 
 ✅ **HOLE 5 (RESOLVED 2026-05-18).** `usage_events_service.most_frequent_unknown_items` now includes `'transcript'` in its context filter. Subtitle-clicked unknown words surface in the "Keeps coming up" insight card. Regression-guarded by `test_audit_holes.py::test_transcript_context_in_frequent_unknowns_aggregation` and `test_insights.py::test_frequent_unknowns_includes_transcript_clicks`.
 
@@ -91,7 +91,7 @@ That `<…>` requirement is a **soft join** to `word_table` / `phrase_table` / `
 
 🕳 **HOLE 10 (orphaned cards).** Nothing deletes an `srs_cards` row when its underlying `word_table` row goes away (e.g. content cleanup). The card persists forever, just never surfaces. Low risk operationally but it complicates queue-size statistics.
 
-🕳 **HOLE 11 (no active card creation path other than success).** `_RULES["transcript_clicked"]` and `status_marked_learning` both do `passive_srs="create"` — only the passive card. Active cards are only created when an event already produced a correct outcome (`guided_counted`, `status_marked_known`, `free_chat_used_correctly`, `active_review_correct`). A user who only marks words as `learning` and never opens guided chat will **never** have an active card scheduled — meaning the SRS review page will only ever test recognition for them. Production gets no scheduled practice.
+✅ **HOLE 11 (RESOLVED — confirmed 2026-05-20, W6).** Since #0b (2026-05-19), `status_marked_learning` sets BOTH `passive_srs="create"` and `active_srs="create"`, so every learning click schedules both directions. The W2 `learn-anyway` path and the reading `save_selection` path both route through this rule. W6 audit (`srs_backfill_service.find_missing_active_cards`) reports zero pre-#0b stragglers in the current dev DB. A safety-net backfill script (`scripts/backfill_missing_active_srs.py --apply`) is available for any future edge case.
 
 ---
 
@@ -101,11 +101,11 @@ Frontend: `SRSReviewPage` ([SRSReviewPage.tsx:27](../youglish-app/frontend/src/c
 
 Card UI shows: direction badge, the **German display text**, a question ("Do you recognise and understand this?"), level dots, and a "Show answer buttons" button followed by "I didn't know it" / "I knew it ✓".
 
-🕳 **HOLE 12 (passive review doesn't actually test recognition).** The card *shows the German word up front*. There is no English translation hidden behind the reveal — the user reads "Auto" and asked themselves "do I recognise this?". Self-report, no recall test. Should show the gloss / example sentence and require the user to surface meaning before pressing "I knew it".
+✅ **HOLE 12 (RESOLVED 2026-05-20, T1.2).** `review_service.get_due_cards` now assigns `prompt_text = gloss, answer_text = display_text` for both directions. Passive card front shows the English gloss; reveal shows the German `display_text`; self-grade flow unchanged. Active card unchanged (still typed-input + `evaluate_production`). Both directions share the same prompt/answer mapping; only the grading mode differs. Grammar rule cards now use `prompt = short_explanation, answer = title` as the natural consequence of the uniform mapping.
 
 🕳 **HOLE 13 (no dark mode).** Hardcoded colors: `background: '#fafafa'`, `border: '#e8eaf6'`. Renders illegibly in dark mode.
 
-🕳 **HOLE 14 (skip ≠ defer).** "Skip →" advances the local index but doesn't tell the backend. The card stays due. Next session it reappears at the same position. No "see again later" / "bury for today" affordance.
+✅ **HOLE 14 (RESOLVED 2026-05-20, W5).** Skip now calls `POST /api/v1/srs/review/{card_id}/skip` → `review_service.skip_card` which moves `due_date` forward by `SKIP_DEFER_DAYS` (1 day). Touches ONLY `due_date` — no progression event fires, no usage event recorded, no level/interval/ease/repetitions change. The skipped card disappears from `/srs/due` until tomorrow.
 
 On answer submit (`handleAnswer` → `submitReviewAnswer` → `routers/srs.py:38` → `review_service.submit_answer` → `progression_service.apply_progression("passive_review_correct" | "passive_review_incorrect")`):
 - Correct: passive SM-2 advance, interval ×= ease, ease += 0.05 (cap 3.0), reps += 1. **No level/status change** — the rule sets only `passive_srs`. So passively reviewing correctly does **not** increment `passive_level`. The user's progress dots in `WordStatusPicker` ("Understood" row) don't grow from SRS reviews.
@@ -227,7 +227,7 @@ If the connection drops between UPDATE and yield, the notification is marked del
 
 ## Cross-step holes (data quality)
 
-🕳 **HOLE 32 (no idempotency on transcript clicks).** Same word, same video, same playback position can be clicked 10×; backend dutifully increments `times_seen` and `passive_level` 10×. Should de-dupe by `(user_id, item_id, sentence_id, day)` or similar.
+✅ **HOLE 32 (RESOLVED 2026-05-20, T1.1).** Same fix as Hole 4 above — unique partial index on `(user_id, item_id, item_type, sentence_id, event_day)` enforces per-sentence, per-day idempotency at the DB level.
 
 🕳 **HOLE 33 (no global "last reviewed at" on `user_word_knowledge`).** `srs_cards.last_review` exists per direction, but `user_word_knowledge.last_seen` is updated on every event whether or not it's a real interaction. Mixes "saw in subtitle" with "actively answered SRS". Insights downstream can't tell.
 

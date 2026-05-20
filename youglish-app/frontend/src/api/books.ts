@@ -1,3 +1,4 @@
+import { apiUrl } from './_baseUrl';
 import type {
   BookDocument,
   BookPageSummary,
@@ -40,7 +41,7 @@ export async function uploadBook(
   form.append('title', title);
   form.append('language', language);
 
-  const res = await fetch('/api/v1/books/upload', {
+  const res = await fetch(apiUrl('/api/v1/books/upload'), {
     method: 'POST',
     headers: authHeaders(token),
     body: form,
@@ -52,13 +53,13 @@ export async function uploadBook(
 // ── Book list / detail ────────────────────────────────────────────────────────
 
 export async function listBooks(token: string): Promise<BookDocument[]> {
-  const res = await fetch('/api/v1/books', { headers: authHeaders(token) });
+  const res = await fetch(apiUrl('/api/v1/books'), { headers: authHeaders(token) });
   await assertOk(res);
   return res.json() as Promise<BookDocument[]>;
 }
 
 export async function getBook(token: string, docId: string): Promise<BookDocument> {
-  const res = await fetch(`/api/v1/books/${docId}`, { headers: authHeaders(token) });
+  const res = await fetch(apiUrl(`/api/v1/books/${docId}`), { headers: authHeaders(token) });
   await assertOk(res);
   return res.json() as Promise<BookDocument>;
 }
@@ -66,7 +67,7 @@ export async function getBook(token: string, docId: string): Promise<BookDocumen
 // ── Pages ─────────────────────────────────────────────────────────────────────
 
 export async function listPages(token: string, docId: string): Promise<BookPageSummary[]> {
-  const res = await fetch(`/api/v1/books/${docId}/pages`, { headers: authHeaders(token) });
+  const res = await fetch(apiUrl(`/api/v1/books/${docId}/pages`), { headers: authHeaders(token) });
   await assertOk(res);
   return res.json() as Promise<BookPageSummary[]>;
 }
@@ -76,7 +77,7 @@ export async function getPage(
   docId: string,
   pageNumber: number,
 ): Promise<BookPageDetail> {
-  const res = await fetch(`/api/v1/books/${docId}/pages/${pageNumber}`, {
+  const res = await fetch(apiUrl(`/api/v1/books/${docId}/pages/${pageNumber}`), {
     headers: authHeaders(token),
   });
   await assertOk(res);
@@ -84,7 +85,7 @@ export async function getPage(
 }
 
 export function getPageImageUrl(docId: string, pageNumber: number): string {
-  return `/api/v1/books/${docId}/pages/${pageNumber}/image`;
+  return apiUrl(`/api/v1/books/${docId}/pages/${pageNumber}/image`);
 }
 
 // ── Block updates ─────────────────────────────────────────────────────────────
@@ -99,7 +100,7 @@ export async function patchBlock(
     correction_status?: 'approved' | 'rejected';
   },
 ): Promise<BookBlock> {
-  const res = await fetch(`/api/v1/books/${docId}/blocks/${blockId}`, {
+  const res = await fetch(apiUrl(`/api/v1/books/${docId}/blocks/${blockId}`), {
     method: 'PATCH',
     headers: jsonHeaders(token),
     body: JSON.stringify(patch),
@@ -115,7 +116,7 @@ export async function repairBlock(
   docId: string,
   blockId: number,
 ): Promise<LLMRepairResponse> {
-  const res = await fetch(`/api/v1/books/${docId}/blocks/${blockId}/llm-repair`, {
+  const res = await fetch(apiUrl(`/api/v1/books/${docId}/blocks/${blockId}/llm-repair`), {
     method: 'POST',
     headers: authHeaders(token),
   });
@@ -124,7 +125,7 @@ export async function repairBlock(
 }
 
 export async function deleteBook(token: string, docId: string): Promise<void> {
-  const res = await fetch(`/api/v1/books/${docId}`, {
+  const res = await fetch(apiUrl(`/api/v1/books/${docId}`), {
     method: 'DELETE',
     headers: authHeaders(token),
   });
@@ -132,7 +133,7 @@ export async function deleteBook(token: string, docId: string): Promise<void> {
 }
 
 export async function deletePage(token: string, docId: string, pageNumber: number): Promise<void> {
-  const res = await fetch(`/api/v1/books/${docId}/pages/${pageNumber}`, {
+  const res = await fetch(apiUrl(`/api/v1/books/${docId}/pages/${pageNumber}`), {
     method: 'DELETE',
     headers: authHeaders(token),
   });
@@ -145,7 +146,7 @@ export async function patchPageSentenceCount(
   pageNumber: number,
   sentenceCount: number,
 ): Promise<void> {
-  const res = await fetch(`/api/v1/books/${docId}/pages/${pageNumber}/sentence-count`, {
+  const res = await fetch(apiUrl(`/api/v1/books/${docId}/pages/${pageNumber}/sentence-count`), {
     method: 'PATCH',
     headers: jsonHeaders(token),
     body: JSON.stringify({ sentence_count: sentenceCount }),
@@ -158,7 +159,7 @@ export async function batchRepairPage(
   docId: string,
   pageNumber: number,
 ): Promise<{ repaired: number; errors: number; total_candidates: number }> {
-  const res = await fetch(`/api/v1/books/${docId}/pages/${pageNumber}/batch-llm-repair`, {
+  const res = await fetch(apiUrl(`/api/v1/books/${docId}/pages/${pageNumber}/batch-llm-repair`), {
     method: 'POST',
     headers: authHeaders(token),
   });

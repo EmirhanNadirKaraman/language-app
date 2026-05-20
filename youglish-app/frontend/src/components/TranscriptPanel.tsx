@@ -9,7 +9,7 @@ interface Props {
     activeSentenceIdx: number;
     highlightTerms: string[];
     wordStatuses: Record<string, string>;
-    onWordClick: (word: string) => void;
+    onWordClick: (word: string, sentenceId?: number) => void;
     onWordRightClick: (word: string) => void;
     onSentenceClick: (idx: number) => void;
     videoId: string;
@@ -76,7 +76,14 @@ export function TranscriptPanel({
                                 wordBreak: 'break-word',
                             }}
                         >
-                            {renderClickableText(sentence.content, highlightTerms, onWordClick, wordStatuses, onWordRightClick, wordColors)}
+                            {renderClickableText(
+                                sentence.content,
+                                highlightTerms,
+                                (word) => onWordClick(word, sentence.sentence_id),
+                                wordStatuses,
+                                onWordRightClick,
+                                wordColors,
+                            )}
                         </div>
                     );
                 })}

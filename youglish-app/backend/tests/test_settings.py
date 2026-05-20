@@ -29,9 +29,10 @@ HTTP tests (FastAPI client):
 """
 import uuid
 
+import pytest
 
 from backend.services.settings_service import DEFAULTS, apply_defaults, get_preferences, update_preferences
-from ._email_helper import make_test_email
+from ._email_helper import cleanup_pattern, make_test_email
 
 
 # ---------------------------------------------------------------------------
@@ -67,10 +68,9 @@ class TestApplyDefaults:
         assert DEFAULTS == original_defaults
 
     def test_all_keys_overridden(self):
+        # Channel arrays moved to user_channel_preference in T1.4 (mig 027),
+        # so apply_defaults drops them; only JSONB-resident keys round-trip.
         overrides = {
-            "liked_channels":         ["channel1"],
-            "followed_channels":      ["channel2"],
-            "disliked_channels":      ["channel3"],
             "channel_names":          {"channel1": "Sports Channel"},
             "passive_reps_for_known": 10,
             "active_reps_for_known":  8,
@@ -100,13 +100,16 @@ async def _create_user(pool) -> str:
 
 
 async def test_get_preferences_new_user_returns_defaults(db_pool):
-    """A fresh user sees DEFAULTS plus empty derived category/genre lists."""
+    """A fresh user sees DEFAULTS plus empty derived lists for relational fields."""
     user_id = await _create_user(db_pool)
     result = await get_preferences(db_pool, user_id)
     expected = {
         **DEFAULTS,
+        # Category prefs (user_video_category) — derived per get_preferences.
         "liked_categories": [], "disliked_categories": [],
         "liked_genres":     [], "disliked_genres":     [],
+        # Channel prefs (user_channel_preference, T1.4) — derived too.
+        "followed_channels": [], "liked_channels": [], "disliked_channels": [],
     }
     assert result == expected
 
@@ -181,6 +184,9 @@ async def _auth_token(client) -> str:
 ALL_PREFERENCE_KEYS = set(DEFAULTS) | {
     "liked_categories", "disliked_categories",
     "liked_genres",     "disliked_genres",
+    # Channel-preference fields moved to user_channel_preference in T1.4
+    # but are still surfaced in the response dict for API compatibility.
+    "followed_channels", "liked_channels", "disliked_channels",
 }
 
 
@@ -291,3 +297,297 @@ async def test_put_only_changes_specified_field(client):
     assert body["passive_reps_for_known"] == 9
     assert body["active_reps_for_known"] == DEFAULTS["active_reps_for_known"]
     assert body["known_word_color"] == DEFAULTS["known_word_color"]
+
+
+# ---------------------------------------------------------------------------
+# theme_mode tristate (T1.3) + dark_mode legacy compatibility
+# ---------------------------------------------------------------------------
+
+async def test_new_user_theme_mode_defaults_to_system(client):
+    """T1.3: brand-new users get theme_mode='system' so iOS follows OS dark mode."""
+    token = await _auth_token(client)
+    resp = await client.get(
+        "/api/v1/settings/preferences",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    body = resp.json()
+    assert body["theme_mode"] == "system"
+    # Legacy mirror: system resolves to "not dark" by storage default.
+    assert body["dark_mode"] is False
+
+
+@pytest.mark.parametrize("mode", ["system", "light", "dark"])
+async def test_put_theme_mode_persists(client, mode):
+    token = await _auth_token(client)
+    put = await client.put(
+        "/api/v1/settings/preferences",
+        json={"theme_mode": mode},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert put.status_code == 200
+    assert put.json()["theme_mode"] == mode
+
+    get = await client.get(
+        "/api/v1/settings/preferences",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert get.json()["theme_mode"] == mode
+
+
+async def test_put_invalid_theme_mode_returns_422(client):
+    token = await _auth_token(client)
+    resp = await client.put(
+        "/api/v1/settings/preferences",
+        json={"theme_mode": "midnight"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 422
+
+
+async def test_setting_theme_mode_mirrors_dark_mode_for_legacy_clients(client):
+    """T1.3 compat: theme_mode is source of truth, dark_mode mirrors it on the wire."""
+    token = await _auth_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    dark = await client.put("/api/v1/settings/preferences",
+                            json={"theme_mode": "dark"}, headers=headers)
+    assert dark.json()["dark_mode"] is True
+
+    light = await client.put("/api/v1/settings/preferences",
+                             json={"theme_mode": "light"}, headers=headers)
+    assert light.json()["dark_mode"] is False
+
+    system = await client.put("/api/v1/settings/preferences",
+                              json={"theme_mode": "system"}, headers=headers)
+    # system resolves to "not dark" for legacy boolean readers — they can't
+    # follow prefers-color-scheme anyway.
+    assert system.json()["dark_mode"] is False
+
+
+async def test_legacy_dark_mode_true_derives_theme_mode_dark(client):
+    """A legacy client sending only dark_mode=True must end up with theme_mode='dark'."""
+    token = await _auth_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = await client.put("/api/v1/settings/preferences",
+                            json={"dark_mode": True}, headers=headers)
+    body = resp.json()
+    assert body["dark_mode"] is True
+    assert body["theme_mode"] == "dark"
+
+
+async def test_legacy_dark_mode_false_derives_theme_mode_light(client):
+    """dark_mode=False is an explicit user choice — must NOT silently upgrade to system."""
+    token = await _auth_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = await client.put("/api/v1/settings/preferences",
+                            json={"dark_mode": False}, headers=headers)
+    body = resp.json()
+    assert body["dark_mode"] is False
+    assert body["theme_mode"] == "light"
+
+
+async def test_existing_user_with_stored_dark_mode_only_reads_with_derived_theme(db_pool):
+    """
+    Backfill simulation: an existing row in users.settings JSONB that only has
+    `dark_mode=True` (saved before T1.3) must come back with theme_mode='dark'.
+    """
+    import json as _json
+    user_id = await _create_user(db_pool)
+    # Plant a legacy settings blob directly (bypasses update_preferences).
+    await db_pool.execute(
+        "UPDATE users SET settings = $1::jsonb WHERE user_id = $2::uuid",
+        _json.dumps({"dark_mode": True}),
+        user_id,
+    )
+    prefs = await get_preferences(db_pool, user_id)
+    assert prefs["theme_mode"] == "dark"
+    assert prefs["dark_mode"] is True
+
+
+# ---------------------------------------------------------------------------
+# T1.4 — channel preferences moved to user_channel_preference
+# ---------------------------------------------------------------------------
+
+async def test_new_user_channel_prefs_are_empty_lists(client):
+    token = await _auth_token(client)
+    resp = await client.get("/api/v1/settings/preferences",
+                            headers={"Authorization": f"Bearer {token}"})
+    body = resp.json()
+    assert body["followed_channels"] == []
+    assert body["liked_channels"] == []
+    assert body["disliked_channels"] == []
+
+
+async def test_put_followed_channels_persists_relationally(client, db_pool):
+    token = await _auth_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    put = await client.put("/api/v1/settings/preferences",
+                           json={"followed_channels": ["UC_x", "UC_y"]},
+                           headers=headers)
+    assert put.json()["followed_channels"] == ["UC_x", "UC_y"]
+    get = await client.get("/api/v1/settings/preferences", headers=headers)
+    assert get.json()["followed_channels"] == ["UC_x", "UC_y"]
+
+    # Belt-and-braces: rows exist in the relational table, not JSONB.
+    rows = await db_pool.fetch(
+        """
+        SELECT u.user_id FROM users u
+        WHERE u.email LIKE $1
+        ORDER BY u.created_at DESC LIMIT 1
+        """,
+        cleanup_pattern(),
+    )
+    uid = rows[0]["user_id"]
+    channel_rows = await db_pool.fetch(
+        """
+        SELECT youtube_channel_id, preference_kind
+          FROM user_channel_preference
+         WHERE user_id = $1 AND preference_kind = 'followed'
+         ORDER BY youtube_channel_id
+        """,
+        uid,
+    )
+    assert [(r["youtube_channel_id"], r["preference_kind"]) for r in channel_rows] == [
+        ("UC_x", "followed"), ("UC_y", "followed"),
+    ]
+    # JSONB blob does NOT contain followed_channels anymore.
+    settings_row = await db_pool.fetchrow(
+        "SELECT settings FROM users WHERE user_id = $1", uid,
+    )
+    import json as _json
+    settings_raw = settings_row["settings"]
+    if isinstance(settings_raw, str):
+        settings_raw = _json.loads(settings_raw)
+    assert "followed_channels" not in settings_raw
+
+
+async def test_put_liked_channels_persists_relationally(client):
+    token = await _auth_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    put = await client.put("/api/v1/settings/preferences",
+                           json={"liked_channels": ["UC_a"]}, headers=headers)
+    assert put.json()["liked_channels"] == ["UC_a"]
+
+
+async def test_put_disliked_channels_persists_relationally(client):
+    token = await _auth_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    put = await client.put("/api/v1/settings/preferences",
+                           json={"disliked_channels": ["UC_b"]}, headers=headers)
+    assert put.json()["disliked_channels"] == ["UC_b"]
+
+
+async def test_put_replaces_existing_channel_list(client):
+    """PUT is full-replace per kind, not a merge — mirrors pre-T1.4 semantics."""
+    token = await _auth_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    await client.put("/api/v1/settings/preferences",
+                     json={"followed_channels": ["A", "B"]}, headers=headers)
+    await client.put("/api/v1/settings/preferences",
+                     json={"followed_channels": ["C"]}, headers=headers)
+    body = (await client.get("/api/v1/settings/preferences", headers=headers)).json()
+    assert body["followed_channels"] == ["C"]
+
+
+async def test_channel_action_follow_then_dislike_clears_followed(client):
+    """Dislike removes both followed AND liked (mutual exclusion + dislike-override)."""
+    token = await _auth_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"channel_id": "UC_q", "channel_name": "Quack"}
+
+    await client.put("/api/v1/settings/channel-preference",
+                     json={**payload, "action": "follow"}, headers=headers)
+    await client.put("/api/v1/settings/channel-preference",
+                     json={**payload, "action": "like"}, headers=headers)
+    body = (await client.put("/api/v1/settings/channel-preference",
+                             json={**payload, "action": "dislike"}, headers=headers)).json()
+
+    assert body["followed_channels"] == []
+    assert body["liked_channels"] == []
+    assert body["disliked_channels"] == ["UC_q"]
+    # channel_names cache still has the display name.
+    assert body["channel_names"]["UC_q"] == "Quack"
+
+
+async def test_channel_action_clear_removes_all_three(client):
+    token = await _auth_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"channel_id": "UC_r", "channel_name": "Rover"}
+
+    await client.put("/api/v1/settings/channel-preference",
+                     json={**payload, "action": "follow"}, headers=headers)
+    body = (await client.put("/api/v1/settings/channel-preference",
+                             json={**payload, "action": "clear"}, headers=headers)).json()
+
+    assert body["followed_channels"] == []
+    assert body["liked_channels"] == []
+    assert body["disliked_channels"] == []
+    # Display-name cache evicted because no remaining presence.
+    assert "UC_r" not in body["channel_names"]
+
+
+async def test_channel_action_follow_and_like_coexist(client):
+    """followed + liked are NOT mutually exclusive (only liked/disliked are)."""
+    token = await _auth_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    payload = {"channel_id": "UC_z", "channel_name": "Zed"}
+
+    await client.put("/api/v1/settings/channel-preference",
+                     json={**payload, "action": "follow"}, headers=headers)
+    body = (await client.put("/api/v1/settings/channel-preference",
+                             json={**payload, "action": "like"}, headers=headers)).json()
+
+    assert body["followed_channels"] == ["UC_z"]
+    assert body["liked_channels"] == ["UC_z"]
+
+
+async def test_scalar_settings_still_persist_in_jsonb(client, db_pool):
+    """T1.4 must not break the JSONB path for color / theme / reps scalars."""
+    token = await _auth_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+    await client.put("/api/v1/settings/preferences",
+                     json={"known_word_color": "#123456", "passive_reps_for_known": 9},
+                     headers=headers)
+
+    # Raw JSONB row contains the scalars (regression guard).
+    rows = await db_pool.fetch(
+        "SELECT user_id, settings FROM users WHERE email LIKE $1 ORDER BY created_at DESC LIMIT 1",
+        cleanup_pattern(),
+    )
+    import json as _json
+    raw = rows[0]["settings"]
+    if isinstance(raw, str):
+        raw = _json.loads(raw)
+    assert raw["known_word_color"] == "#123456"
+    assert raw["passive_reps_for_known"] == 9
+
+
+async def test_legacy_jsonb_channel_arrays_backfilled_by_migration(db_pool):
+    """
+    The migration 027 backfill is exercised once at alembic upgrade head.
+    This test simulates a user inserted with the legacy shape and verifies
+    that the relational rows + read path align — i.e. if a JSONB blob with
+    channel arrays were ever planted manually, _fetch_channel_prefs would
+    still surface them ONCE the corresponding rows are present.
+    """
+    import json as _json
+    user_id = await _create_user(db_pool)
+    # Plant relational rows directly (what the migration does for existing users).
+    for cid in ("X1", "X2"):
+        await db_pool.execute(
+            """
+            INSERT INTO user_channel_preference (user_id, youtube_channel_id, preference_kind)
+            VALUES ($1::uuid, $2, 'followed') ON CONFLICT DO NOTHING
+            """,
+            user_id, cid,
+        )
+    # And a legacy JSONB blob — the read path should IGNORE it (relational wins).
+    await db_pool.execute(
+        "UPDATE users SET settings = $1::jsonb WHERE user_id = $2::uuid",
+        _json.dumps({"followed_channels": ["IGNORED_LEGACY"]}),
+        user_id,
+    )
+    prefs = await get_preferences(db_pool, user_id)
+    assert prefs["followed_channels"] == ["X1", "X2"], (
+        "relational table must be source of truth; stale JSONB array must be ignored"
+    )

@@ -121,8 +121,11 @@ async def test_translate_item_gloss_cache_key_is_text_case_insensitive(db_pool, 
 # /srs/due — passive card payload
 # ---------------------------------------------------------------------------
 
-async def test_passive_due_card_has_prompt_text_eq_display_text(client: AsyncClient, db_pool):
-    """Passive card: prompt is German display, answer is the gloss."""
+async def test_passive_due_card_has_english_prompt(client: AsyncClient, db_pool):
+    """Passive card (T1.2 / Hole 12): prompt is the English gloss, answer is
+    the German display. Same mapping as active — directions differ only in
+    grading (passive = self-grade reveal, active = typed input via /produce).
+    """
     word_id, word_text, language = await _get_word(db_pool)
     headers, _ = await _register(client, db_pool, _email())
 
@@ -138,8 +141,11 @@ async def test_passive_due_card_has_prompt_text_eq_display_text(client: AsyncCli
     cards = resp.json()
     passive = next((c for c in cards if c["direction"] == "passive"), None)
     assert passive is not None
-    assert passive["prompt_text"] == passive["display_text"] == word_text
-    assert passive["answer_text"] and passive["answer_text"] != passive["display_text"]
+    assert passive["answer_text"] == passive["display_text"] == word_text
+    assert passive["prompt_text"] and passive["prompt_text"] != passive["display_text"], (
+        "passive prompt must carry the gloss, not the German display — otherwise the "
+        "review is pure self-report (Hole 12 regression)."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -250,8 +256,11 @@ async def test_grammar_rule_card_uses_short_explanation_no_llm(client: AsyncClie
     cards = resp.json()
     grammar_card = next((c for c in cards if c["item_id"] == rule_id and c["item_type"] == "grammar_rule"), None)
     assert grammar_card is not None
-    assert grammar_card["prompt_text"] == title
-    assert grammar_card["answer_text"] == short_explanation
+    # T1.2: uniform mapping — prompt = English short_explanation,
+    # answer = German title. The user is cued by the rule's meaning and
+    # tries to recall the rule's name.
+    assert grammar_card["prompt_text"] == short_explanation
+    assert grammar_card["answer_text"] == title
 
 
 # ---------------------------------------------------------------------------
