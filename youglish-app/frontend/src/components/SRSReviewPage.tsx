@@ -557,8 +557,10 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                             </span>
 
                             {/* Front of the card — prompt_text from the backend.
-                                Passive cards: German display.
-                                Active cards: English gloss.
+                                Both directions show the English gloss (T1.2 /
+                                Hole 12). Passive reveals the German answer_text
+                                for self-grading; active expects the user to
+                                type the German into the input below.
                                 Fluid font: 24px on phone, 32px on desktop. */}
                             <div style={{
                                 fontSize: 'clamp(24px, 7vw, 32px)',

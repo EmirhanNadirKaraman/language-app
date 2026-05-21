@@ -49,25 +49,45 @@ These were failing before #0b and are tracked here so they don't get blamed on f
 
 Test runner: Vitest + @testing-library/react + jsdom. Setup: `src/test/setup.ts`.
 
-| File | Covers |
-|---|---|
-| `src/components/TranscriptPanel.test.tsx` | TranscriptPanel rendering |
+**Current count (W13 baseline, 2026-05-20):** ~179+ tests across ~31 files.
+The full per-file inventory is below in the dated "Tests added in this session"
+rows — each W# / T# row lists which test files it added or extended. Rather
+than maintain a parallel index here, treat those rows as the live list and
+update them when you add new tests.
 
-**Coverage is essentially zero on the frontend.** Components, hooks, utils, and api wrappers have no tests. See "Frontend gaps" below.
+Highlights of what's covered now (non-exhaustive — see the dated rows for the
+full picture):
+- Hooks: `useWordStatus` (W13 + T1.1), `useNotifications` (W13 audit fix C),
+  `usePreferences` (#9 follow-up), `useViewport` (#27a), `_http.ts` 401 flow
+  (#11/#13/#14 bundle).
+- Components: `SRSReviewPage` (mobile + behaviour), `ReadingReviewPage` (#5),
+  `WordStatusPicker`, `NotificationToast` (W13 fix A), `ErrorBoundary` (#22),
+  `PlayerView` / `PlayerControls` / `SubtitleDisplay` / `TranscriptPanel`
+  (mobile + theme), `LoginForm`, `BookLibraryPage`, `BookReaderPage`,
+  `ContentRequestPage`, `SettingsPanel`, `PlaylistPanel`,
+  `RecommendationsPanel`, `MessageInput`, `GuidedChatPage`, `PrepView`,
+  `SessionSummaryCard`, `SelectionPanel`, `FreeChatPage`, `ReminderBanner`,
+  `PrivacyPage`.
+- Theme tokens: `src/test/theme.test.tsx` (across #20a/b).
 
 ---
 
 ## Pipeline tests — `tests/`
 
-Hermetic pytest tests for the root pipeline modules (`pipeline.py`, `eligibility.py`, `exposure_counter.py`, etc.). No DB. ~900+ tests according to earlier exploration.
+Hermetic pytest tests. Two sub-trees:
+- `tests/{subtitles,learning,exposure,pipeline}/` — 537 tests against the `src/app/` refactor (TODO #17 inventory).
+- `tests/runtime/` — 20 tests salvaged onto the runtime root modules (W4 batch 1, 2026-05-20: subtitle cleaner / merger / ingestion / multi-speaker guard / word_knowledge / onboarding).
 
-Run: `pytest tests/` from repo root.
+Root suite baseline (W4): **562 passed.** Run: `pytest tests/` from repo root.
 
-Not catalogued individually here — owned by the pipeline modules and rarely touched.
+Backend suite baseline (W13, 2026-05-20): **521 passed / 2 skipped** (xdist parallel run ~48s). Run: `pytest -n auto` from `youglish-app/backend/`.
 
 ---
 
 ## Coverage gaps (backend)
+
+Re-derived 2026-05-20 after the W1–W13 + T1.1–T1.4 rollouts. Many earlier
+gaps closed.
 
 ### No direct test file
 | Service / router | Status |
@@ -75,30 +95,30 @@ Not catalogued individually here — owned by the pipeline modules and rarely to
 | `analytics.py` router (4 endpoints) | covered indirectly by `test_usage_events.py` aggregations, but not end-to-end via HTTP |
 | `books.py` router (upload, list, page, block, llm-repair) | **none** — major gap |
 | `book_service`, `book_llm_service` | none |
-| `content_requests.py` router | none |
-| `insights.py` router + `insights_service` | none — major gap; relevant to Audit Hole 5 (transcript context filter) |
-| `notifications.py` SSE | none |
-| `phrases.py` router + `phrase_service` (seed, match, enrich) | none (broken via `test_matcher.py` until phrase_finder fix) |
-| `reading.py` translate / explain endpoints | none |
-| `reminders.py` | none |
+| `reading.py` translate / explain endpoints | covered indirectly via cache-migration tests (`test_llm_cache_migration.py`); no dedicated router test |
+| `reminders.py` | covered by `test_reminders.py` |
 | `videos.py` | none |
 | `search.py` legacy public endpoints | none |
-| `recommendation_service.enrich_items` for phrases | none |
+| `phrases.py` router + `phrase_service` | indirect via `test_matcher.py` (now green post-#5b) and `test_guided_chat_targets.py` |
+
+### Closed gaps (formerly listed here)
+- `insights.py` / `insights_service` — covered by `test_insights.py` (#5a + #5c).
+- `notifications.py` SSE — covered by `test_notifications.py` (#4a).
+- `content_requests.py` — covered by `test_content_requests.py`.
+- `recommendation_service.enrich_by_type` — covered by `test_recommendations.py` (#5c).
 
 ### Indirect coverage that should be made direct
-- `progression_service` — only tested via integration paths (test_progression covers rule table + helpers, but the full event-flow integrations through guided_chat / free_chat / reading are spread across 3 files)
-- `prioritization_service` — has its own test but downstream consumers (insights, recommendations) aren't asserted
+- `progression_service` — `test_progression.py` covers the rule table + demotion + auto-promotion. End-to-end integrations live in `test_e2e_learning_loop.py` (#29) — `test_free_chat_progression.py`, `test_reading_progression.py`, and `test_srs_review.py` each pin one path.
+- `prioritization_service` — has its own test but downstream consumers (insights, recommendations) aren't asserted.
 
 ### Pipeline (root) gaps
 - No integration test between `pipeline.GermanSubtitlePipeline` and the FastAPI backend (the two never run together in tests).
 - No test that `subtitle-scraper/pipeline.py --requests-only` consumes a `content_request` row, populates `word_table`, and writes a notification.
 
 ### Frontend gaps
-- `App.tsx` routing + auth gates
-- `useWordStatus`, `useGuidedChat`, `useChat`, `useNotifications` (SSE consumer)
-- `WordStatusPicker` — its dead-end on unscraped words (Audit Hole 1) is a UX claim with no test
-- `SRSReviewPage` — the audit's biggest concern (Hole 12/21: review is self-graded) has no behavioural test
-- API client error handling (`assertOk` paths)
+- `App.tsx` routing + auth gates.
+- `useChat`, `useGuidedChat` — still uncovered.
+- (Note: `useWordStatus`, `useNotifications`, `WordStatusPicker`, `SRSReviewPage`, `_http.ts` 401 flow are now covered — see the dated 🆕 rows below.)
 
 ---
 

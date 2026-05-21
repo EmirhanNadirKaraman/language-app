@@ -26,6 +26,10 @@ interface Props {
     onSelectCandidate?: (candidate: WordLookupResult) => void;
     passiveMax?: number;
     activeMax?: number;
+    // Audit fix B: surface lookup + status-save failures inline so the
+    // picker doesn't get stuck on a silent spinner / silently swallow saves.
+    lookupError?: string | null;
+    statusSaveError?: string | null;
 }
 
 export function WordStatusPicker({
@@ -34,6 +38,7 @@ export function WordStatusPicker({
     onLearnAnyway, learnAnywayError,
     candidates = [], onSelectCandidate,
     passiveMax = PASSIVE_MAX, activeMax = ACTIVE_MAX,
+    lookupError, statusSaveError,
 }: Props) {
     const hasCandidates = candidates.length > 0 && !!onSelectCandidate;
     return (
@@ -52,6 +57,16 @@ export function WordStatusPicker({
 
             {loading && (
                 <span style={{ color: 'var(--color-text-subtle)', fontSize: '13px' }}>Looking up…</span>
+            )}
+
+            {/* Audit fix B: lookup failure — picker isn't stuck on a spinner. */}
+            {!loading && lookupError && (
+                <span
+                    data-testid="word-status-lookup-error"
+                    style={{ color: 'var(--color-danger)', fontSize: '12px' }}
+                >
+                    {lookupError}
+                </span>
             )}
 
             {!loading && !lookup && hasCandidates && (
@@ -140,6 +155,15 @@ export function WordStatusPicker({
                 <>
                     {lookup.lemma.toLowerCase() !== word.toLowerCase() && (
                         <span style={{ color: 'var(--color-text-muted)', fontSize: '12px' }}>({lookup.lemma})</span>
+                    )}
+                    {/* Audit fix B: status save failed — leave picker open so user can retry. */}
+                    {statusSaveError && (
+                        <span
+                            data-testid="word-status-save-error"
+                            style={{ color: 'var(--color-danger)', fontSize: '12px', flexBasis: '100%' }}
+                        >
+                            {statusSaveError}
+                        </span>
                     )}
                     {/* Status row wraps on narrow phones so all 3 buttons stay
                         tappable instead of overflowing horizontally. */}

@@ -43,33 +43,57 @@ Last updated: 2026-05-20.
 - [x] **Procfile present** — `web: cd youglish-app && uvicorn backend.main:app
       --host 0.0.0.0 --port $PORT`. Heroku/Render-compatible.
 
+### Now ready (since the original audit)
+
+- [x] **`capacitor.config.ts` written** — placeholder
+      `appId='com.youglish.learning'` (ROADMAP T3.1).
+- [x] **`@capacitor/*` dependencies installed** —
+      `@capacitor/core@8.3.4`, `@capacitor/cli@8.3.4`,
+      `@capacitor/ios@8.3.4` in `frontend/package.json`.
+- [x] **`ios/` directory scaffolded** — `npx cap add ios` complete; web
+      assets copied to `ios/App/App/public/`; Podfile platform bumped to
+      iOS 15 (Capacitor-8 requirement).
+- [x] **API base URL is configurable** — `frontend/src/api/_baseUrl.ts`
+      exports `apiUrl(path)` + `API_BASE_URL`. All 14 api files and the
+      few inline fetches (`BookReaderPage`, `useNotifications`,
+      `useReadingStats`, `useWordColors`, `getPageImageUrl`) route through
+      it. Empty `VITE_API_BASE_URL` preserves the path-relative web
+      behaviour (§8.1, done 2026-05-20).
+- [x] **Account-deletion endpoint + privacy page** — `DELETE
+      /api/v1/account` (W11) cascades private FKs and SET-NULLs
+      audit-signal tables. `/privacy` page accessible logged-out;
+      footer link in the global Layout.
+- [x] **`useNotifications` lifecycle hardened** — per-connection
+      `AbortController` + reconnect timer (W13 audit fix C). Foregrounding
+      after a backgrounded reload reconnects on the next effect fire.
+
 ### Still missing for Capacitor
 
-- [ ] **No `capacitor.config.ts`** — wrapper not yet initialised.
-- [ ] **No `@capacitor/*` dependencies** — `frontend/package.json` is plain
-      React + Vite (no Capacitor packages).
-- [ ] **No `ios/` directory** — no native shell exists.
-- [ ] **API base URL is path-relative** — every `api/*.ts` uses
-      `fetch('/api/v1/...')`. Inside a Capacitor wrap the WebView origin is
-      `capacitor://localhost` (iOS) or `http://localhost` (Android) — there is
-      no backend at that origin. **Must be configurable** before wrap.
 - [ ] **Vite dev proxy is the only thing that makes `/api` work** today —
       `vite.config.ts:11-13` proxies to `localhost:8000`. Production builds
       have no proxy, so a hosted frontend would already need a same-origin
-      backend or a CDN/edge rewrite. Capacitor compounds this.
+      backend or a CDN/edge rewrite. Capacitor compounds this — the
+      hosted backend at the `VITE_API_BASE_URL` value must be reachable.
 - [ ] **Token storage is `localStorage`** — `auth.ts` calls
       `localStorage.getItem/setItem('auth_token')`. Works in Capacitor's
       WKWebView, but not secure (any local script can read it) and not
       ideal for App Store review. Should move to `@capacitor/preferences`
       (or Keychain via `@capacitor-community/secure-storage`).
-- [ ] **SSE polling at 3s** — `useNotifications.ts:19` opens a long-lived
+- [ ] **SSE polling at 3s** — `useNotifications.ts` opens a long-lived
       `fetch('/api/v1/notifications/stream', { signal })`. iOS background
-      kills the connection; no auto-reconnect on app foreground. **#4b
-      LISTEN/NOTIFY refactor is the upstream fix** (not blocking Capacitor
-      but degrades UX).
-- [ ] **No App Store assets** — privacy policy URL, account-deletion flow
-      (required by App Store guideline 5.1.1(v) since June 2022), age
-      rating, support URL.
+      kills the connection. **#4b LISTEN/NOTIFY refactor is the upstream
+      fix** (not blocking Capacitor but degrades UX).
+- [ ] **Real privacy / support email** — `PrivacyPage.tsx` ships a
+      `<YOUR_REAL_PRIVACY_EMAIL_BEFORE_LAUNCH>` placeholder; cannot ship
+      to App Store with this.
+- [ ] **App Store Connect declarations** — Privacy Nutrient Label / Apple
+      App Privacy form, age rating, support URL, screenshots.
+- [ ] **Production env values** — `VITE_API_BASE_URL` for the hosted
+      backend; backend `CORS_ORIGINS` including
+      `capacitor://localhost,https://localhost` plus the web origin.
+- [ ] **Full Xcode + signing** — `xcode-select` currently points at
+      CommandLineTools; need full Xcode to finish `cap sync` and set the
+      development team + bundle ID before TestFlight.
 - [ ] **No splash screen assets** — only icons present. iOS uses the
       LaunchScreen storyboard by default; Capacitor generates one but
       branded splash needs design.
@@ -173,18 +197,16 @@ if (import.meta.env.PROD
       Acceptable to ship v1 with the default white background + logo.
 
 ### 2.7 Privacy / account deletion / App Store requirements
-- [ ] **Privacy policy URL** — public-facing HTML page. Must be linked from
-      App Store Connect AND from inside the app.
-- [ ] **Account deletion flow** — required by Guideline 5.1.1(v). Backend
-      needs a `DELETE /api/v1/auth/account` that:
-      1. Cascades `users` row (CASCADE on FKs to `user_word_knowledge`,
-         `srs_cards`, `user_channel_preference`, `user_video_category`,
-         `reading_selections`, `chat_sessions`, `book_documents`,
-         `word_usage_events`, `notification`, `content_request` —
-         **audit each FK before shipping**).
-      2. Logs out the user client-side.
-      Frontend: a "Delete account" button in `SettingsPanel`, double-confirm,
-      then `signalAuthExpired('unauthorized')`.
+- [x] **Privacy policy URL** — `/privacy` (`PrivacyPage.tsx`) shipped W11.
+      Linked from the global Layout footer. Placeholder contact email
+      still needs replacing before App Store submission.
+- [x] **Account deletion flow** — `DELETE /api/v1/account` shipped W11
+      (router: `routers/account.py`). Single statement `DELETE FROM users
+      WHERE user_id = $1::uuid`; FK declarations carry the cascade. See
+      `docs/PRIVACY.md` for the per-table cascade / SET-NULL audit and
+      `tests/test_account_deletion.py` for the regression guards.
+      Frontend: destructive Account section in `SettingsPanel`, two-step
+      confirm, `signalAuthExpired` on success.
 - [ ] **Age rating** — German language-learning content with YouTube
       embeds. Likely 12+ for "Infrequent/Mild Profanity or Crude Humor"
       (depends on which channels users follow). Disclose in App Store
@@ -436,11 +458,16 @@ is independently shippable; don't bundle.
        Full config + verification checklist in §9 below.
 
 ### 8.2 — Native wrapper setup
-3. [ ] `npm install @capacitor/core @capacitor/cli @capacitor/ios`.
-4. [ ] `npx cap init` (appId, appName, webDir=dist).
+3. [x] `npm install @capacitor/core @capacitor/cli @capacitor/ios`
+       — done (T3.1). `@capacitor/*@8.3.4` in lockfile.
+4. [x] `npx cap init` — `capacitor.config.ts` written with placeholder
+       `appId='com.youglish.learning'`, `appName='YouGlish'`,
+       `webDir='dist'`.
 5. [ ] First `vite build` with `VITE_API_BASE_URL=https://your-backend`.
-6. [ ] `npx cap add ios`.
-7. [ ] `npx cap open ios` → set team + bundle ID in Xcode.
+6. [x] `npx cap add ios` — `ios/` scaffolded; web assets copied to
+       `ios/App/App/public/`; Podfile bumped to iOS 15.
+7. [ ] `npx cap open ios` → set team + bundle ID in Xcode (blocked on
+       full Xcode install).
 8. [ ] Build to simulator. Verify: login, word click, status update, SRS
        review, dark mode follows simulator setting.
 
@@ -455,8 +482,12 @@ is independently shippable; don't bundle.
 13. [ ] Verify offline.html appears with airplane mode on.
 
 ### 8.4 — App Store prep (in parallel with device testing)
-14. [ ] Privacy policy page (host on GitHub Pages or similar).
-15. [ ] Account-deletion endpoint + UI in SettingsPanel.
+14. [x] Privacy policy page — `/privacy` (W11). Linked from the global
+        Layout footer. Replace the placeholder contact email before
+        submission.
+15. [x] Account-deletion endpoint + UI in SettingsPanel — `DELETE
+        /api/v1/account` + destructive Account section with two-step
+        confirm (W11).
 16. [ ] App Store Connect: app record, screenshots (6.7", 5.5"),
         description, keywords, category=Education, age=12+.
 17. [ ] App Privacy disclosures filled in.

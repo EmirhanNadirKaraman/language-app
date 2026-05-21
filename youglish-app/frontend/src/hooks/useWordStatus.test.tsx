@@ -183,3 +183,127 @@ describe('useWordStatus.selectCandidate (W3 / Hole 2 disambiguation)', () => {
         expect(record).not.toHaveBeenCalled();
     });
 });
+
+// ---------------------------------------------------------------------------
+// Audit fix B — error surfacing for lookup / status save / toggle
+// ---------------------------------------------------------------------------
+
+describe('useWordStatus — lookup error surfacing (audit fix B)', () => {
+    beforeEach(() => { vi.restoreAllMocks(); });
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('selectWord surfaces lookupError and clears loading when lookupWord throws', async () => {
+        vi.spyOn(wordsApi, 'lookupWord').mockRejectedValue(new Error('500'));
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const { result } = renderHook(() => useWordStatus('tok', 'de'));
+        await act(async () => { await result.current.selectWord('Auto', 7); });
+
+        expect(result.current.state.loading).toBe(false);
+        expect(result.current.state.lookup).toBeNull();
+        expect(result.current.state.candidates).toEqual([]);
+        expect(result.current.state.lookupError).toBe('500');
+        expect(warn).toHaveBeenCalledWith('lookupWord failed', expect.any(Error));
+    });
+
+    it('dismiss clears lookupError', async () => {
+        vi.spyOn(wordsApi, 'lookupWord').mockRejectedValue(new Error('boom'));
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const { result } = renderHook(() => useWordStatus('tok', 'de'));
+        await act(async () => { await result.current.selectWord('Auto'); });
+        expect(result.current.state.lookupError).toBe('boom');
+
+        await act(async () => { result.current.dismiss(); });
+        expect(result.current.state.lookupError).toBeNull();
+        expect(result.current.selected).toBeNull();
+    });
+
+    it('successful subsequent lookup clears prior lookupError', async () => {
+        const spy = vi.spyOn(wordsApi, 'lookupWord');
+        spy.mockRejectedValueOnce(new Error('boom'));
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        vi.spyOn(wordsApi, 'recordTranscriptClick').mockResolvedValue();
+
+        const { result } = renderHook(() => useWordStatus('tok', 'de'));
+        await act(async () => { await result.current.selectWord('Auto'); });
+        expect(result.current.state.lookupError).toBe('boom');
+
+        // Reselect a different word with a successful response.
+        spy.mockResolvedValueOnce(single({ word_id: 42 }) as never);
+        await act(async () => { await result.current.selectWord('Bahn'); });
+
+        expect(result.current.state.lookupError).toBeNull();
+        expect(result.current.state.lookup?.word_id).toBe(42);
+    });
+});
+
+describe('useWordStatus — status save / toggle error surfacing (audit fix B)', () => {
+    beforeEach(() => { vi.restoreAllMocks(); });
+    afterEach(() => { vi.restoreAllMocks(); });
+
+    it('updateStatus surfaces statusSaveError and resets saving on failure', async () => {
+        vi.spyOn(wordsApi, 'setWordStatus').mockRejectedValue(new Error('PUT 500'));
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const { result } = renderHook(() => useWordStatus('tok', 'de'));
+        await act(async () => { await result.current.updateStatus(42, 'learning'); });
+
+        expect(result.current.state.saving).toBe(false);
+        expect(result.current.state.statusSaveError).toBe('PUT 500');
+        expect(warn).toHaveBeenCalledWith('setWordStatus failed', expect.any(Error));
+    });
+
+    it('updateStatus keeps prior lookup so the picker can retry', async () => {
+        vi.spyOn(wordsApi, 'lookupWord').mockResolvedValue(single({ word_id: 42, current_status: 'unknown' }) as never);
+        vi.spyOn(wordsApi, 'recordTranscriptClick').mockResolvedValue();
+        vi.spyOn(wordsApi, 'setWordStatus').mockRejectedValue(new Error('500'));
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const { result } = renderHook(() => useWordStatus('tok', 'de'));
+        await act(async () => { await result.current.selectWord('Auto'); });
+        await act(async () => { await result.current.updateStatus(42, 'learning'); });
+
+        // Picker stays open with the original lookup intact for a retry.
+        expect(result.current.state.lookup?.word_id).toBe(42);
+        expect(result.current.state.lookup?.current_status).toBe('unknown');
+        expect(result.current.state.statusSaveError).toBe('500');
+    });
+
+    it('successful updateStatus clears a prior statusSaveError', async () => {
+        const setStatus = vi.spyOn(wordsApi, 'setWordStatus');
+        setStatus.mockRejectedValueOnce(new Error('500'));
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const { result } = renderHook(() => useWordStatus('tok', 'de'));
+        await act(async () => { await result.current.updateStatus(42, 'learning'); });
+        expect(result.current.state.statusSaveError).toBe('500');
+
+        setStatus.mockResolvedValueOnce(undefined as never);
+        await act(async () => { await result.current.updateStatus(42, 'learning'); });
+        expect(result.current.state.statusSaveError).toBeNull();
+    });
+
+    it('toggleWordStatus catches lookup failure (no unhandled rejection)', async () => {
+        vi.spyOn(wordsApi, 'lookupWord').mockRejectedValue(new Error('boom'));
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const { result } = renderHook(() => useWordStatus('tok', 'de'));
+        await act(async () => { await result.current.toggleWordStatus('Auto'); });
+
+        expect(warn).toHaveBeenCalledWith('toggleWordStatus failed', expect.any(Error));
+        expect(result.current.state.statusSaveError).toBe('boom');
+    });
+
+    it('toggleWordStatus catches setWordStatus failure', async () => {
+        vi.spyOn(wordsApi, 'lookupWord').mockResolvedValue(single({ word_id: 42, current_status: 'unknown' }) as never);
+        vi.spyOn(wordsApi, 'setWordStatus').mockRejectedValue(new Error('PUT failed'));
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const { result } = renderHook(() => useWordStatus('tok', 'de'));
+        await act(async () => { await result.current.toggleWordStatus('Auto'); });
+
+        expect(warn).toHaveBeenCalledWith('toggleWordStatus failed', expect.any(Error));
+        expect(result.current.state.statusSaveError).toBe('PUT failed');
+    });
+});

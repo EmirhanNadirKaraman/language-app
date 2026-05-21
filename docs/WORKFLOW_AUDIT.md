@@ -99,11 +99,11 @@ That `<…>` requirement is a **soft join** to `word_table` / `phrase_table` / `
 
 Frontend: `SRSReviewPage` ([SRSReviewPage.tsx:27](../youglish-app/frontend/src/components/SRSReviewPage.tsx)).
 
-Card UI shows: direction badge, the **German display text**, a question ("Do you recognise and understand this?"), level dots, and a "Show answer buttons" button followed by "I didn't know it" / "I knew it ✓".
+Passive card UI (post-T1.2): direction badge "Recognition", the **English gloss** as the prompt (`prompt_text`), level dots, and a "Show answer" button. On reveal the German `answer_text` is shown alongside "I didn't know it" / "I knew it ✓" self-grade buttons. Instruction: "Recall the German. Reveal, then self-grade."
 
 ✅ **HOLE 12 (RESOLVED 2026-05-20, T1.2).** `review_service.get_due_cards` now assigns `prompt_text = gloss, answer_text = display_text` for both directions. Passive card front shows the English gloss; reveal shows the German `display_text`; self-grade flow unchanged. Active card unchanged (still typed-input + `evaluate_production`). Both directions share the same prompt/answer mapping; only the grading mode differs. Grammar rule cards now use `prompt = short_explanation, answer = title` as the natural consequence of the uniform mapping.
 
-🕳 **HOLE 13 (no dark mode).** Hardcoded colors: `background: '#fafafa'`, `border: '#e8eaf6'`. Renders illegibly in dark mode.
+✅ **HOLE 13 (RESOLVED 2026-05-19, #20a/#20b).** The hardcoded `#fafafa` / `#e8eaf6` palette was replaced with the CSS-variable theme tokens (`var(--color-surface-muted)`, `var(--color-border-accent)`, etc.). `SRSReviewPage` and every other component now resolve colours through the `[data-theme="light|dark"]` token system. T1.3 (2026-05-20) added the `system | light | dark` tristate on top.
 
 ✅ **HOLE 14 (RESOLVED 2026-05-20, W5).** Skip now calls `POST /api/v1/srs/review/{card_id}/skip` → `review_service.skip_card` which moves `due_date` forward by `SKIP_DEFER_DAYS` (1 day). Touches ONLY `due_date` — no progression event fires, no usage event recorded, no level/interval/ease/repetitions change. The skipped card disappears from `/srs/due` until tomorrow.
 
@@ -138,13 +138,11 @@ Holes:
 
 ## Step 7 — Active SRS review
 
-Same `SRSReviewPage` component. Direction badge says "Production", question changes to "Can you use this naturally in a sentence?". On reveal, an extra row shows `Target: <German word>` ([SRSReviewPage.tsx:240](../youglish-app/frontend/src/components/SRSReviewPage.tsx)).
+Same `SRSReviewPage` component. Direction badge says "Production". Prompt is the English gloss (`prompt_text`, same mapping as passive). Instruction reads "Type the German for this item." A text input + Submit button replaces the self-grade buttons; "I don't know" routes through the same `/srs/review/{id}` endpoint as a passive incorrect. On submit, the backend evaluates the typed answer (`POST /srs/review/{id}/produce`) — fast-path exact match, otherwise `llm_service.evaluate_production`. The feedback panel reveals the canonical German target, what the user typed, and a one-sentence LLM verdict.
 
-🕳 **HOLE 21 (active review does not test production).** Just like Hole 12, the card shows the German word as the prompt. The user is asked self-report whether they could produce it. No translation or cue prompt, no input field, no LLM-judged sentence. The whole "active" track is currently self-graded recognition.
+✅ **HOLE 21 (RESOLVED 2026-05-19, #0a-2).** Active review now genuinely tests production. `POST /api/v1/srs/review/{card_id}/produce` runs `evaluate_production` (tool_use, structured `{correct, feedback, corrected_form}`), routes through `apply_progression(active_review_correct | active_review_incorrect)`, and surfaces the LLM verdict in the UI. Self-grade buttons are no longer exposed for active cards.
 
-Suggested fix: pivot active reviews to use `llm_service.evaluate_and_reply` (the guided-chat eval) on a one-shot user input field. Or at minimum show the English translation as the prompt and the German as the reveal.
-
-🕳 **HOLE 22 (no active-direction display_text resolution).** The card payload doesn't include a translation field. The schema has no place for it. Adding production-style review requires schema or LLM-cache work first.
+✅ **HOLE 22 (RESOLVED 2026-05-19, #0a-1).** The card payload now carries `prompt_text` and `answer_text`. Word/phrase glosses come from `llm_service.translate_item_gloss` (cached permanently via `llm_cache_service.get_or_compute`); grammar rules use `short_explanation` / `title` directly without an LLM call.
 
 ---
 
@@ -235,22 +233,29 @@ If the connection drops between UPDATE and yield, the notification is marked del
 
 ---
 
-## Summary — the loop that almost works
+## Summary — current loop status
 
-What works:
-- Discovery → click → passive level grows → auto-promotes to `learning` → passive SRS card created → due dates honored → SM-2 advances → status filters keep the queue tidy.
-- Reading saves → catalog map → main-progression `status_marked_learning` (correct integration!).
-- Free chat language-detected match → progression. Guided chat per-turn evaluation → progression.
+What works (after W1–W13, T1.1–T1.4, and the 2026-05-18/19/20 hole closures):
+- Discovery → click → dedup-aware exposure (T1.1) → passive level grows → auto-promotes through `learning` → `known` (Hole 9 second branch).
+- Status changes are atomic (`apply_progression` with `status_override`) — Hole 6.
+- `status_marked_learning` creates BOTH passive and active SRS cards (#0b); manual `known` no longer fabricates active mastery (Hole 8); manual `unknown` resets cards via SM-2 incorrect (Hole 7).
+- Manual demotion (known→learning, known→unknown, learning→unknown) resets levels and reschedules cards via the `_apply_demotion` branch (Hole 26).
+- Passive review is a real recall test against the English gloss (T1.2 / Hole 12). Active review is a real production test via typed input + LLM evaluation (#0a-2 / Hole 21).
+- Reading saves push into main progression as `status_marked_learning`; reading `mastered` propagates to `status_marked_known` (Hole 24). `ReadingReviewPage` at `/reading-review` is the global queue (#5 / Hole 25).
+- Free chat and guided chat both treat phrases as first-class (Hole 17, 18). Recommendation enrichment dispatches via `enrich_by_type` (Hole 17 / #5c).
+- Transcript clicks surface in the "Keeps coming up" insight card (Hole 5).
+- Notifications: per-row mark-after-yield ordering (Hole 28); `request_failed` notifications fire on scraper errors (Hole 30); `useNotifications` lifecycle is `AbortController`-cleaned per W13 audit fix C.
+- Dark mode is a real theme system (#20a/b); tristate `system | light | dark` (T1.3).
+- LLM cache has a per-key `asyncio.Lock` so concurrent misses cause one provider call (#24). All cached call sites migrated.
+- LLM-backed routes are rate-limited per user (#12). CORS env-driven (#11). JWT expiry differentiated (#13). Frontend has a shared 401 handler that dispatches `auth:expired` (#14).
+- Account deletion + privacy page shipped (W11). Mobile responsive + PWA shell + icons shipped (#27a–i).
 
-What doesn't, in priority order:
-1. **Active review (Hole 21) is fake** — it just shows the German word and asks the user to grade themselves. The entire "Production" side of SRS is currently a self-report dialog, not a test.
-2. **Passive review (Hole 12) is also self-report** — same shape problem in the recognition direction.
-3. **No path to schedule active practice** for learning words other than entering guided chat manually (Hole 11, 16, 17).
-4. **Reading SRS is parallel and uncoordinated** with main SRS (Hole 23, 24, 25).
-5. **Notification delivery is unreliable** (Hole 28) and silent on failure (Hole 30).
-6. **Transcript-clicked words don't surface in insights** (Hole 5).
-7. **Phrases get second-class treatment** in free chat matching, guided chat target selection, and recommendation enrichment (Hole 17, 18; `enrich_items` in recommendation_service has a TODO comment confirming this).
-8. **Status-change atomicity** across the two router calls (Hole 6).
-9. **Empty `status_marked_unknown` rule** and partial `status_marked_known` (Hole 7, 8).
+What's still open / accepted-not-closed:
+1. **Hole 23 — dual SRS schedule (accepted).** Reading queue and main SRS queue diverge after the first review; documented as a UX choice. Revisit if duplication starts confusing users.
+2. **Hole 27 — silent forgetting.** No scheduled auto-demotion of `known` items. Needs a UX call before code.
+3. **Hole 19 / Hole 20 — free-chat language hardcoded `'de'` + per-message detection.** Bundled into the future multi-language work (#18, #19); zero practical impact while only German exists.
+4. **Hole 10 — orphaned SRS cards (operational hygiene).** `scripts/cleanup_orphan_srs_cards.py` exists; periodic job is a polish task.
+5. **Hole 33 / Hole 34 — per-direction `last_seen` + recommendation keys.** Future-proofing for richer ranking.
+6. **TODO #4b — LISTEN/NOTIFY refactor.** Cost/perf, not correctness; deferred until user count warrants it.
 
-These are the holes to close before claiming "end-to-end word learning works."
+The end-to-end "word learns, gets scheduled, gets produced, gets mastered" loop is now closed.

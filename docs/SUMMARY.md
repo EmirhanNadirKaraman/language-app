@@ -11,7 +11,7 @@ Conventions: each entry is `path — purpose. Touchpoints.` Touchpoints list adj
 ### Entry + infra
 | Path | Purpose |
 |---|---|
-| `main.py` | FastAPI app. Lifespan: pool init, phrase + grammar seeds, resume pending content requests. Mounts all 14 routers. CORS hardcoded (TODO #11). |
+| `main.py` | FastAPI app. Lifespan: pool init, phrase + grammar seeds, resume pending content requests. Mounts all routers. CORS env-driven via `CORS_ORIGINS` (`_parse_cors_origins`). |
 | `database.py` | asyncpg pool create/close/get. Single global pool. |
 | `core/deps.py` | `get_current_user` JWT verification dependency. |
 | `core/security.py` | password hashing (bcrypt), `encode_token` / `decode_token`. |
@@ -39,7 +39,7 @@ Conventions: each entry is `path — purpose. Touchpoints.` Touchpoints list adj
 | `search.py` | `/search`, `/suggest`, `/word-forms`, `/languages`, `/categories`, `/video-sentences` (legacy public, no auth) | `search_service` |
 | `videos.py` | `/videos/{id}/reading-stats` | `reading_stats_service` |
 | `content_requests.py` | `/content-requests` POST/GET. Spawns `subtitle-scraper/pipeline.py --requests-only` subprocess. | direct SQL + subprocess |
-| `notifications.py` | `/notifications/stream` (SSE). Marks `seen=true` before yield — TODO #4 bug. | direct SQL |
+| `notifications.py` | `/notifications/stream` (SSE). Per-row mark-after-yield ordering (disconnect leaves un-yielded rows unseen for re-delivery). LISTEN/NOTIFY refactor deferred (TODO #4b). | direct SQL |
 
 ### Services (business logic) — `youglish-app/backend/services/`
 | Path | Owns |
@@ -47,8 +47,8 @@ Conventions: each entry is `path — purpose. Touchpoints.` Touchpoints list adj
 | `progression_service.py` | **Single source of truth** for knowledge-state changes. `_RULES` dict maps event → ProgressionDelta. `apply_progression` is transactional (line 178). `_update_srs` runs SM-2 and now skips active-card creation for grammar_rule (line 268). |
 | `review_service.py` | Real SRS implementation. `get_due_cards` joins per-type display table. `submit_answer` maps to `progression_service`. |
 | `word_service.py` | `lookup_word_by_text` (ILIKE on word_table; ambiguous on POS), `get_user_knowledge`. (`upsert_word_status` was deleted 2026-05-19 — `progression_service.apply_progression(..., status_override=...)` is now the single writer.) |
-| `chat_service.py` | session/message CRUD + `match_learning_words` (free-chat token matching — words only, no phrases TODO #5b). |
-| `guided_chat_service.py` | `get_next_target` (priority: due active → learning without active → random; words only TODO #5b), `update_progress` (event mapping). |
+| `chat_service.py` | session/message CRUD + `match_learning_words` (free-chat matching against the user's vocab — words **and** phrases, via `matcher_service.match_sentence_with_ids` for the phrase half). |
+| `guided_chat_service.py` | `get_next_target` (priority: due active → learning without active → random; considers words AND phrases at every tier), `update_progress` (event mapping). |
 | `llm_service.py` | All Claude Haiku calls. tool_use for structured outputs. Cached via `llm_cache_service`. Has `MOCK_LLM=true` mode. |
 | `llm_cache_service.py` | SHA256(prompt_key+model+params) → `llm_cache` table. TTL or permanent. |
 | `book_service.py` | PDF upload, docling+masking ingestion, page/block CRUD, sentence_count, user_text_override. |
@@ -57,10 +57,10 @@ Conventions: each entry is `path — purpose. Touchpoints.` Touchpoints list adj
 | `reading_llm_service.py` | `translate_sentence`, `explain_in_context`. Permanent cache. |
 | `reading_stats_service.py` | Lemma coverage stats for books/videos. |
 | `insights_service.py` | `get_insight_cards` (frequent_unknowns, recent_mistakes), `get_prep_data` (translation + grammar + examples + linked rules). |
-| `recommendation_service.py` | Pure scoring functions (score_sentence, score_video, channel_category_multiplier) + DB orchestration. `enrich_items` is word-only (TODO #5c). |
+| `recommendation_service.py` | Pure scoring functions (score_sentence, score_video, channel_category_multiplier) + DB orchestration. Mixed item types go through `enrich_by_type` (dispatches to per-type enrichers for word/phrase/grammar_rule). `enrich_items` remains the word-only backend. |
 | `prioritization_service.py` | `get_prioritized_items` — combines is_due (×4), mistake_recency (×3 decay), freq_rank (×2 linear), is_learning (×1). |
-| `usage_events_service.py` | `record_event` (analytics fire-and-forget) + 4 aggregations. Filter excludes `'transcript'` context (TODO #5a). |
-| `matcher_service.py` | Async wrapper around `subtitle-scraper/phrase_finder.py`. Module-level `os.chdir` import hack. `match_sentence` runs sync spaCy in thread pool. |
+| `usage_events_service.py` | `record_event` (analytics fire-and-forget) + `record_transcript_click_event` (atomic dedup-aware insert) + 4 aggregations. Insight filters include `'transcript'` context. |
+| `matcher_service.py` | Async wrapper around `subtitle-scraper/phrase_finder.py`. Imports the scraper via `sys.path.insert` (post-#3, no more `os.chdir`). `match_sentence` runs sync spaCy in a thread pool. |
 | `phrase_service.py` | `seed_from_blueprint_map`, `enrich_phrases`, phrase_type inference from blueprint. |
 | `grammar_service.py` | `seed_rules` (curated DE list), `get_rules_for_phrase_type`, `get_rules_for_lemma`. |
 | `playlist_service.py` | Video playlist generation from target words. |
@@ -93,7 +93,7 @@ See `docs/TESTS.md` for full list, coverage status, and known failures.
 | `/for-you` | `ForYouPage` → `RecommendationsPanel` | Items, videos, sentences + InsightsSection |
 | `/playlist` | `PlaylistPage` | Build playlists from target words |
 | `/books` | `BooksPage` → `BookLibraryPage` / `BookReaderPage` | Upload, list, read PDFs |
-| `/review` | `ReviewPage` → `SRSReviewPage` | SRS due cards (self-graded today TODO #0a) |
+| `/review` | `ReviewPage` → `SRSReviewPage` | SRS due cards. Passive = English-gloss prompt + reveal + self-grade; active = typed German + LLM evaluation via `/srs/review/{id}/produce`. |
 | `/add-content` | `AddContentPage` → `ContentRequestPage` | Channel/video requests |
 | `/settings` | `SettingsPage` → `SettingsPanel` | Prefs, colours, reps, channels, dark mode |
 
@@ -107,10 +107,9 @@ Grouped by feature:
 - `PlayerControls.tsx` — prev/next/replay
 - `SubtitleDisplay.tsx` — clickable highlighted text
 - `TranscriptPanel.tsx` — sentence list with statuses (has its own test)
-- `ResultCard.tsx` — search result card
 
 **Word interaction**
-- `WordStatusPicker.tsx` — modal lookup + status switcher. Dead-ends on unscraped words (Audit Hole 1).
+- `WordStatusPicker.tsx` — modal lookup + status switcher. Offers "Learn this anyway" when the surface isn't in the catalog (W2 / Hole 1); shows a candidate chooser when `/by-text` returns `status='ambiguous'` (W3 / Hole 2).
 - `TurnFeedbackChip.tsx` — eval chip in chat
 
 **Chat**
@@ -123,7 +122,7 @@ Grouped by feature:
 - `BookLibraryPage.tsx` — list, upload, sort, delete
 - `BookReaderPage.tsx` — page view, word highlighting, selection panel, translate row
 - `SelectionPanel.tsx` — save custom learning unit from selected tokens
-- `SelectionReviewPanel.tsx` — review saved selections (per-book; no global session UI yet TODO #5)
+- `SelectionReviewPanel.tsx` — review saved selections per-book. Global session loop lives at `/reading-review` (`ReadingReviewPage.tsx`, shipped #5).
 - `ReadingStatsPanel.tsx` — coverage stats
 
 **Recommendations / insights**
@@ -138,11 +137,11 @@ Grouped by feature:
 ### Hooks — `src/hooks/`
 | Hook | Purpose |
 |---|---|
-| `useSearch.ts` | Query state + pagination. Hardcodes `language='de'` (Audit + TODO #10). |
-| `usePreferences.ts` | Fetch + update prefs. Silent catch on failure (TODO #9). |
+| `useSearch.ts` | Query state + pagination. Takes `language` as a parameter (defaults to `'de'`); caller threads `recLanguage`. |
+| `usePreferences.ts` | Fetch + update prefs. Exposes `error`; preserves last-known prefs on failure instead of snapping back to defaults. |
 | `useChat.ts`, `useGuidedChat.ts` | Free + guided chat lifecycles. |
 | `usePlayerSentences.ts` | Sentence parsing, navigation. |
-| `useWordStatus.ts` | Lookup + mark. `recordTranscriptClick` fire-and-forget. |
+| `useWordStatus.ts` | Lookup + mark + W3 ambiguous-candidate flow. `recordTranscriptClick` surfaces failures via `console.warn`; backend dedups per `(user, item, sentence_id, UTC day)`. |
 | `useWordColors.ts` | Page-level word-status fetch for highlighting. |
 | `useNotifications.ts` | SSE consumer. |
 | `useReminders.ts`, `useReadingStats.ts`, `useRecommendations.ts`, `useInsights.ts` | Feature-specific data fetchers. |
@@ -197,7 +196,7 @@ Pytest tests for pipeline modules. Mostly hermetic (no DB).
 |---|---|
 | `pipeline.py` | yt-dlp scraper orchestrator. `load_channels` (DB), `populate`, `insert_phrases`, `_notify_user`, `_mark_request`. Run modes: full, `--requests-only`. |
 | `transcript_fetcher.py` | yt-dlp wrapper. JSON3 + WebVTT parsing. Cache under `transcript_cache/`. |
-| `phrase_finder.py` | German phrase extraction. Loads `data/final_result.txt` + spaCy at import. Currently has a bug (Doc vs str) breaking matcher tests — see TESTS.md. |
+| `phrase_finder.py` | German phrase extraction. Loads `data/final_result.txt` (path resolved from `__file__`, no chdir) + spaCy at import. `matcher_service.match_sentence` wraps the str in `nlp(...)` before calling `extract_german_logic`. |
 | `seed_channels.py` | Bootstrap upsert of `seed_data/channels.json` → `channel` table. Idempotent. |
 | `backfill_video_channels.py`, `backfill_channel_names.py`, `backfill_categories.py` | One-off backfills. |
 | `channel_finder.py` | YouTube subscription / CSV channel discovery. Prints IDs to stdout. |
@@ -274,14 +273,14 @@ Pytest tests for pipeline modules. Mostly hermetic (no DB).
 | Question | Open |
 |---|---|
 | Where is the state machine? | `youglish-app/backend/services/progression_service.py` (`_RULES`) |
-| Where does a transcript click go? | `routers/words.py:34` → `progression_service.apply_progression("transcript_clicked")` |
+| Where does a transcript click go? | `routers/words.py:record_transcript_click` → `usage_events_service.record_transcript_click_event` (atomic dedup via unique partial index); only on a new insert does it then call `progression_service.apply_progression("transcript_clicked")`. |
 | Where do SRS cards come from? | `progression_service._update_srs` — created on `passive_srs/active_srs="create"` or first correct event |
 | Where is the LLM called? | `services/llm_service.py` — all calls go through here, cached via `llm_cache_service` |
 | Where is the polymorphic `(item_id, item_type)` join? | `review_service.get_due_cards` is the canonical example; `usage_events_service` analytics too |
 | Where do book pages render? | `frontend/src/components/BookReaderPage.tsx`, blocks via `book_service.get_page_detail` |
-| Where do free-chat words match against vocab? | `chat_service.match_learning_words` (words only — TODO #5b) |
+| Where do free-chat words match against vocab? | `chat_service.match_learning_words` (words via direct SQL; phrases via `matcher_service.match_sentence_with_ids`). |
 | Where are reading selections wired into main progression? | `routers/reading.py:156` calls `find_catalog_item` then `apply_progression("status_marked_learning")` |
 | Where is `users.settings` JSONB read/written? | `services/settings_service.py` — defaults live here |
-| Where do notifications get written? | `subtitle-scraper/pipeline.py:_notify_user` (only on success — TODO #4) |
+| Where do notifications get written? | `subtitle-scraper/pipeline.py:_notify_user` for success (`video_done`, `channel_done`); `_mark_request` emits `request_failed` whenever `status='failed'`. |
 | Where is auth enforced? | `core/deps.py:get_current_user` — every router uses it as a Depends |
 | What seeds run on startup? | `main.py` lifespan: `phrase_service.seed_from_blueprint_map`, `grammar_service.seed_rules`, resume pending content_requests |

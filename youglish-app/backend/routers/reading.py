@@ -135,7 +135,7 @@ async def save_selection(
       canonical    — normalized form for deduplication
       surface_text — exact text as selected
       sentence_text — surrounding sentence (context container)
-      anchors      — [{block_id, token_index, surface}]
+      anchors      — [{block_id, token_id, surface}]   (string token_id since migration 025)
       note         — optional user note
     """
     await _require_doc(pool, doc_id, str(user["user_id"]))
@@ -268,9 +268,21 @@ async def review_selection(
     Record a review event for a custom learning unit.
 
     outcome='got_it'         — mark as recalled; increments review_count and
-                               schedules next review per the interval table
-    outcome='still_learning' — reset review_count, due immediately again
-    outcome='mastered'       — move to 'mastered' status, exits review rotation
+                               schedules next review per the interval table.
+                               When a catalog item matches, also fires
+                               passive_review_correct against the main SRS card.
+    outcome='still_learning' — reset review_count, due immediately again.
+                               When a catalog item matches, also fires
+                               passive_review_incorrect.
+    outcome='mastered'       — move to 'mastered' status, exits review
+                               rotation. When a catalog item matches, also
+                               fires status_marked_known with
+                               status_override='known' so the user_word_knowledge
+                               row flips to 'known' atomically (Hole 24 / #5).
+                               Per policy, reading 'Mastered' is manual known
+                               confidence, NOT active production evidence —
+                               active_level and the active SRS card are not
+                               touched.
     """
     row = await reading_service.record_review(
         pool, selection_id, str(user["user_id"]), body.outcome,

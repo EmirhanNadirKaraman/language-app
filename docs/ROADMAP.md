@@ -7,7 +7,7 @@ numbers the workflow holes referenced below).
 Last re-ranked: 2026-05-20 (later same day — direction changed: finish
 polishing the web/desktop app to "bug free" first, then resume iOS
 migration. T1.1–T1.4, the four Capacitor-prereq Tier-1 items, are all
-done. W1–W8 + W10 + W11 + W12 also done; W1 verified clean
+done. W1–W8 + W10 + W11 + W12 + W13 also done; W1 verified clean
 (`npm audit` → 0 vulns); W8 #25 sub-task reported as overscoped and
 dropped; W10 BookReaderPage memoization deferred as
 architecture-not-memo; W11 shipped account-deletion endpoint +
@@ -306,6 +306,33 @@ old Tier 2 ordering for the moment.
   exact command to produce an SVG later.
 - **Verified:** backend 528 passed / 2 skipped (was 521; +7);
   frontend 158 passed; `tsc` clean; `vite build` clean.
+
+### W13 — Audit fixes A + B + C — ✅ RESOLVED 2026-05-20
+- **A (notification toast):** `request_failed` was emitted by the
+  scraper but rendered as a green success toast with `undefined`
+  fields. Frontend `AppNotification.type` union extended to include
+  `'request_failed'`; `NotificationToast` now branches explicitly per
+  type with danger tokens + `!` icon for failures; success branches
+  gracefully degrade when payload fields are missing. 4 new tests in
+  `NotificationToast.test.tsx`.
+- **B (useWordStatus error surfacing):** `State` gained
+  `lookupError` + `statusSaveError`. `selectWord` try/catches the
+  `lookupWord` call so a failed lookup no longer leaves the picker
+  stuck on a spinner. `updateStatus` surfaces save failures inline
+  and keeps the picker open with the prior lookup intact for retry.
+  `toggleWordStatus` (right-click path in BookReaderPage) wrapped in
+  try/catch — no more unhandled promise rejections. `WordStatusPicker`
+  renders inline danger chips for both error fields; `PlayerView` and
+  `BookReaderPage` thread the new props through. 8 new tests in
+  `useWordStatus.test.tsx`.
+- **C (useNotifications lifecycle):** replaced the `cancelRef` boolean
+  with `AbortController` per connection + a ref-held reconnect timer.
+  Cleanup, token change, and reconnect all abort the prior controller
+  before starting a new one. One-hook-one-live-signal invariant proven
+  by a StrictMode-style multi-rerender test. 9 new tests in new
+  `useNotifications.test.tsx` (fake timers + mocked fetch).
+- **Verified:** `tsc` clean; vitest **179 passed across 31 files**
+  (was 158; +21); `vite build` clean (+3 kB).
 
 ### Deferred until web polish ships
 

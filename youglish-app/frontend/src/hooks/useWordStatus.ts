@@ -11,6 +11,10 @@ interface State {
     loading: boolean;
     saving: boolean;
     learnAnywayError: string | null;
+    // Audit fix B: surface lookup + status-save failures so the picker
+    // doesn't get stuck on a spinner or silently swallow errors.
+    lookupError: string | null;
+    statusSaveError: string | null;
 }
 
 const IDLE: State = {
@@ -19,6 +23,8 @@ const IDLE: State = {
     loading: false,
     saving: false,
     learnAnywayError: null,
+    lookupError: null,
+    statusSaveError: null,
 };
 
 export function useWordStatus(token: string | null, language: string) {
@@ -52,14 +58,33 @@ export function useWordStatus(token: string | null, language: string) {
         setState({
             lookup: null, candidates: [],
             loading: true, saving: false, learnAnywayError: null,
+            lookupError: null, statusSaveError: null,
         });
-        const resp = await wordsApi.lookupWord(token, word, language);
+
+        // Audit fix B: lookupWord can throw on network / 5xx / 429. Without a
+        // try/catch, `loading: true` would stick forever and the picker would
+        // be stuck on the spinner.
+        let resp;
+        try {
+            resp = await wordsApi.lookupWord(token, word, language);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Lookup failed';
+            console.warn('lookupWord failed', err);
+            setState({
+                lookup: null, candidates: [],
+                loading: false, saving: false, learnAnywayError: null,
+                lookupError: msg, statusSaveError: null,
+            });
+            pendingSentenceIdRef.current = undefined;
+            return;
+        }
 
         if (resp.status === 'single' && resp.item) {
             // Single match — set lookup and record transcript exposure now.
             setState({
                 lookup: resp.item, candidates: [],
                 loading: false, saving: false, learnAnywayError: null,
+                lookupError: null, statusSaveError: null,
             });
             fireTranscriptClick(resp.item.word_id, sentenceId);
             pendingSentenceIdRef.current = undefined;
@@ -68,6 +93,7 @@ export function useWordStatus(token: string | null, language: string) {
             setState({
                 lookup: null, candidates: resp.candidates,
                 loading: false, saving: false, learnAnywayError: null,
+                lookupError: null, statusSaveError: null,
             });
             // pendingSentenceIdRef stays — selectCandidate will consume it.
         } else {
@@ -75,6 +101,7 @@ export function useWordStatus(token: string | null, language: string) {
             setState({
                 lookup: null, candidates: [],
                 loading: false, saving: false, learnAnywayError: null,
+                lookupError: null, statusSaveError: null,
             });
             pendingSentenceIdRef.current = undefined;
         }
@@ -98,30 +125,46 @@ export function useWordStatus(token: string | null, language: string) {
 
     const updateStatus = useCallback(async (wordId: number, status: string) => {
         if (!token) return;
-        setState(s => ({ ...s, saving: true }));
+        // Clear any prior error and start the save.
+        setState(s => ({ ...s, saving: true, statusSaveError: null }));
         try {
             await wordsApi.setWordStatus(token, wordId, status);
             setRefreshKey(k => k + 1);
             setState(s => ({
                 ...s,
                 saving: false,
+                statusSaveError: null,
                 lookup: s.lookup ? { ...s.lookup, current_status: status } : null,
             }));
-        } catch {
-            setState(s => ({ ...s, saving: false }));
+        } catch (err) {
+            // Audit fix B: don't silently swallow. Keep the picker open with
+            // the prior lookup intact so the user can retry.
+            const msg = err instanceof Error ? err.message : 'Failed to save status';
+            console.warn('setWordStatus failed', err);
+            setState(s => ({ ...s, saving: false, statusSaveError: msg }));
         }
     }, [token]);
 
     const toggleWordStatus = useCallback(async (word: string) => {
         if (!token) return;
         const CYCLE = ['unknown', 'learning', 'known'];
-        const resp = await wordsApi.lookupWord(token, word, language);
-        const result = wordsApi.pickSingleOrFirst(resp);
-        if (!result) return;
-        const idx = CYCLE.indexOf(result.current_status ?? '');
-        const next = CYCLE[(idx + 1) % CYCLE.length];
-        await wordsApi.setWordStatus(token, result.word_id, next);
-        setRefreshKey(k => k + 1);
+        // Audit fix B: wrap the entire flow. This path (right-click in
+        // BookReaderPage) had no error handling at all — failures produced
+        // unhandled promise rejections. Surface in statusSaveError so a
+        // mounted picker can render the error; otherwise console.warn only.
+        try {
+            const resp = await wordsApi.lookupWord(token, word, language);
+            const result = wordsApi.pickSingleOrFirst(resp);
+            if (!result) return;
+            const idx = CYCLE.indexOf(result.current_status ?? '');
+            const next = CYCLE[(idx + 1) % CYCLE.length];
+            await wordsApi.setWordStatus(token, result.word_id, next);
+            setRefreshKey(k => k + 1);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to toggle status';
+            console.warn('toggleWordStatus failed', err);
+            setState(s => ({ ...s, statusSaveError: msg }));
+        }
     }, [token, language]);
 
     const learnAnyway = useCallback(async () => {
@@ -133,6 +176,7 @@ export function useWordStatus(token: string | null, language: string) {
             setState({
                 lookup: result, candidates: [],
                 loading: false, saving: false, learnAnywayError: null,
+                lookupError: null, statusSaveError: null,
             });
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to add word';

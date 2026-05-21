@@ -340,11 +340,10 @@ Coverage of the batch: 8 cleaner + 4 merger + 4 guard + 2 noise + 1 knowledge + 
 
 #### Out of scope for this card
 
-- **#3 (`os.chdir` import hacks)** remains separate. The two surviving uses live in **runtime code** (`youglish-app/backend/services/matcher_service.py:23` and `subtitle-scraper/pipeline.py:24`). Neither lives under `src/app/`. Deleting `src/app/` does not help #3 at all — that's its own fix.
+- **#3 (`os.chdir` import hacks)** has since been resolved separately (2026-05-20 — `phrase_finder` now resolves its data path from `__file__`, so every call site can just `sys.path.insert` and import normally).
 - Don't change `subtitle-scraper/` imports.
-- Don't touch `tests/legacy/` (already `collect_ignore_glob`-skipped per root `conftest.py`).
 
-**Status:** Plan agreed (B-min ruled out; B-redirect deferred until salvage batch lands). Awaiting approval to begin batch 1 (the 20 tests above).
+**Status:** Batch 1 shipped 2026-05-20 (W4) — 20 behavioural tests ported into `tests/runtime/` (subtitle cleaner / merger / ingestion / multi-speaker guard / word_knowledge / onboarding). Runtime APIs matched the refactor exactly; no production code changed. Batches 2+ not yet started; `src/app/` and the rest of `tests/{subtitles,learning,exposure,pipeline}/` still in place pending further salvage.
 
 ### 18. 🟡 Hardcoded language config in scraper
 **File:** `subtitle-scraper/pipeline.py:36–60` (`LANG_MODEL_MAP`, `LANG_TRANSCRIPT_CODES`, `NO_MORPH_LANGS`)
@@ -758,10 +757,8 @@ Grep confirmed only one caller (`LoginForm.tsx:30`) and it already null-handles 
 **Problem:** `getStoredEmail()` can return `null` but several callers don't check.
 **Fix:** Tighten the return type, add a guard.
 
-### 33. 🟢 `pyfile` `pytest.ini` ignores legacy tests
-**File:** `conftest.py`
-**Problem:** `tests/legacy/*` glob-ignored — no one has looked at them in a while.
-**Fix:** Either restore them as canary tests or delete them.
+### 33. ✅ Legacy test directory deleted — RESOLVED 2026-05-20 (W8)
+`tests/legacy/` (9 ad-hoc phrase_finder debug scripts + `__init__.py` + `__pycache__/`) was deleted, and the `collect_ignore_glob = ["tests/legacy/*"]` line was removed from the root `conftest.py` in the same commit. No remaining references.
 
 ---
 
@@ -803,14 +800,16 @@ Three viable paths, ordered by effort:
 
 ---
 
-## Suggested execution order
+## Historical execution order (mostly past-tense)
 
-1. **#0a, #0b** — the SRS review UI is currently a self-grading checkbox. Until it actually tests recall/production, every other progression metric is built on noise. Fix the review UX first, then add `active_srs="create"` to `status_marked_learning` so cards exist to be reviewed.
-2. **#1, #5d** — clean up dead `srs_service` endpoints; fix the inconsistent progression rule table. Both touch the state machine; bundle them.
-3. **#2, #5a, #5b** — close the silent gaps: atomicity in `routers/words.py:update_status`, transcript clicks into the insights filter, phrases into chat matching + guided target selection.
-4. **#4, #5** — make notifications reliable (yield before mark-seen, fire on failure, switch to LISTEN/NOTIFY). Build `ReadingReviewPage` so the reading SRS endpoints have a UI. Resolve the double-schedule issue (#5) by picking one schedule per item.
-5. **#6, #7** — get `users.settings` channel prefs and the scraper flat files out of the JSON-in-DB gray zone.
-6. **#11, #12, #13, #14** — deploy gates (CORS, rate limit, JWT error shape, frontend 401 handler).
-7. **#17, #20** — pay down the structural debt before #27 (mobile) doubles the work.
-8. **#3** — opportunistically replace the `os.chdir` import hacks during a `subtitle-scraper/` reorganisation.
-9. Everything else as it comes up.
+Kept as a trace of the dependency chain we followed. The live priority view is `docs/ROADMAP.md`.
+
+1. **#0a, #0b** — the SRS review UI was a self-grading checkbox. Resolved 2026-05-19: backend now ships `prompt_text` + `answer_text`, active review is a real production test, `status_marked_learning` creates both passive and active cards.
+2. **#1, #5d** — dead `srs_service.py` endpoints removed; progression rule table cleaned. Resolved 2026-05-18/19.
+3. **#2, #5a, #5b** — status-update atomicity (`status_override`), insights filter includes `'transcript'`, free chat + guided target both handle phrases. Resolved 2026-05-18/19.
+4. **#4a, #5** — notifications: per-row mark-after-yield + `request_failed` firing. `ReadingReviewPage` shipped, mastered→known propagation wired. Dual-schedule (#5 sub-issue / Hole 23) accepted, not closed. Resolved 2026-05-19/20. **#4b LISTEN/NOTIFY still deferred.**
+5. **#6, #7** — channel prefs moved to `user_channel_preference` (migration 027 / T1.4); scraper flat-files consolidated to `seed_data/channels.json`. Resolved 2026-05-20.
+6. **#11, #12, #13, #14** — deploy gates (CORS env-driven, rate limit, JWT error shape, shared frontend 401 handler). Resolved 2026-05-19.
+7. **#17, #20** — structural debt: src/app salvage batch 1 (W4); dark-mode theme system (#20a/b) + tristate (T1.3). Resolved 2026-05-19/20.
+8. **#3** — `os.chdir` import hacks replaced by path-from-`__file__` in `phrase_finder.py`. Resolved 2026-05-20.
+9. Everything else as it comes up — see `docs/ROADMAP.md` Tier 4 + Tier 5 for what's still open.

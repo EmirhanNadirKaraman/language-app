@@ -156,6 +156,8 @@ export function PlayerView({ result, query, token, canPrev, canNext, onPrev, onN
                     onDismiss={dismiss}
                     passiveMax={passiveMax}
                     activeMax={activeMax}
+                    lookupError={state.lookupError}
+                    statusSaveError={state.statusSaveError}
                 />
             )}
 

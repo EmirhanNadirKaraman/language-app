@@ -21,7 +21,7 @@ async def lookup_word_by_text(
         candidates: [<WordLookupResult dict>...]
       }
 
-    W3 fix (Hole 2): the pre-T1.4 query ended with `LIMIT 1`, which silently
+    W3 fix (Hole 2): the pre-W3 query ended with `LIMIT 1`, which silently
     picked an arbitrary row when the same surface form mapped to multiple
     entries (e.g. *die Bank* = bench vs. financial institution → different
     `pos`/`lemma`). Mastery progress could attach to the wrong meaning

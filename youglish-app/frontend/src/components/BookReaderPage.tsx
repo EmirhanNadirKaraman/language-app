@@ -1157,6 +1157,8 @@ export function BookReaderPage({ token, doc, onClose, autoMarkKnown }: Props) {
             setWordStatuses(prev => ({ ...prev, [wsSelected.toLowerCase()]: status }));
           }}
           onDismiss={wsDismiss}
+          lookupError={wsState.lookupError}
+          statusSaveError={wsState.statusSaveError}
         />
       )}
     </div>

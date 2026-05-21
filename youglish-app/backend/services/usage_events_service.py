@@ -4,8 +4,12 @@ Word usage events — write and aggregate.
 record_event() is fire-and-forget: call it with asyncio.create_task() from
 routers so analytics failures never crash the main request path.
 
-Valid contexts:  'free_chat' | 'guided_chat' | 'status_change' | 'srs_review'
+Valid contexts:  'free_chat' | 'guided_chat' | 'status_change' | 'srs_review' | 'transcript'
 Valid outcomes:  'seen' | 'used' | 'correct' | 'incorrect'
+
+Note: 'transcript' events are normally written via record_transcript_click_event
+(atomic dedup against the unique partial index from migration 026); the legacy
+fire-and-forget path in routers/words.py also uses context='transcript'.
 """
 import asyncpg
 
