@@ -562,6 +562,73 @@ async def test_scalar_settings_still_persist_in_jsonb(client, db_pool):
     assert raw["passive_reps_for_known"] == 9
 
 
+async def test_channel_action_preserves_out_of_band_jsonb_keys(db_pool):
+    """Audit #8: channel preference actions used to full-replace users.settings
+    with a DEFAULTS-filtered dict, silently dropping any out-of-band keys (e.g.
+    is_admin planted via SQL). The fix preserves the raw JSONB blob and only
+    rewrites `channel_names`.
+    """
+    import json as _json
+    from backend.services.settings_service import channel_preference_action
+    user_id = await _create_user(db_pool)
+    await db_pool.execute(
+        "UPDATE users SET settings = $1::jsonb WHERE user_id = $2::uuid",
+        _json.dumps({"is_admin": True, "custom_key": "keep-me",
+                     "known_word_color": "#abcdef"}),
+        user_id,
+    )
+
+    # Each of the four action paths must preserve out-of-band keys.
+    for action in ("follow", "like", "dislike", "clear"):
+        await channel_preference_action(
+            db_pool, user_id, "UC_audit8", "Audit-8 Channel", action,
+        )
+        raw = (await db_pool.fetchrow(
+            "SELECT settings FROM users WHERE user_id = $1::uuid", user_id,
+        ))["settings"]
+        if isinstance(raw, str):
+            raw = _json.loads(raw)
+        assert raw.get("is_admin") is True, f"is_admin lost after action={action}"
+        assert raw.get("custom_key") == "keep-me", f"custom_key lost after action={action}"
+        # Scalar pref planted in JSONB also survives.
+        assert raw.get("known_word_color") == "#abcdef", (
+            f"known_word_color lost after action={action}"
+        )
+
+
+async def test_channel_action_updates_channel_names_cache(db_pool):
+    """Sanity check the cache write still works alongside the new preservation
+    logic — follow planting + clear-when-empty eviction both behave correctly."""
+    import json as _json
+    from backend.services.settings_service import channel_preference_action
+    user_id = await _create_user(db_pool)
+
+    # Plant out-of-band keys to make sure they coexist with channel_names writes.
+    await db_pool.execute(
+        "UPDATE users SET settings = $1::jsonb WHERE user_id = $2::uuid",
+        _json.dumps({"is_admin": True}), user_id,
+    )
+
+    await channel_preference_action(db_pool, user_id, "UC_cache", "Cache TV", "follow")
+    raw = (await db_pool.fetchrow(
+        "SELECT settings FROM users WHERE user_id = $1::uuid", user_id,
+    ))["settings"]
+    if isinstance(raw, str):
+        raw = _json.loads(raw)
+    assert raw["channel_names"]["UC_cache"] == "Cache TV"
+    assert raw["is_admin"] is True  # not nuked
+
+    # Clear removes the channel's presence + evicts its name (no remaining state).
+    await channel_preference_action(db_pool, user_id, "UC_cache", "Cache TV", "clear")
+    raw = (await db_pool.fetchrow(
+        "SELECT settings FROM users WHERE user_id = $1::uuid", user_id,
+    ))["settings"]
+    if isinstance(raw, str):
+        raw = _json.loads(raw)
+    assert "UC_cache" not in raw.get("channel_names", {})
+    assert raw["is_admin"] is True  # still preserved across the clear path too
+
+
 async def test_legacy_jsonb_channel_arrays_backfilled_by_migration(db_pool):
     """
     The migration 027 backfill is exercised once at alembic upgrade head.

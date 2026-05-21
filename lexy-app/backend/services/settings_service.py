@@ -374,9 +374,14 @@ async def channel_preference_action(
             }
             updated = apply_channel_action(current, channel_id, channel_name, action)
 
-            # 2. Persist channel_names (JSONB) only — channel-presence keys
-            #    are filtered out via the DEFAULTS allowlist.
-            settings_to_save = {k: v for k, v in updated.items() if k in DEFAULTS}
+            # 2. Persist ONLY the channel_names cache to JSONB. Earlier this
+            #    block did a full-replace of users.settings with a
+            #    DEFAULTS-filtered dict, which silently nuked any out-of-band
+            #    keys (e.g. is_admin, future flags planted via SQL or
+            #    migrations). Read-modify-write the existing blob so every
+            #    other JSONB key is preserved verbatim.
+            new_channel_names = updated.get("channel_names", {})
+            settings_to_save = {**settings_raw, "channel_names": new_channel_names}
             await conn.execute(
                 "UPDATE users SET settings = $1::jsonb WHERE user_id = $2::uuid",
                 json.dumps(settings_to_save),
