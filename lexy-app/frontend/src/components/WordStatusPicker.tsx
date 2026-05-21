@@ -202,6 +202,7 @@ export function WordStatusPicker({
             <button
                 data-testid="word-status-close"
                 onClick={onDismiss}
+                aria-label="Close word status picker"
                 style={{
                     marginLeft: 'auto',
                     // 44×44 finger-tappable close, but visually keep it minimal.

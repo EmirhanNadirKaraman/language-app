@@ -393,6 +393,7 @@ export function SettingsPanel({ prefs, onSave, onClose, token }: Props) {
                 ].map(({ label: lbl, value, onChange }) => (
                     <div key={lbl} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
                         <input type="color" value={value} onChange={e => onChange(e.target.value)}
+                            aria-label={`${lbl} word colour`}
                             // 44×44 — color pickers need a finger-target too.
                             style={{ width: '44px', height: '44px', border: '1px solid var(--color-input-border)', borderRadius: '4px', cursor: 'pointer', padding: '2px', touchAction: 'manipulation' }} />
                         <span style={{ fontSize: '12px', color: 'var(--color-text-muted)', fontWeight: 600 }}>{lbl}</span>

@@ -76,9 +76,13 @@ export function LoginForm({ token, onLogin, onLogout }: Props) {
             {/* fontSize: 16px blocks iOS Safari focus-zoom. */}
             <input type="email" placeholder="Email" value={email}
                 onChange={e => setEmail(e.target.value)} required style={inputStyle}
+                aria-label="Email address"
+                autoComplete="email"
                 data-testid="login-email" />
             <input type="password" placeholder="Password" value={password}
                 onChange={e => setPassword(e.target.value)} required style={inputStyle}
+                aria-label="Password"
+                autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                 data-testid="login-password" />
 
             <button type="submit" disabled={loading} style={primaryBtn} data-testid="login-submit">

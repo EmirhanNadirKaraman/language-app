@@ -122,6 +122,7 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
               {term}
               <button
                 onClick={(e) => { e.stopPropagation(); onRemoveTerm(i); }}
+                aria-label={`Remove search term ${term}`}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', fontSize: '14px', color: 'var(--color-text-muted)', lineHeight: 1, touchAction: 'manipulation' }}
               >
                 ×
@@ -137,6 +138,7 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
             onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
             onFocus={() => suggestions.length > 0 && setShowDropdown(true)}
             placeholder={terms.length === 0 ? 'Search for words...' : ''}
+            aria-label="Search vocabulary"
             style={{
               border: 'none',
               outline: 'none',

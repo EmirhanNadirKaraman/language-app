@@ -882,15 +882,18 @@ export function BookReaderPage({ token, doc, onClose, autoMarkKnown }: Props) {
         <button
           onClick={() => navigateRef.current(-1)}
           disabled={readingMode === 'sentence' ? (sentenceIdx === 0 && pageNum <= 1) : pageNum <= 1}
+          aria-label={readingMode === 'sentence' ? 'Previous sentence' : 'Previous page'}
           style={navBtnStyle(readingMode === 'sentence' ? (sentenceIdx > 0 || pageNum > 1) : pageNum > 1)}
         >◀</button>
-        <span style={{ fontSize: '13px', color: th.muted }}>Page</span>
+        <label htmlFor="book-page-input-id" style={{ fontSize: '13px', color: th.muted }}>Page</label>
         <input
+          id="book-page-input-id"
           data-testid="book-page-input"
           type="text" value={inputPage}
           onChange={e => setInputPage(e.target.value)}
           onKeyDown={handlePageInput}
           onBlur={() => setInputPage(String(pageNum))}
+          aria-label="Jump to page number"
           // fontSize: 16px blocks iOS Safari's focus-zoom. minHeight 44 for tap.
           style={{ width: '56px', textAlign: 'center', padding: '6px 8px', border: '1px solid var(--color-input-border)', borderRadius: '4px', fontSize: '16px', minHeight: '44px', background: 'var(--color-input-bg)', color: 'var(--color-text)' }}
         />
@@ -898,6 +901,7 @@ export function BookReaderPage({ token, doc, onClose, autoMarkKnown }: Props) {
         <button
           onClick={() => navigateRef.current(1)}
           disabled={readingMode === 'sentence' ? (sentenceIdx === allSentences.length - 1 && pageNum >= totalPages) : pageNum >= totalPages}
+          aria-label={readingMode === 'sentence' ? 'Next sentence' : 'Next page'}
           style={navBtnStyle(readingMode === 'sentence' ? (sentenceIdx < allSentences.length - 1 || pageNum < totalPages) : pageNum < totalPages)}
         >▶</button>
         {pageData?.is_scanned && <span style={{ fontSize: '11px', color: '#f57c00', marginLeft: '8px' }}>OCR page</span>}

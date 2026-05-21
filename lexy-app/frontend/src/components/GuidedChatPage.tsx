@@ -71,6 +71,7 @@ export function GuidedChatPage({ result, token, targetItemId, targetItemType, on
                 <button
                     data-testid="guided-close"
                     onClick={onClose}
+                    aria-label="Close guided practice"
                     style={{
                         // 44×44 finger-tappable close.
                         minWidth: '44px', minHeight: '44px',
