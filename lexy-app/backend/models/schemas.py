@@ -207,6 +207,11 @@ class WordLearnAnywayRequest(BaseModel):
 
 class ChatSessionCreate(BaseModel):
     session_type: Literal["free"] = "free"
+    # Stage 3 (second-language plan, 2026-05-21): the target language for
+    # this free-chat session. Defaults to "de" for back-compat with
+    # pre-Stage-3 frontends that don't yet send the field; new Spanish
+    # sessions send "es".
+    language: str = "de"
 
 
 # ---------------------------------------------------------------------------

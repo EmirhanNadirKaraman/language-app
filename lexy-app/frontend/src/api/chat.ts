@@ -6,11 +6,20 @@ function authHeaders(token: string): HeadersInit {
     return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
-export async function createSession(token: string): Promise<ChatSession> {
+export async function createSession(
+    token: string,
+    language?: string,
+): Promise<ChatSession> {
+    // Stage 3 of second-language plan: send the user's active target
+    // language so the backend stores it on the session row and the LLM
+    // system prompt picks the right tutor voice. Omitting the arg falls
+    // back to the backend default ('de') for pre-Stage-3 call sites.
+    const body: Record<string, unknown> = { session_type: 'free' };
+    if (language) body.language = language;
     const res = await fetch(apiUrl('/api/v1/chat/sessions'), {
         method: 'POST',
         headers: authHeaders(token),
-        body: JSON.stringify({ session_type: 'free' }),
+        body: JSON.stringify(body),
     });
     return assertOkJson<ChatSession>(res);
 }

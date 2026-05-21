@@ -9,18 +9,33 @@ async def create_session(
     user_id: str,
     session_type: str = "free",
     *,
+    language: str | None = None,
     target_item_id: int | None = None,
     target_item_type: str | None = None,
 ) -> dict:
+    """Insert a chat_sessions row.
+
+    Stage 3 (second-language plan): `language` is the target-language
+    code for this session and is persisted on the row. Free chat needs
+    this because it has no target-item to derive a language from at
+    message time; guided chat could re-derive via word/phrase_table but
+    storing it avoids the per-message JOIN and keeps the LLM prompt +
+    free_chat_* progression aligned with the user's actual target.
+
+    NULL is accepted for back-compat with pre-Stage-3 callers; readers
+    fall back to DEFAULT_LANGUAGE ("de") so legacy German sessions in
+    the wild keep working.
+    """
     row = await pool.fetchrow(
         """
         INSERT INTO chat_sessions
-            (user_id, session_type, target_item_id, target_item_type)
-        VALUES ($1, $2, $3, $4)
+            (user_id, session_type, language, target_item_id, target_item_type)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
         """,
         user_id,
         session_type,
+        language,
         target_item_id,
         target_item_type,
     )
@@ -173,6 +188,9 @@ def _session_dict(row) -> dict:
         "session_id": str(row["session_id"]),
         "user_id": str(row["user_id"]),          # used for ownership checks, stripped by response_model
         "session_type": row["session_type"],
+        # `language` is None on legacy rows (pre-Stage-3 / migration 031).
+        # Routers fall back to DEFAULT_LANGUAGE when they read this.
+        "language": row["language"] if "language" in row else None,
         "target_item_id": row["target_item_id"],
         "target_item_type": row["target_item_type"],
         "started_at": row["started_at"],

@@ -26,7 +26,13 @@ async def create_session(
     pool=Depends(get_pool),
     current_user: dict = Depends(get_current_user),
 ):
-    return await chat_service.create_session(pool, str(current_user["user_id"]), body.session_type)
+    # Stage 3: persist the requested target language so the LLM system
+    # prompt + match_learning_words at message time honour the user's
+    # actual target language instead of the pre-Stage-3 hardcoded 'de'.
+    return await chat_service.create_session(
+        pool, str(current_user["user_id"]), body.session_type,
+        language=body.language,
+    )
 
 
 @router.get("/sessions", response_model=list[ChatSessionRead])
@@ -87,6 +93,7 @@ async def create_guided_session(
 
     session = await chat_service.create_session(
         pool, user_id, "guided",
+        language=body.language,
         target_item_id=target["item_id"],
         target_item_type=target["item_type"],
     )
@@ -146,11 +153,17 @@ async def send_message(
 
     # --- Free chat ---
     user_id = str(current_user["user_id"])
+    # Stage 3 (second-language plan): read the session's stored language
+    # instead of hardcoding 'de'. Legacy rows (migration 031 added the
+    # column nullable) fall back to "de" so pre-Stage-3 sessions keep
+    # behaving identically.
+    session_language = session.get("language") or "de"
     user_msg = await chat_service.save_message(pool, session_id, "user", body.content)
 
     result = await llm_service.evaluate_and_reply(
         body.content,
         [{"role": m["role"], "content": m["content"]} for m in history],
+        session_language,
     )
 
     assistant_msg = await chat_service.save_message(
@@ -160,21 +173,27 @@ async def send_message(
         word_matches=result["word_matches"],
     )
 
-    # Server-side vocabulary matching: find learning-status words that appear in
-    # the user's message.  language_detected drives the event:
-    #   'de'    → free_chat_used_correctly  (German production — both tracks advance)
-    #   'mixed' → free_chat_mixed_lang      (passive credit only)
-    #   'en'    → skip                      (user wasn't practising German)
-    #
-    # Free chat is German-only (system prompt hardcoded); language='de' is correct here.
+    # Server-side vocabulary matching: find learning-status words that appear
+    # in the user's message. `language_detected` (from the LLM) drives the
+    # event:
+    #   == session_language → free_chat_used_correctly  (target-language
+    #                                                    production: both
+    #                                                    passive + active
+    #                                                    tracks advance)
+    #   == 'mixed'          → free_chat_mixed_lang      (passive credit only)
+    #   == 'en' / other     → skip                      (user wasn't
+    #                                                    practising the
+    #                                                    target language)
     language_detected = result.get("language_detected", "en")
-    if language_detected in ("de", "mixed"):
+    if language_detected in (session_language, "mixed"):
         _event = (
-            "free_chat_used_correctly" if language_detected == "de"
+            "free_chat_used_correctly" if language_detected == session_language
             else "free_chat_mixed_lang"
         )
-        _analytics_outcome = "used" if language_detected == "de" else "seen"
-        matched = await chat_service.match_learning_words(pool, user_id, body.content, "de")
+        _analytics_outcome = "used" if language_detected == session_language else "seen"
+        matched = await chat_service.match_learning_words(
+            pool, user_id, body.content, session_language,
+        )
 
         for match in matched:
             # Progression update — awaited; these are primary knowledge-state changes

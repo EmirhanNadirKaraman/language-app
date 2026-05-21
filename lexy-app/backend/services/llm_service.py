@@ -38,52 +38,107 @@ _MOCK_OPENINGS = [
     "Guten Tag! Ich bereite gerade ein Abendessen für Freunde vor — habt ihr ein Lieblingsrezept, das ich ausprobieren sollte?",
 ]
 
-_SYSTEM = """\
-You are a warm, encouraging German language tutor in a free-conversation practice app.
-The learner is practising spoken German. Your job is twofold:
-  1. Keep the conversation going naturally (reply in German).
-  2. Quietly correct any language errors the learner made.
+# Stage 3 of second-language plan (2026-05-21): _SYSTEM and _EVAL_TOOL
+# used to hardcode German. They're now constructed per-call from the
+# session's target language so the LLM gets a Spanish-tutor prompt for
+# Spanish sessions, German-tutor prompt for German sessions, etc.
+#
+# `_LANGUAGE_NAMES` is the source of human-readable names sent into
+# prompts; codes outside the table fall back to a generic "target
+# language" wording so a future ingest of (say) Polish content doesn't
+# break the call. Stays in lockstep with frontend's
+# `src/config/languages.ts` LANGUAGE_OPTIONS — when adding a target
+# language, update both.
 
-Rules:
-- Reply conversationally in German. Be friendly, brief, and encouraging.
-- If the user wrote in English, reply in English but gently nudge them to try in German.
-- List ONLY genuine language errors (grammar, wrong word, spelling). Skip style preferences.
-- If there are no errors, return an empty corrections array.
-- You MUST call the evaluate_and_reply tool — never respond with raw text.
-"""
+_LANGUAGE_NAMES: dict[str, str] = {
+    "de": "German",
+    "en": "English",
+    "fr": "French",
+    "es": "Spanish",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "ja": "Japanese",
+    "ru": "Russian",
+    "ko": "Korean",
+    "tr": "Turkish",
+    "pl": "Polish",
+    "sv": "Swedish",
+}
 
-_EVAL_TOOL: anthropic.types.ToolParam = {
-    "name": "evaluate_and_reply",
-    "description": "Produce a structured response: a conversational reply plus any corrections.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "reply": {
-                "type": "string",
-                "description": "Your conversational reply.",
-            },
-            "language_detected": {
-                "type": "string",
-                "enum": ["de", "en", "mixed"],
-                "description": "Dominant language of the user's message.",
-            },
-            "corrections": {
-                "type": "array",
-                "description": "Language errors found. Empty list if none.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "original":    {"type": "string"},
-                        "corrected":   {"type": "string"},
-                        "explanation": {"type": "string"},
+
+def _language_name(code: str | None) -> str:
+    """Human-readable language name for prompt interpolation.
+
+    Falls back to `"the target language"` for unknown codes — the LLM
+    still reads naturally, just without a specific name to anchor on.
+    """
+    if not code:
+        return "the target language"
+    return _LANGUAGE_NAMES.get(code, "the target language")
+
+
+def _make_system(language: str) -> str:
+    """Build the free-chat system prompt for a given target language.
+
+    German wording is byte-equivalent to the pre-Stage-3 constant when
+    `language == 'de'` — same tone, same rules, same tool-only contract.
+    For any other language we swap "German" for the target language's
+    name; English stays the bilingual fallback.
+    """
+    name = _language_name(language)
+    return (
+        f"You are a warm, encouraging {name} language tutor in a "
+        f"free-conversation practice app.\n"
+        f"The learner is practising spoken {name}. Your job is twofold:\n"
+        f"  1. Keep the conversation going naturally (reply in {name}).\n"
+        f"  2. Quietly correct any language errors the learner made.\n"
+        f"\n"
+        f"Rules:\n"
+        f"- Reply conversationally in {name}. Be friendly, brief, and encouraging.\n"
+        f"- If the user wrote in English, reply in English but gently nudge them to try in {name}.\n"
+        f"- List ONLY genuine language errors (grammar, wrong word, spelling). Skip style preferences.\n"
+        f"- If there are no errors, return an empty corrections array.\n"
+        f"- You MUST call the evaluate_and_reply tool — never respond with raw text.\n"
+    )
+
+
+def _make_eval_tool(language: str) -> anthropic.types.ToolParam:
+    """Build the free-chat evaluator tool definition for a given target
+    language. `language_detected` enum is parameterised so the LLM picks
+    between the active target language, English, and `mixed` — pre-Stage-3
+    this was hardcoded to `['de', 'en', 'mixed']`."""
+    return {
+        "name": "evaluate_and_reply",
+        "description": "Produce a structured response: a conversational reply plus any corrections.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "reply": {
+                    "type": "string",
+                    "description": "Your conversational reply.",
+                },
+                "language_detected": {
+                    "type": "string",
+                    "enum": [language, "en", "mixed"] if language != "en" else ["en", "mixed"],
+                    "description": "Dominant language of the user's message.",
+                },
+                "corrections": {
+                    "type": "array",
+                    "description": "Language errors found. Empty list if none.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "original":    {"type": "string"},
+                            "corrected":   {"type": "string"},
+                            "explanation": {"type": "string"},
+                        },
+                        "required": ["original", "corrected", "explanation"],
                     },
-                    "required": ["original", "corrected", "explanation"],
                 },
             },
+            "required": ["reply", "language_detected", "corrections"],
         },
-        "required": ["reply", "language_detected", "corrections"],
-    },
-}
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -161,39 +216,45 @@ async def guided_open(
 # Guided chat — progressive hints
 # ---------------------------------------------------------------------------
 
-_GUIDED_HINTS_TOOL: anthropic.types.ToolParam = {
-    "name": "generate_hints",
-    "description": "Generate three progressive learning hints for a target word/phrase.",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "intent_hint": {
-                "type": "string",
-                "description": (
-                    "One sentence in English describing the concept or action to express. "
-                    "Must NOT name the target word, its direct translation, or a clear synonym. "
-                    "Describes what kind of meaning the learner should convey."
-                ),
+def _make_guided_hints_tool(language: str) -> anthropic.types.ToolParam:
+    """Stage 3: tool description text interpolates the target-language name
+    so the LLM is told to produce hints in the right language. Pre-Stage-3
+    this was a module-level constant whose descriptions hardcoded German.
+    """
+    name = _language_name(language)
+    return {
+        "name": "generate_hints",
+        "description": "Generate three progressive learning hints for a target word/phrase.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "intent_hint": {
+                    "type": "string",
+                    "description": (
+                        "One sentence in English describing the concept or action to express. "
+                        "Must NOT name the target word, its direct translation, or a clear synonym. "
+                        "Describes what kind of meaning the learner should convey."
+                    ),
+                },
+                "anchor_hint": {
+                    "type": "string",
+                    "description": (
+                        f"A short {name} clue — a related word, a prefix hint, "
+                        f"or a closely related concept — that narrows the search "
+                        f"without giving the full answer. Must NOT be the target word itself."
+                    ),
+                },
+                "example": {
+                    "type": "string",
+                    "description": (
+                        f"A complete, natural {name} sentence that uses the target word in a realistic context. "
+                        f"The target word must appear exactly as-is or in a natural inflected form."
+                    ),
+                },
             },
-            "anchor_hint": {
-                "type": "string",
-                "description": (
-                    "A short German clue — a related word, a prefix hint (e.g. 'beginnt mit ver…'), "
-                    "or a closely related concept — that narrows the search without giving the full answer. "
-                    "Must NOT be the target word itself."
-                ),
-            },
-            "example": {
-                "type": "string",
-                "description": (
-                    "A complete, natural German sentence that uses the target word in a realistic context. "
-                    "The target word must appear exactly as-is or in a natural inflected form."
-                ),
-            },
+            "required": ["intent_hint", "anchor_hint", "example"],
         },
-        "required": ["intent_hint", "anchor_hint", "example"],
-    },
-}
+    }
 
 
 async def guided_hints(
@@ -209,18 +270,23 @@ async def guided_hints(
         {"intent_hint": str, "anchor_hint": str, "example": str}
 
     Cached permanently by (target_word, language) — the same word always gets
-    the same hints, so re-opening a session is instant.
+    the same hints, so re-opening a session is instant. Stage 3 (2026-05-21):
+    prompt + tool description are now language-aware so a Spanish target
+    word doesn't get "German clue" wording. German cache entries written
+    pre-Stage-3 stay valid and serve German hints; Spanish writes new
+    cache entries under their own `language` key.
     """
     if _MOCK:
         return dict(_MOCK_HINTS)
 
+    name = _language_name(language)
     system = (
-        f'You are creating pedagogical hints for a language learner whose hidden target word/phrase is "{target_word}" in {language}.\n\n'
+        f'You are creating pedagogical hints for a language learner whose hidden target word/phrase is "{target_word}" in {name}.\n\n'
         f"Generate exactly three hints in order of increasing explicitness:\n"
         f"1. intent_hint — English only. Describe what concept or action to express WITHOUT naming the target or its translation.\n"
-        f"2. anchor_hint — German only. Give a partial clue: a related word, a prefix hint, or a semantic neighbour. "
+        f"2. anchor_hint — {name} only. Give a partial clue: a related word, a prefix hint, or a semantic neighbour. "
         f"Do NOT use the target word itself.\n"
-        f"3. example — A full natural German sentence using the target word in a realistic everyday context.\n\n"
+        f"3. example — A full natural {name} sentence using the target word in a realistic everyday context.\n\n"
         f"You MUST call the generate_hints tool."
     )
 
@@ -229,7 +295,7 @@ async def guided_hints(
             model=_MODEL,
             max_tokens=512,
             system=system,
-            tools=[_GUIDED_HINTS_TOOL],
+            tools=[_make_guided_hints_tool(language)],
             tool_choice={"type": "tool", "name": "generate_hints"},
             messages=[{"role": "user", "content": "Generate the hints now."}],
         )
@@ -836,20 +902,30 @@ async def get_grammar_explanation_if_cached(
 async def evaluate_and_reply(
     user_content: str,
     history: list[dict],
+    language: str = "de",
 ) -> dict:
     """
     Returns:
         {
             reply: str,
-            language_detected: "de" | "en" | "mixed",
+            language_detected: "<target>" | "en" | "mixed",
             corrections: [{"original", "corrected", "explanation"}, ...],
             word_matches: [],   # reserved for phrase-matcher integration
         }
+
+    Stage 3 (second-language plan): `language` defaults to 'de' for
+    back-compat. Callers should pass the chat session's stored
+    language so the system prompt + evaluator enum match the user's
+    target. The `language_detected` enum value the LLM returns will be
+    the supplied `language` code (when the user wrote in the target
+    language) or "en" / "mixed".
     """
     if _MOCK:
         return {
             "reply": random.choice(_MOCK_REPLIES),
-            "language_detected": "de",
+            # Mock surfaces the requested target language so tests can
+            # exercise the language-aware free_chat_* progression branches.
+            "language_detected": language,
             "corrections": random.choice(_MOCK_CORRECTIONS),
             "word_matches": [],
         }
@@ -860,8 +936,8 @@ async def evaluate_and_reply(
     response = await _client.messages.create(
         model=_MODEL,
         max_tokens=1024,
-        system=_SYSTEM,
-        tools=[_EVAL_TOOL],
+        system=_make_system(language),
+        tools=[_make_eval_tool(language)],
         tool_choice={"type": "tool", "name": "evaluate_and_reply"},
         messages=messages,
     )

@@ -12,7 +12,12 @@ interface Props {
 }
 
 export function FreeChatPage({ result, token, onClose }: Props) {
-    const { session, messages, sending, error, startSession, send } = useChat(token);
+    // Stage 3 of second-language plan: use the active search result's
+    // language as the free-chat target. Free chat is always opened from
+    // a SearchResult (PlayerView / recommendations) and `result.language`
+    // is the most direct source — the user is practising whatever
+    // language the content is in.
+    const { session, messages, sending, error, startSession, send } = useChat(token, result.language);
 
     useEffect(() => {
         startSession();
