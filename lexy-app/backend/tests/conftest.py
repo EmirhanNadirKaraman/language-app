@@ -1,8 +1,8 @@
 """
 Test fixtures.
 
-Run tests from youglish-app/:
-    cd youglish-app
+Run tests from lexy-app/:
+    cd lexy-app
     pytest                 # serial
     pytest -n auto         # parallel via pytest-xdist
 
@@ -23,7 +23,7 @@ from httpx import ASGITransport, AsyncClient
 from ._email_helper import cleanup_pattern
 
 # .env is four levels up from this file:
-# tests/ → backend/ → youglish-app/ → sentence-to-phrase-matcher/
+# tests/ → backend/ → lexy-app/ → sentence-to-phrase-matcher/
 load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 

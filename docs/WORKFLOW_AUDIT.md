@@ -13,7 +13,7 @@ Active review loop → Mastery
 
 ## Step 0 — Prerequisite: the word must already exist in `word_table`
 
-`word_service.lookup_word_by_text` ([word_service.py:8](../youglish-app/backend/services/word_service.py)) does `WHERE w.word ILIKE $1 AND w.language = $3 LIMIT 1`. The frontend `WordStatusPicker` shows **"Not in vocabulary"** ([WordStatusPicker.tsx:41](../youglish-app/frontend/src/components/WordStatusPicker.tsx)) when this returns null and offers no alternative — the user cannot mark a word they just heard if the scraper has never indexed it.
+`word_service.lookup_word_by_text` ([word_service.py:8](../lexy-app/backend/services/word_service.py)) does `WHERE w.word ILIKE $1 AND w.language = $3 LIMIT 1`. The frontend `WordStatusPicker` shows **"Not in vocabulary"** ([WordStatusPicker.tsx:41](../lexy-app/frontend/src/components/WordStatusPicker.tsx)) when this returns null and offers no alternative — the user cannot mark a word they just heard if the scraper has never indexed it.
 
 The scraper inserts surface forms (not just lemmas) into `word_table` ([subtitle-scraper/pipeline.py:341](../subtitle-scraper/pipeline.py)) so common inflections are usually present, but:
 
@@ -29,7 +29,7 @@ Frontend flow:
 2. Click → `useWordStatus.lookupWord(word, language)` → `GET /api/v1/words/by-text`.
 3. Same click also fires `recordTranscriptClick(token, word_id)` → `POST /api/v1/words/word/{word_id}/transcript-click` (fire-and-forget from the hook).
 
-Backend: `routers/words.py:34` calls **awaited** `progression_service.apply_progression(..., "transcript_clicked")`. Per `_RULES["transcript_clicked"]` ([progression_service.py:119](../youglish-app/backend/services/progression_service.py)):
+Backend: `routers/words.py:34` calls **awaited** `progression_service.apply_progression(..., "transcript_clicked")`. Per `_RULES["transcript_clicked"]` ([progression_service.py:119](../lexy-app/backend/services/progression_service.py)):
 - `passive_delta = 1`, `times_seen_delta = 1`
 - `passive_srs = "create"` — inserts an `srs_cards` row with direction=passive, due_date=NOW, interval=1day, ease=2.5, repetitions=0 (no-op if already exists).
 - Active card is **not** created.
@@ -60,7 +60,7 @@ Each call is its own transaction.
 
 ## Step 3 — Auto-promotion to "learning"
 
-In `_maybe_promote` ([progression_service.py:217](../youglish-app/backend/services/progression_service.py)):
+In `_maybe_promote` ([progression_service.py:217](../lexy-app/backend/services/progression_service.py)):
 ```
 if active_level >= active_threshold and status != 'known': → known
 elif passive_level >= passive_threshold and status == 'learning': → known   (Hole 9 fix)
@@ -80,7 +80,7 @@ With default `passive_threshold = 5` (line 60) and `transcript_clicked` adding 1
 
 ## Step 4 — First SRS appearance
 
-`review_service.get_due_cards` ([review_service.py:46](../youglish-app/backend/services/review_service.py)) filter:
+`review_service.get_due_cards` ([review_service.py:46](../lexy-app/backend/services/review_service.py)) filter:
 ```
 WHERE sc.due_date <= NOW()
   AND (uwk.status IS NULL OR uwk.status != 'known')
@@ -97,7 +97,7 @@ That `<…>` requirement is a **soft join** to `word_table` / `phrase_table` / `
 
 ## Step 5 — Passive review loop
 
-Frontend: `SRSReviewPage` ([SRSReviewPage.tsx:27](../youglish-app/frontend/src/components/SRSReviewPage.tsx)).
+Frontend: `SRSReviewPage` ([SRSReviewPage.tsx:27](../lexy-app/frontend/src/components/SRSReviewPage.tsx)).
 
 Passive card UI (post-T1.2): direction badge "Recognition", the **English gloss** as the prompt (`prompt_text`), level dots, and a "Show answer" button. On reveal the German `answer_text` is shown alongside "I didn't know it" / "I knew it ✓" self-grade buttons. Instruction: "Recall the German. Reveal, then self-grade."
 
@@ -124,7 +124,7 @@ Three ways to get active credit (`active_delta` and/or `active_srs="correct"`):
 
 Holes:
 
-🕳 **HOLE 16 (chicken-and-egg for active SRS).** As noted in Hole 11, you can't get an active SRS card without first producing the word. Guided chat closes this: `guided_chat_service.get_next_target` ([guided_chat_service.py:17](../youglish-app/backend/services/guided_chat_service.py)) Priority 2 picks a `learning` word with no active card. That's the only built-in path from "learning" to active production for words that never appear in a free chat.
+🕳 **HOLE 16 (chicken-and-egg for active SRS).** As noted in Hole 11, you can't get an active SRS card without first producing the word. Guided chat closes this: `guided_chat_service.get_next_target` ([guided_chat_service.py:17](../lexy-app/backend/services/guided_chat_service.py)) Priority 2 picks a `learning` word with no active card. That's the only built-in path from "learning" to active production for words that never appear in a free chat.
 
 ✅ **HOLE 17 (RESOLVED 2026-05-19).** `get_next_target` now considers `phrase_table` at all three priority tiers (due active card, learning without active card, random fallback). Grammar rules remain out of scope here — they're passive-only and don't have a "production" target meaning. The polymorphic return shape `{item_id, item_type, word, lemma}` is unchanged.
 
@@ -194,7 +194,7 @@ Regression-guarded by 24 new tests in `test_progression.py` (8 unit + 16 integra
 ## Step 10 — Notifications about asynchronous work
 
 When a user requests a new channel via `AddContentPage`:
-1. `POST /api/v1/content-requests` inserts a row, spawns `python subtitle-scraper/pipeline.py --requests-only` ([content_requests.py:21](../youglish-app/backend/routers/content_requests.py)).
+1. `POST /api/v1/content-requests` inserts a row, spawns `python subtitle-scraper/pipeline.py --requests-only` ([content_requests.py:21](../lexy-app/backend/routers/content_requests.py)).
 2. Scraper processes; on completion calls `_notify_user(... "channel_done" | "video_done", payload)` ([subtitle-scraper/pipeline.py:382](../subtitle-scraper/pipeline.py)).
 3. Frontend `useNotifications` consumes SSE from `/api/v1/notifications/stream`.
 

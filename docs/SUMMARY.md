@@ -6,7 +6,7 @@ Conventions: each entry is `path — purpose. Touchpoints.` Touchpoints list adj
 
 ---
 
-## Backend — `youglish-app/backend/`
+## Backend — `lexy-app/backend/`
 
 ### Entry + infra
 | Path | Purpose |
@@ -19,7 +19,7 @@ Conventions: each entry is `path — purpose. Touchpoints.` Touchpoints list adj
 | `alembic.ini`, `migrations/env.py` | Alembic config. |
 | `migrations/versions/0XX_*.py` | 25 migrations, append-only. Schema lives here. |
 
-### Routers (HTTP surface) — `youglish-app/backend/routers/`
+### Routers (HTTP surface) — `lexy-app/backend/routers/`
 | Path | Endpoints | Calls |
 |---|---|---|
 | `auth.py` | `/auth/register`, `/auth/login` | `auth_service` |
@@ -41,7 +41,7 @@ Conventions: each entry is `path — purpose. Touchpoints.` Touchpoints list adj
 | `content_requests.py` | `/content-requests` POST/GET. Spawns `subtitle-scraper/pipeline.py --requests-only` subprocess. | direct SQL + subprocess |
 | `notifications.py` | `/notifications/stream` (SSE). Per-row mark-after-yield ordering (disconnect leaves un-yielded rows unseen for re-delivery). LISTEN/NOTIFY refactor deferred (TODO #4b). | direct SQL |
 
-### Services (business logic) — `youglish-app/backend/services/`
+### Services (business logic) — `lexy-app/backend/services/`
 | Path | Owns |
 |---|---|
 | `progression_service.py` | **Single source of truth** for knowledge-state changes. `_RULES` dict maps event → ProgressionDelta. `apply_progression` is transactional (line 178). `_update_srs` runs SM-2 and now skips active-card creation for grammar_rule (line 268). |
@@ -70,12 +70,12 @@ Conventions: each entry is `path — purpose. Touchpoints.` Touchpoints list adj
 | `reminder_service.py` | Learning reminder summary. |
 | `search_service.py` | Full-text video/subtitle search. |
 
-### Tests — `youglish-app/backend/tests/`
+### Tests — `lexy-app/backend/tests/`
 See `docs/TESTS.md` for full list, coverage status, and known failures.
 
 ---
 
-## Frontend — `youglish-app/frontend/`
+## Frontend — `lexy-app/frontend/`
 
 ### Top level
 | Path | Purpose |
@@ -272,7 +272,7 @@ Pytest tests for pipeline modules. Mostly hermetic (no DB).
 
 | Question | Open |
 |---|---|
-| Where is the state machine? | `youglish-app/backend/services/progression_service.py` (`_RULES`) |
+| Where is the state machine? | `lexy-app/backend/services/progression_service.py` (`_RULES`) |
 | Where does a transcript click go? | `routers/words.py:record_transcript_click` → `usage_events_service.record_transcript_click_event` (atomic dedup via unique partial index); only on a new insert does it then call `progression_service.apply_progression("transcript_clicked")`. |
 | Where do SRS cards come from? | `progression_service._update_srs` — created on `passive_srs/active_srs="create"` or first correct event |
 | Where is the LLM called? | `services/llm_service.py` — all calls go through here, cached via `llm_cache_service` |

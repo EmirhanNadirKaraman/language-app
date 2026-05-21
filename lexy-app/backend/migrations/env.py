@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
 # .env lives at the project root (sentence-to-phrase-matcher/.env)
-# env.py → migrations/ → backend/ → youglish-app/ → sentence-to-phrase-matcher/
+# env.py → migrations/ → backend/ → lexy-app/ → sentence-to-phrase-matcher/
 load_dotenv(Path(__file__).parent.parent.parent.parent / ".env")
 
 config = context.config

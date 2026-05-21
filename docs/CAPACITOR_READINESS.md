@@ -25,7 +25,7 @@ Last updated: 2026-05-20.
 - [x] **Viewport-fit=cover** — `index.html` line 8 already includes it, so
       a Capacitor wrap can paint behind the iPhone notch.
 - [x] **Apple meta tags** — `apple-mobile-web-app-capable`,
-      `apple-mobile-web-app-title="YouGlish"`, status-bar style.
+      `apple-mobile-web-app-title="Lexy"`, status-bar style.
 - [x] **Dark-mode tristate** — T1.3 (2026-05-20). `theme_mode = system | light
       | dark`; `useResolvedTheme` follows `prefers-color-scheme: dark` live.
 - [x] **Theme-color** — `#1a237e`, present in both `index.html` and
@@ -40,13 +40,13 @@ Last updated: 2026-05-20.
 - [x] **LLM cache + thundering-herd guard** — won't change shape on mobile.
 - [x] **Backend deploy gate sweep prep** — `.env.example` documents
       `DB_*`, `SECRET_KEY`, `ANTHROPIC_API_KEY`, `MOCK_LLM`, `CORS_ORIGINS`.
-- [x] **Procfile present** — `web: cd youglish-app && uvicorn backend.main:app
+- [x] **Procfile present** — `web: cd lexy-app && uvicorn backend.main:app
       --host 0.0.0.0 --port $PORT`. Heroku/Render-compatible.
 
 ### Now ready (since the original audit)
 
 - [x] **`capacitor.config.ts` written** — placeholder
-      `appId='com.youglish.learning'` (ROADMAP T3.1).
+      `appId='com.lexy.learning'` (ROADMAP T3.1).
 - [x] **`@capacitor/*` dependencies installed** —
       `@capacitor/core@8.3.4`, `@capacitor/cli@8.3.4`,
       `@capacitor/ios@8.3.4` in `frontend/package.json`.
@@ -109,7 +109,7 @@ Last updated: 2026-05-20.
 **Decision required.** Pick one:
 
 - **(A) Hosted backend at a real domain** — e.g.
-  `https://api.youglish.app`. Most flexible. Requires DNS, TLS cert, and
+  `https://api.lexy.app`. Most flexible. Requires DNS, TLS cert, and
   `CORS_ORIGINS=capacitor://localhost,https://localhost` (the two iOS
   WebView origins) in addition to your web origin.
 - **(B) Embedded backend** — ship the FastAPI server inside the iOS bundle.
@@ -230,7 +230,7 @@ Deferring these to "shipped + opening on a phone" reduces wrap risk.
       efficiently.
 - [ ] **Secure token storage** — swap `localStorage` →
       `@capacitor/preferences` or Keychain.
-- [ ] **Deep links** — `youglish://video/abc123`, `youglish://book/42`.
+- [ ] **Deep links** — `lexy://video/abc123`, `lexy://book/42`.
       Useful for sharing, not load-bearing.
 - [ ] **Native file picker** — book PDF upload currently uses
       `<input type="file">`. Works in WKWebView but limited. Replace with
@@ -308,13 +308,13 @@ locked.
 
 ```bash
 # From frontend/ — adds Capacitor core + iOS platform.
-cd youglish-app/frontend
+cd lexy-app/frontend
 
 # 1. Install Capacitor packages.
 npm install @capacitor/core @capacitor/cli
 npm install @capacitor/ios
 
-# 2. Initialise (interactive — name=YouGlish, appId=app.youglish.ios or similar).
+# 2. Initialise (interactive — name=Lexy, appId=app.lexy.ios or similar).
 npx cap init
 
 # 3. Build the web bundle that Capacitor will package.
@@ -461,7 +461,7 @@ is independently shippable; don't bundle.
 3. [x] `npm install @capacitor/core @capacitor/cli @capacitor/ios`
        — done (T3.1). `@capacitor/*@8.3.4` in lockfile.
 4. [x] `npx cap init` — `capacitor.config.ts` written with placeholder
-       `appId='com.youglish.learning'`, `appName='YouGlish'`,
+       `appId='com.lexy.learning'`, `appName='Lexy'`,
        `webDir='dist'`.
 5. [ ] First `vite build` with `VITE_API_BASE_URL=https://your-backend`.
 6. [x] `npx cap add ios` — `ios/` scaffolded; web assets copied to
@@ -510,7 +510,7 @@ backend without CORS errors. Copy-paste-ready.
 
 ### Frontend (Capacitor build only)
 
-`youglish-app/frontend/.env.production` (or whichever env file Vite reads
+`lexy-app/frontend/.env.production` (or whichever env file Vite reads
 for `npm run build`):
 
 ```env
@@ -570,7 +570,7 @@ empty/unset, the backend falls back to `http://localhost:5173` (dev only).
 ### Verification checklist (run after deploying both)
 
 1. [ ] **Build the frontend with the env set.** From
-       `youglish-app/frontend/`:
+       `lexy-app/frontend/`:
        ```bash
        VITE_API_BASE_URL=https://api.example.com npm run build
        ```

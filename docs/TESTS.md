@@ -4,7 +4,7 @@ Test inventory and coverage status. **Update this file whenever you add, remove,
 
 ---
 
-## Backend test suite — `youglish-app/backend/tests/`
+## Backend test suite — `lexy-app/backend/tests/`
 
 Test runner: pytest + pytest-asyncio. Fixtures in `conftest.py` provide `db_pool` (real Postgres) and `client` (httpx.AsyncClient against the app).
 
@@ -45,7 +45,7 @@ These were failing before #0b and are tracked here so they don't get blamed on f
 
 ---
 
-## Frontend tests — `youglish-app/frontend/`
+## Frontend tests — `lexy-app/frontend/`
 
 Test runner: Vitest + @testing-library/react + jsdom. Setup: `src/test/setup.ts`.
 
@@ -80,7 +80,7 @@ Hermetic pytest tests. Two sub-trees:
 
 Root suite baseline (W4): **562 passed.** Run: `pytest tests/` from repo root.
 
-Backend suite baseline (W13, 2026-05-20): **521 passed / 2 skipped** (xdist parallel run ~48s). Run: `pytest -n auto` from `youglish-app/backend/`.
+Backend suite baseline (W13, 2026-05-20): **521 passed / 2 skipped** (xdist parallel run ~48s). Run: `pytest -n auto` from `lexy-app/backend/`.
 
 ---
 

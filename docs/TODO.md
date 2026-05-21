@@ -29,7 +29,7 @@ Known limitations: production correctness check evaluates only "did the user pro
 The original #0a is now split into the two items above. The first half (backend payload) ships. The UI rewrite (#0a-2) is the next leg.
 
 Original problem statement preserved below for context:
-**File:** `youglish-app/frontend/src/components/SRSReviewPage.tsx:272–367`
+**File:** `lexy-app/frontend/src/components/SRSReviewPage.tsx:272–367`
 **Problem:** Both passive and active cards display the German word as the prompt. The "reveal" for an active card shows the same German word again. The user is asked "Can you use this naturally in a sentence?" and self-grades. There is no production test (no input field, no LLM evaluation, no translation cue) and no recognition test (no hidden gloss). The entire SRS loop is currently a self-report dialog.
 **Fix (active):** show the English translation (or example sentence with the target redacted) as the prompt; expose a text input; route the answer through `llm_service.guided_evaluate` (or a dedicated `srs_evaluate_production`); use the eval result to drive correct/incorrect.
 **Fix (passive):** show the English gloss as the prompt, German as the reveal — closer to a traditional Anki front/back card.
@@ -53,7 +53,7 @@ Implemented Approach A: `progression_service.apply_progression` gained a keyword
 Root cause was `phrase_finder.py:42` loading `"data/final_result.txt"` via a cwd-relative path. Fixed by resolving the path from `__file__` (`Path(__file__).resolve().parent.parent / "data" / "final_result.txt"`). With that one-line change, every chdir site became unnecessary.
 
 **Sites cleaned (5):**
-- `youglish-app/backend/services/matcher_service.py` — chdir block replaced with `sys.path.insert(0, scraper_dir)` + import
+- `lexy-app/backend/services/matcher_service.py` — chdir block replaced with `sys.path.insert(0, scraper_dir)` + import
 - `subtitle-scraper/pipeline.py` — same
 - `subtitle-scraper/profile_pipeline.py` — same
 - `subtitle-scraper/profile_full_pipeline.py` — same
@@ -99,7 +99,7 @@ Per the project policy "reading Mastered = manual known confidence, NOT active p
 **Dual schedule** — intentionally NOT reconciled. Reading mode keeps its own `reading_selections.next_review_at` schedule alongside `srs_cards`. They continue to diverge after the first review. The policy decision: reading review queue is its own UX surface (book-context-rich), main SRS queue is vocabulary-context-only. Users see the same word due in two places, but each lives in the queue that triggered it. Reconciling would require either a PK bridge (UUID vs SERIAL) or dropping one side; both are bigger refactors than this card. Re-open as a separate issue if the duplication starts confusing users.
 
 ### 5a. ✅ Insights filter — RESOLVED 2026-05-18
-**File:** `youglish-app/backend/services/usage_events_service.py:59`
+**File:** `lexy-app/backend/services/usage_events_service.py:59`
 Added `'transcript'` to the context IN clause. Subtitle-clicked unknown words now surface in the "Keeps coming up" insight card. Regression-guarded by tests in both `test_audit_holes.py` and `test_insights.py`.
 
 ### 5b. ✅ Free-chat matching + guided target selection now handle phrases — RESOLVED 2026-05-19
@@ -160,7 +160,7 @@ UPDATE user_word_knowledge uwk SET
 **Recommendation:** ship forward-only. Inflation is small per user (1 per known click) and isn't load-bearing — `status='known'` is the field that drives downstream filtering. Backfill only if analytics depending on `active_level` shows skew.
 
 ### 6. 🟠 `users.settings` JSONB hides channel/genre preferences
-**File:** `youglish-app/backend/services/settings_service.py`
+**File:** `lexy-app/backend/services/settings_service.py`
 **Problem:** Memory entry `project_db_migration_todo.md` flags two remaining JSON-in-DB problems — channel preferences are one. Filtering recommendations by followed channels means JSON queries on every call.
 **Fix:** Promote `followed_channels`, `followed_genres`, `excluded_categories` into proper join tables (`user_followed_channel`, `user_followed_genre`). Migrate existing JSON rows. Keep `settings` JSONB for genuinely freeform prefs (colour scheme overrides, etc.).
 **Blocks:** efficient recommendation filtering, audit/admin views on what users follow.
@@ -179,7 +179,7 @@ UPDATE user_word_knowledge uwk SET
 `routers/books.py:359` (batch repair loop) now catches `(anthropic.APIError, asyncpg.PostgresError)` as the expected failure mode (logged at WARNING). A second narrower `except Exception:` block remains as a defensive top-level guard so a bug in `repair_block_by_id` doesn't lose all already-repaired blocks in the batch — that one is logged via `logger.exception()` to capture the full trace.
 
 ### 8b. (was original problem statement)
-**File:** `youglish-app/backend/routers/books.py:352–354`
+**File:** `lexy-app/backend/routers/books.py:352–354`
 **Problem:** `except Exception` catches logic bugs alongside transient LLM errors. Counts them all as "errors" but doesn't surface anything actionable.
 **Fix:** Catch specific exceptions (`anthropic.APIError`, `anthropic.RateLimitError`, `asyncpg.PostgresError`). Re-raise on logic errors. Keep retry/skip for the LLM/network class.
 **Blocks:** debugging book-import failures, useful telemetry on LLM error rates.
@@ -188,7 +188,7 @@ UPDATE user_word_knowledge uwk SET
 `api/settings.ts` migrated to use `assertOkJson` from `_http.ts`, so 401s flow into the shared auth:expired handler. `usePreferences` gained an `error: string \| null` field; on failure it keeps the in-flight `prefs` instead of resetting to defaults. 4 new Vitest tests lock the contract.
 
 ### 9b. (was original #9 problem statement, kept for context)
-**File:** `youglish-app/frontend/src/hooks/usePreferences.ts:24` and similar `.catch(() => {})` patterns across hooks
+**File:** `lexy-app/frontend/src/hooks/usePreferences.ts:24` and similar `.catch(() => {})` patterns across hooks
 **Problem:** If `getPreferences` fails (auth expired, server down), the UI sees empty defaults silently. Dark mode resets, channel filters disappear. User assumes their settings were lost.
 **Fix:** Distinguish "not authenticated" from real errors. Bubble real errors to a top-level error toast. Don't reset preferences state on failure — keep last-known.
 **Blocks:** "user trust" — even a single mysterious settings reset trains users to mistrust the app.
@@ -258,7 +258,7 @@ Triaged 288 `print()` calls across 17 files. **62 prints converted** to `logger`
 `main.py` lifespan's three seed paths (phrase, grammar, content-request resume) now narrow to known types first (`asyncpg.PostgresError`, `FileNotFoundError`, `ImportError`, `OSError` as appropriate per site) and log them as a WARNING with `exc_info=True`. A defensive `except Exception:` remains as a final guard per site — intentionally broad because **startup must NEVER crash on a seed failure** — but now logged via `logger.exception()` so the full trace lands in production logs. Module-level `logger = logging.getLogger(__name__)` added; the per-site `import logging` repeats are gone.
 
 ### 16b. (was original problem statement)
-**File:** `youglish-app/backend/main.py:39, 50, 64`
+**File:** `lexy-app/backend/main.py:39, 50, 64`
 **Problem:** Phrase seed / grammar seed / pending-requests resume each `except Exception` and log-and-continue. Intentional ("non-fatal seeding"), but failure modes are invisible in production until someone reads logs.
 **Fix:** Keep the broad catch but emit a structured warning (and ideally a notification or metric). Tighten to specific exceptions where the cause is known.
 
@@ -472,7 +472,7 @@ Existing `TranscriptPanel.test.tsx` updated: `borderLeft` assertion now matches 
 New `components/ErrorBoundary.tsx`. Wraps `<Outlet />` in `App.tsx` (navbar + Layout chrome stay outside the boundary so the user can navigate away after a route crash). Fallback UI: "Something went wrong." + Reload button (`window.location.reload`). Component-stack logged to `console.error` for now. 3 Vitest cases: passthrough, fallback on throw, Reload click invokes reload.
 
 ### 22b. (was original #22 problem statement, kept for context)
-**File:** `youglish-app/frontend/src/App.tsx`
+**File:** `lexy-app/frontend/src/App.tsx`
 **Problem:** A render error in any deep component white-screens the whole app.
 **Fix:** Wrap `<Outlet />` (or each route element) in an `ErrorBoundary` that shows a fallback + reload button + sends to backend logging endpoint.
 
@@ -480,7 +480,7 @@ New `components/ErrorBoundary.tsx`. Wraps `<Outlet />` in `App.tsx` (navbar + La
 `services/settings_service.py:_coerce_settings` (fallback `dict(value)` for unknown DB return types) now catches only `(TypeError, ValueError)` — the actual exceptions `dict()` raises for non-iterable / malformed inputs. Anything else (e.g. real DB or system-level error) bubbles up so it's diagnosable.
 
 ### 23b. (was original problem statement)
-**File:** `youglish-app/backend/services/settings_service.py:49–54`
+**File:** `lexy-app/backend/services/settings_service.py:49–54`
 **Problem:** Bare `except Exception` after `JSONDecodeError`. Hides DB errors, permission errors, type errors.
 **Fix:** Catch only `json.JSONDecodeError` and `asyncpg.PostgresError`. Let everything else propagate.
 
@@ -676,12 +676,12 @@ Closing pass over every interactive surface that #27a–f didn't touch.
 First half of iOS "Add to Home Screen" / Capacitor prep (Path A in #34).
 
 **Files added:**
-  - `frontend/public/manifest.webmanifest` — `name`, `short_name: "YouGlish"`, `start_url: /`, `scope: /`, `display: standalone`, `orientation: portrait`, `theme_color: #1a237e`, `background_color: #ffffff`. Icon list references only `/favicon.svg` (the one icon asset that exists). 192×192 / 512×512 / apple-touch-icon are intentionally not referenced — see TODO below.
+  - `frontend/public/manifest.webmanifest` — `name`, `short_name: "Lexy"`, `start_url: /`, `scope: /`, `display: standalone`, `orientation: portrait`, `theme_color: #1a237e`, `background_color: #ffffff`. Icon list references only `/favicon.svg` (the one icon asset that exists). 192×192 / 512×512 / apple-touch-icon are intentionally not referenced — see TODO below.
   - `frontend/public/sw.js` — conservative shell SW. Strategy: precache shell (`/`, `/index.html`, `/manifest.webmanifest`, `/favicon.svg`, `/offline.html`) on install; navigation = network-first → cached shell → offline.html; `/assets/*` = cache-first (Vite filenames are content-hashed so collisions are impossible); `/api/*`, cross-origin, and non-GET = bypassed (lets SSE notifications work, lets POSTs hit network). `skipWaiting` + `clients.claim` so updates roll out fast. `CACHE_VERSION = 'v1'` constant for future invalidation.
   - `frontend/public/offline.html` — minimal standalone page, theme-coloured, 44×44 Retry button.
 
 **Files modified:**
-  - `frontend/index.html` — added `<link rel="manifest">`, `<meta name="theme-color">`, `mobile-web-app-capable` / `apple-mobile-web-app-capable` / `apple-mobile-web-app-title="YouGlish"` / `apple-mobile-web-app-status-bar-style="default"`. Title bumped from `frontend` → `YouGlish — Language Learning`. Inline comment documents the missing apple-touch-icon. `viewport-fit=cover` from #27a preserved.
+  - `frontend/index.html` — added `<link rel="manifest">`, `<meta name="theme-color">`, `mobile-web-app-capable` / `apple-mobile-web-app-capable` / `apple-mobile-web-app-title="Lexy"` / `apple-mobile-web-app-status-bar-style="default"`. Title bumped from `frontend` → `Lexy — Language Learning`. Inline comment documents the missing apple-touch-icon. `viewport-fit=cover` from #27a preserved.
   - `frontend/src/main.tsx` — production-only registration. Guarded by `import.meta.env.PROD && 'serviceWorker' in navigator`. Registers on `window.load` to avoid blocking first paint. Failure logged via `console.warn`, never throws.
 
 **Dev vs prod:** The SW only registers on production bundles, so `npm run dev` is unaffected — Vite's HMR keeps working without a SW intercepting navigations. To test the SW locally: `npm run build && npm run preview`.
@@ -728,7 +728,7 @@ Closes the PWA stage: Lighthouse PWA audit's "no maskable/png icon" warning is g
 - Touch-target audit (44px minimum)
 
 ### 28. 🟢 Clean `index.css` and `App.css`
-**Files:** `youglish-app/frontend/src/index.css`, `App.css`
+**Files:** `lexy-app/frontend/src/index.css`, `App.css`
 **Problem:** Mostly commented-out Panda-CSS skeleton and Vite template leftovers.
 **Fix:** Delete the dead bits; keep only what's used.
 
@@ -753,7 +753,7 @@ LLM is mocked via `llm_service._MOCK = True`. The active production exact-match 
 Grep confirmed only one caller (`LoginForm.tsx:30`) and it already null-handles via `?? 'Signed in'`. Tightened the function's docstring to make the contract explicit ("Callers MUST handle null — do not assert non-null"). No behaviour change needed.
 
 ### 32b. (was original #32 problem statement, kept for context)
-**File:** `youglish-app/frontend/src/auth.ts`
+**File:** `lexy-app/frontend/src/auth.ts`
 **Problem:** `getStoredEmail()` can return `null` but several callers don't check.
 **Fix:** Tighten the return type, add a guard.
 

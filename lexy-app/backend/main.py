@@ -89,7 +89,7 @@ async def lifespan(app: FastAPI):
     await close_pool()
 
 
-app = FastAPI(title="YouGlish Clone", lifespan=lifespan)
+app = FastAPI(title="Lexy Clone", lifespan=lifespan)
 
 
 def _parse_cors_origins(raw: str | None) -> list[str]:

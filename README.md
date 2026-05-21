@@ -1,4 +1,4 @@
-# YouGlish App
+# Lexy App
 
 ## Running locally
 
@@ -20,7 +20,7 @@
 
 4. Start the app:
    ```
-   cd youglish-app
+   cd lexy-app
    docker compose up
    ```
 

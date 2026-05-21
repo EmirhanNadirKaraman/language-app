@@ -1,1 +1,1 @@
--r youglish-app/backend/requirements.txt
+-r lexy-app/backend/requirements.txt

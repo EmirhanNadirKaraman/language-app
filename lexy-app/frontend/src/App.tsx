@@ -121,7 +121,7 @@ function Layout() {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
           <NavLink to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
-            <h1 style={{ fontSize: '24px', margin: 0 }}>YouGlish Clone</h1>
+            <h1 style={{ fontSize: '24px', margin: 0 }}>Lexy Clone</h1>
           </NavLink>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             {token && <NavLink to="/for-you" style={nl}>For You</NavLink>}

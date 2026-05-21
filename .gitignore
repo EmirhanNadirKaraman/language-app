@@ -10,7 +10,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-!youglish-app/frontend/dist/
+!lexy-app/frontend/dist/
 downloads/
 eggs/
 .eggs/
@@ -48,7 +48,7 @@ postprocessing/results/
 files/
 client_secret.json
 
-youglish-app/uploads
+lexy-app/uploads
 
 # Claude Code session/runtime state (lockfiles, local settings)
 .claude/

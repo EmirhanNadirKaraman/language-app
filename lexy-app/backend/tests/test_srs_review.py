@@ -1,7 +1,7 @@
 """
 SRS review feature tests.
 
-Source of truth: youglish-app/features/srs-review/tests.md
+Source of truth: lexy-app/features/srs-review/tests.md
 
 Covers:
   Unit (no DB):

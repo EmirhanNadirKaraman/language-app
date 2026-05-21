@@ -44,7 +44,7 @@ through `npx cap add ios`); paused there. The ranking below replaces the
 old Tier 2 ordering for the moment.
 
 ### W1 — `npm audit` toolchain vulnerabilities — ✅ RESOLVED 2026-05-20
-- **Verified:** `npm audit` in `youglish-app/frontend/` reports
+- **Verified:** `npm audit` in `lexy-app/frontend/` reports
   `found 0 vulnerabilities`. The vite/postcss/picomatch/brace-expansion
   CVEs flagged in the prior re-rank are already patched in the current
   lockfile.
@@ -172,7 +172,7 @@ old Tier 2 ordering for the moment.
 
 ### W7 — ErrorBoundary → backend client error reporting — ✅ RESOLVED 2026-05-20
 - **Shipped:**
-  - `youglish-app/backend/routers/errors.py` — `POST /api/v1/errors/client`,
+  - `lexy-app/backend/routers/errors.py` — `POST /api/v1/errors/client`,
     auth-optional (`_try_resolve_user_id` never raises: missing/invalid/
     expired tokens collapse to `user_id=NULL`), server-side field caps via
     `_truncate` (message ≤ 2 KB, stack/component_stack ≤ 16 KB, url ≤ 2 KB,
@@ -182,8 +182,8 @@ old Tier 2 ordering for the moment.
     user_id NULL, message, stack, component_stack, url, user_agent, release,
     created_at)`.
   - `main.py` wires `errors_router` under `/api/v1`.
-  - `youglish-app/backend/tests/test_client_errors.py` — endpoint coverage.
-  - `youglish-app/frontend/src/api/clientErrors.ts` — never-throws contract,
+  - `lexy-app/backend/tests/test_client_errors.py` — endpoint coverage.
+  - `lexy-app/frontend/src/api/clientErrors.ts` — never-throws contract,
     no `assertOk` (a 401 here must not trigger global sign-out),
     `keepalive: true`.
   - `ErrorBoundary.tsx` — fires `reportClientError` from
@@ -493,7 +493,7 @@ order. Do not start T3.1 until §8.1 (introduce `VITE_API_BASE_URL`) and
 - **Status:** packages installed (`@capacitor/core@8.3.4`,
   `@capacitor/cli@8.3.4`, `@capacitor/ios@8.3.4`),
   `capacitor.config.ts` written with placeholder
-  `appId='com.youglish.learning'`, `ios/` Xcode project scaffolded, web
+  `appId='com.lexy.learning'`, `ios/` Xcode project scaffolded, web
   assets copied to `ios/App/App/public/`, Podfile platform bumped to
   iOS 15.0 (Capacitor-8 requirement; template default of 14.0 is a
   known upstream bug), pods installed. Cannot finish `cap sync` until

@@ -1,7 +1,7 @@
 # Schema overview
 
 A lightweight map of the Postgres tables in this project. Source of truth is
-the `youglish-app/backend/migrations/versions/` directory; this document is a
+the `lexy-app/backend/migrations/versions/` directory; this document is a
 plain-text companion. Update it when a migration changes the shape of a group.
 
 No ERD image is generated. `eralchemy` / `schemacrawler` aren't installed and

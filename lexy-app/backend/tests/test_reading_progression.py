@@ -1,7 +1,7 @@
 """
 Reading → progression tests.
 
-Source of truth: youglish-app/features/reading-progression/tests.md
+Source of truth: lexy-app/features/reading-progression/tests.md
 
 Covers:
   Unit (no DB):

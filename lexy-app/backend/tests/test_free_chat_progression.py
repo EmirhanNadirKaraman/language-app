@@ -1,7 +1,7 @@
 """
 Free chat → progression tests.
 
-Source of truth: youglish-app/features/free-chat-progression/tests.md
+Source of truth: lexy-app/features/free-chat-progression/tests.md
 
 Covers:
   Unit (no DB):

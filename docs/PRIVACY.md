@@ -1,13 +1,13 @@
 # Privacy & data-deletion notes
 
 The user-facing privacy policy lives at `/privacy` (rendered by
-`youglish-app/frontend/src/components/PrivacyPage.tsx`). This doc is the
+`lexy-app/frontend/src/components/PrivacyPage.tsx`). This doc is the
 engineering-side companion: what data each table holds, and how account
 deletion fans out.
 
 ## Account deletion
 
-`DELETE /api/v1/account` (router: `youglish-app/backend/routers/account.py`).
+`DELETE /api/v1/account` (router: `lexy-app/backend/routers/account.py`).
 Auth-required. Runs `DELETE FROM users WHERE user_id = $1::uuid`; everything
 else falls out via Postgres FK declarations.
 
@@ -42,7 +42,7 @@ No `user_id` column → not affected by user deletion:
 - `channel_names_cache` (display-name lookup, not user-specific)
 
 ### Tests
-`youglish-app/backend/tests/test_account_deletion.py`:
+`lexy-app/backend/tests/test_account_deletion.py`:
 - positive path (204 + users row gone)
 - cascade fan-out (user_word_knowledge, srs_cards, word_usage_events all drain)
 - shared catalog preserved (word_table, phrase_table, grammar_rule_table,

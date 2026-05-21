@@ -1,7 +1,7 @@
 """
 Grammar rules as SRS items tests.
 
-Source of truth: youglish-app/features/grammar-rules-srs/tests.md
+Source of truth: lexy-app/features/grammar-rules-srs/tests.md
 
 Covers:
   Integration (real DB):

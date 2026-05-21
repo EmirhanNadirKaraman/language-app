@@ -1,7 +1,7 @@
 """
 Transcript click → progression tests.
 
-Source of truth: youglish-app/features/transcript-click-progression/tests.md
+Source of truth: lexy-app/features/transcript-click-progression/tests.md
 
 Covers:
   Unit (no DB):

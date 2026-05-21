@@ -16,7 +16,7 @@ Primary user goal: see a word in real context, mark/learn it, see it again at th
 
 | Layer | Path | Status |
 |---|---|---|
-| **App backend** (production) | `youglish-app/backend/` | FastAPI + asyncpg + Postgres. This is what serves the frontend. |
+| **App backend** (production) | `lexy-app/backend/` | FastAPI + asyncpg + Postgres. This is what serves the frontend. |
 | **Pipeline modules (root)** | `pipeline.py`, `eligibility.py`, `exposure_counter.py`, `user_knowledge.py`, `learning_units.py`, `onboarding.py`, `subtitle_*.py`, `utterance_*.py`, `word_knowledge.py`, `validate_tier_lemmas.py` | Standalone in-memory utilities. NOT mounted on FastAPI. Used by `subtitle-scraper/` and ad-hoc data prep. |
 | **`src/app/`** | `src/app/{exposure,extraction,learning,pipeline,subtitles}/` | Refactored copies of root pipeline modules, reorganized as a package. **NOT wired into anything** — orphan refactor in progress. |
 
@@ -26,7 +26,7 @@ Primary user goal: see a word in real context, mark/learn it, see it again at th
 
 ## 3. Stack
 
-### Backend (`youglish-app/backend/`)
+### Backend (`lexy-app/backend/`)
 - **FastAPI** + **asyncpg** (async Postgres driver, pool-based)
 - **Alembic** migrations (25+ files in `alembic/versions/`)
 - **JWT auth** (HS256, secret in `SECRET_KEY` env)
@@ -34,7 +34,7 @@ Primary user goal: see a word in real context, mark/learn it, see it again at th
 - **LLM cache**: SHA256(prompt_key + model + params) → `llm_cache` table, with TTL.
 - **spaCy** (`de_core_news_md` etc.) for tokenisation/lemmatisation.
 
-### Frontend (`youglish-app/frontend/`)
+### Frontend (`lexy-app/frontend/`)
 - **React 19** + **React Router 7** + **Vite 8** + **TypeScript** (strict)
 - **No state library** — `useOutletContext` + custom hooks + `localStorage` for token
 - **No CSS framework** — inline `React.CSSProperties` everywhere, dark mode via boolean prop
@@ -54,7 +54,7 @@ Primary user goal: see a word in real context, mark/learn it, see it again at th
 
 ```
 language-app/
-├── youglish-app/
+├── lexy-app/
 │   ├── backend/                   ← FastAPI app (production)
 │   │   ├── main.py                ← lifespan: pool + seed phrases + seed grammar + resume requests
 │   │   ├── database.py            ← asyncpg pool
@@ -80,7 +80,7 @@ language-app/
 ├── files/                          ← book_pdfs/, json/, masked/, text/
 ├── scripts/                        ← one-off backfills
 ├── tests/                          ← pytest tests for root pipeline modules
-└── Procfile                        ← deploys youglish-app backend
+└── Procfile                        ← deploys lexy-app backend
 ```
 
 ---
@@ -118,7 +118,7 @@ language-app/
 
 ---
 
-## 6. Service layer (`youglish-app/backend/services/`)
+## 6. Service layer (`lexy-app/backend/services/`)
 
 | Service | What it owns |
 |---|---|
@@ -252,7 +252,7 @@ Read this before assuming anything about how an event flows through `progression
 
 ### Backend
 ```bash
-cd youglish-app/backend
+cd lexy-app/backend
 # create venv, pip install -r requirements.txt
 alembic upgrade head
 uvicorn main:app --reload --port 8000
@@ -260,7 +260,7 @@ uvicorn main:app --reload --port 8000
 
 ### Frontend
 ```bash
-cd youglish-app/frontend
+cd lexy-app/frontend
 npm install
 npm run dev          # Vite on :5173, proxies /api → :8000
 npm run test         # vitest
@@ -276,7 +276,7 @@ python pipeline.py --requests-only  # consume content_request queue
 
 ### Backend tests
 ```bash
-cd youglish-app/backend
+cd lexy-app/backend
 pytest                              # serial — ~165s for 433 tests
 pytest -n auto                      # parallel via pytest-xdist — ~48s (3.4× speedup)
 ```
@@ -310,7 +310,7 @@ MOCK_LLM=false            # set true to short-circuit LLM in tests
 - **All LLM calls go through `llm_service` and cache via `llm_cache_service`.** Don't instantiate `AsyncAnthropic` ad-hoc.
 - **Polymorphic key everywhere:** if you add a new tracked content type, it gets an `item_type`, lives in its own content table (with `display_text` available), and plugs into `user_word_knowledge` / `srs_cards`.
 - **Migrations are append-only** — never edit an existing migration once it's been run anywhere.
-- **Tests live next to the layer they test** (backend tests under `youglish-app/backend/tests/`, pipeline tests under `tests/`).
+- **Tests live next to the layer they test** (backend tests under `lexy-app/backend/tests/`, pipeline tests under `tests/`).
 - **No new top-level Python files** without a reason — root is already crowded with the pipeline modules and the `src/app/` refactor is in flight.
 
 ---
@@ -318,7 +318,7 @@ MOCK_LLM=false            # set true to short-circuit LLM in tests
 ## 13. Where to start if you're new
 
 1. Skim `docs/SUMMARY.md` — file-level index of the whole repo. Tells you which file to open for any feature.
-2. Read `youglish-app/backend/main.py` — see the routers, the lifespan, the seed calls.
+2. Read `lexy-app/backend/main.py` — see the routers, the lifespan, the seed calls.
 3. Read `progression_service.py` (especially `_RULES`) — the state machine. Cross-check against §8b above before assuming any rule's behaviour.
 4. Read `review_service.py` — what happens on every SRS click.
 5. Read `App.tsx` + `SRSReviewPage.tsx` — the frontend loop.

@@ -34,7 +34,7 @@ from pathlib import Path
 
 # Make `backend.*` importable when running this script from the repo root.
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO_ROOT / "youglish-app"))
+sys.path.insert(0, str(_REPO_ROOT / "lexy-app"))
 
 import asyncpg  # noqa: E402
 

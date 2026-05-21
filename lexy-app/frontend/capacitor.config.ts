@@ -5,7 +5,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
  *
  * - appId is a PLACEHOLDER — change to the registered bundle ID before
  *   App Store submission. The Apple convention is reverse-DNS of a domain
- *   you actually own (e.g. com.yourcompany.youglish).
+ *   you actually own (e.g. com.yourcompany.lexy).
  * - webDir points at the Vite build output; `npx cap sync ios` copies
  *   the contents of dist/ into ios/App/App/public/ on every run.
  * - server.url is intentionally NOT set for production. If a future
@@ -19,8 +19,8 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * See docs/CAPACITOR_READINESS.md §§5, 9 for the full setup + CORS rules.
  */
 const config: CapacitorConfig = {
-  appId: 'com.youglish.learning',
-  appName: 'YouGlish',
+  appId: 'com.lexy.learning',
+  appName: 'Lexy',
   webDir: 'dist',
 };
 

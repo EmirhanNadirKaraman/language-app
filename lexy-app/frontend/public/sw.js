@@ -19,8 +19,8 @@
  * to invalidate old caches when the strategy shape changes.
  */
 const CACHE_VERSION = 'v1';
-const SHELL_CACHE = `youglish-shell-${CACHE_VERSION}`;
-const ASSET_CACHE = `youglish-assets-${CACHE_VERSION}`;
+const SHELL_CACHE = `lexy-shell-${CACHE_VERSION}`;
+const ASSET_CACHE = `lexy-assets-${CACHE_VERSION}`;
 
 const SHELL_PATHS = [
   '/',
