@@ -71,3 +71,26 @@ describe('ContentRequestPage mobile (#27f)', () => {
         await waitFor(() => expect(submit).toHaveBeenCalledWith('t', 'channel', 'UCabc'));
     });
 });
+
+
+describe('ContentRequestPage detected-language note (Stage 5)', () => {
+    it('renders the detected-language note before the form', () => {
+        render(<ContentRequestPage token="t" onClose={() => {}} />);
+        const note = screen.getByTestId('content-request-language-note');
+        expect(note).toBeInTheDocument();
+        // Key signals — language-neutral wording about the active learning
+        // language. The exact copy can evolve; assert the load-bearing
+        // phrases that make the policy unambiguous.
+        expect(note.textContent).toMatch(/detected/i);
+        expect(note.textContent).toMatch(/subtitles/i);
+        expect(note.textContent).toMatch(/active learning language/i);
+    });
+
+    it('language note appears before the submit button in DOM order', () => {
+        render(<ContentRequestPage token="t" onClose={() => {}} />);
+        const note = screen.getByTestId('content-request-language-note');
+        const submit = screen.getByTestId('content-request-submit');
+        // bitmask: 4 (DOCUMENT_POSITION_FOLLOWING) means submit follows note
+        expect(note.compareDocumentPosition(submit) & 4).toBeTruthy();
+    });
+});

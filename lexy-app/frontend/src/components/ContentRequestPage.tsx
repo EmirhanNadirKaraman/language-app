@@ -93,6 +93,30 @@ export function ContentRequestPage({ token, onClose }: Props) {
                 >×</button>
             </div>
 
+            {/* Detected-language policy note (Stage 5 of second-language plan).
+                We don't ask the user for an expected language here — the
+                scraper detects it from subtitles/metadata. This note sets the
+                expectation so a user studying Spanish who submits a German
+                channel doesn't expect it to surface in their Spanish queue. */}
+            <p
+                data-testid="content-request-language-note"
+                style={{
+                    margin: '0 0 16px',
+                    padding: '10px 12px',
+                    fontSize: '13px',
+                    color: 'var(--color-text-muted)',
+                    background: 'var(--color-surface-sunken)',
+                    border: '1px solid var(--color-border-subtle)',
+                    borderRadius: '6px',
+                    lineHeight: 1.4,
+                }}
+            >
+                Videos and channels are imported in the language detected from
+                their subtitles. Make sure the content actually matches the
+                language you want to study — recommendations, search, and SRS
+                only show items in your active learning language.
+            </p>
+
             {/* Form */}
             <form onSubmit={handleSubmit}>
                 {/* Type toggle */}

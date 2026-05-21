@@ -167,3 +167,72 @@ python -c "import spacy; nlp = spacy.load('es_core_news_sm'); \
 If a Stage-1 PR ever needs to test against Spanish locally, the spaCy
 model install above is the prerequisite; the migration in this commit
 is the schema-side prerequisite.
+
+---
+
+## Second-language plan — content-request language policy (Stage 5)
+
+**Decision (2026-05-21):** Spanish v1 does NOT add an
+`expected_language` field to `content_request`. The scraper continues
+to detect language from subtitles + yt-dlp metadata and writes
+`channel.language` / `video.language` / `sentence.language` /
+`word_table.language` from the detection result. The frontend simply
+surfaces a note explaining that.
+
+### Why no `expected_language` yet
+
+- Schema change is one-way: once a column exists, downstream code
+  starts depending on it. Avoid until we have a real signal that
+  mismatches confuse users.
+- The detected-language pipeline already works (Stage 4 smoke test
+  verifies Spanish content rows land at `language='es'`).
+- Recommendations / search / SRS / reading-review all filter by the
+  user's active language. Cross-language content is **invisible** to
+  the wrong-language user without any extra guard.
+
+### How mismatches surface today
+
+If a user on `recLanguage='es'` submits a German channel via
+`/api/v1/content-requests`:
+
+1. Backend scraper detects `de` from yt-dlp metadata.
+2. Rows land in `channel`/`video`/`sentence`/`word_table` with
+   `language='de'`.
+3. User's Spanish views (`/api/v1/search?language=es`,
+   `/api/v1/recommendations/*?language=es`, `/api/v1/srs/due?language=es`,
+   etc.) filter by `language='es'` and never return the German rows.
+4. User sees: their content request marked "done" (notification fires);
+   nothing new appears in their Spanish queue. Functionally
+   harmless — just a wasted scrape.
+
+The new note on `ContentRequestPage` sets the expectation up front so
+users know the language is detected, not chosen.
+
+### When to add `expected_language`
+
+Re-open if any of these signals appears:
+
+- Multiple support reports of "I submitted a Spanish channel and got
+  German rows" (the inverse: detection said German on bilingual
+  content).
+- Cost concern: wasted scrapes of language-mismatched content.
+- A UX call to **reject** wrong-language submissions instead of
+  silently filtering them out.
+
+When added, the migration is small (one NULL TEXT column + an
+optional CHECK against `language_table.language`). The router would
+warn or reject early before spawning the scraper.
+
+### What the user sees today
+
+`ContentRequestPage` carries a short note immediately under the close
+button:
+
+> Videos and channels are imported in the language detected from their
+> subtitles. Make sure the content actually matches the language you
+> want to study — recommendations, search, and SRS only show items in
+> your active learning language.
+
+Locked by a Vitest assertion in
+`lexy-app/frontend/src/components/ContentRequestPage.mobile.test.tsx`
+so the note can't accidentally disappear in a future refactor.
