@@ -27,7 +27,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 _SCRAPER_DIR = str(Path(__file__).resolve().parent)
 if _SCRAPER_DIR not in sys.path:
     sys.path.insert(0, _SCRAPER_DIR)
-from phrase_finder import extract_german_logic
+from phrase_finder import extract_phrases
 from transcript_fetcher import fetch_with_retries
 
 
@@ -195,12 +195,21 @@ def fetch_category(video_id: str) -> str:
     return meta["category"] if meta else "other"
 
 
-def insert_phrases(cursor, sentence_ids, docs):
+def insert_phrases(cursor, sentence_ids, docs, language):
+    """Insert phrase rows for sentences in `docs`.
+
+    Phrase extraction is German-only in v1; other languages route through
+    `extract_phrases(doc, language)` and get back an empty list. The
+    caller (populate) no longer needs to gate on language — passing the
+    detected language through is enough.
+
+    Stage 1 / second-language plan, 2026-05-21.
+    """
     # Phase 1: collect all phrases and unique blueprints across all sentences
     all_phrase_data = []  # [(sid, phrases_list), ...]
     unique_blueprints = set()
     for sid, doc in zip(sentence_ids, docs):
-        phrases = extract_german_logic(doc)
+        phrases = extract_phrases(doc, language)
         if not phrases:
             continue
         all_phrase_data.append((sid, phrases))
@@ -374,8 +383,9 @@ def populate(cursor, connection, db_words, video_id, title, thumbnail_url,
             + b" ON CONFLICT DO NOTHING"
         )
 
-    if language == "de":
-        insert_phrases(cursor, sentence_ids, docs)
+    # Dispatch by language — `insert_phrases` is a no-op for any language
+    # without a registered extractor (Stage 1 / second-language plan).
+    insert_phrases(cursor, sentence_ids, docs, language)
 
     connection.commit()
 

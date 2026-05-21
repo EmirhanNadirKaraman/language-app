@@ -94,3 +94,58 @@ async def test_empty_sentence_returns_empty_phrases(matcher_client: AsyncClient)
 async def test_missing_sentence_field_returns_422(matcher_client: AsyncClient):
     resp = await matcher_client.post(MATCH, json={})
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Stage 1 — language-gated extractor
+# ---------------------------------------------------------------------------
+
+async def test_language_query_de_keeps_german_extraction(matcher_client: AsyncClient):
+    """Explicitly passing ?language=de must not change German behaviour
+    (back-compat with the no-param call asserted above)."""
+    resp = await matcher_client.post(
+        f"{MATCH}?language=de", json={"sentence": "Ich lerne Deutsch."}
+    )
+    assert resp.status_code == 200
+    assert len(resp.json()["phrases"]) > 0
+
+
+async def test_language_query_es_returns_no_phrases(matcher_client: AsyncClient):
+    """Spanish has no v1 extractor — even when the sentence is German.
+    The dispatcher returns [] before any German logic runs."""
+    resp = await matcher_client.post(
+        f"{MATCH}?language=es", json={"sentence": "Ich lerne Deutsch."}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["phrases"] == []
+
+
+async def test_language_query_unknown_returns_no_phrases(matcher_client: AsyncClient):
+    resp = await matcher_client.post(
+        f"{MATCH}?language=xx", json={"sentence": "Ich lerne Deutsch."}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["phrases"] == []
+
+
+async def test_matcher_service_match_sentence_with_language_param():
+    """Unit-level: match_sentence(sentence, language='es') returns []
+    without invoking extract_german_logic. Asserts the language arg
+    actually threads through to the dispatcher rather than being ignored."""
+    from unittest.mock import patch
+    from backend.services import matcher_service
+
+    with patch.object(matcher_service._pf, "extract_german_logic") as ge_mock:
+        result = await matcher_service.match_sentence("Ich lerne Deutsch.", "es")
+        assert result == []
+        # The German extractor must NOT be called when language='es'.
+        ge_mock.assert_not_called()
+
+
+async def test_matcher_service_match_sentence_default_language_is_de():
+    """Back-compat: omitting `language` must still run the German extractor."""
+    from backend.services import matcher_service
+
+    result = await matcher_service.match_sentence("Ich lerne Deutsch.")
+    assert isinstance(result, list)
+    assert len(result) > 0

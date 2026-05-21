@@ -72,9 +72,9 @@ pipeline.populate = instrumented_populate
 # Monkey-patch insert_phrases to instrument it
 _original_insert_phrases = pipeline.insert_phrases
 
-def instrumented_insert_phrases(cursor, sentence_ids, docs):
+def instrumented_insert_phrases(cursor, sentence_ids, docs, language):
     t0 = time.perf_counter()
-    _original_insert_phrases(cursor, sentence_ids, docs)
+    _original_insert_phrases(cursor, sentence_ids, docs, language)
     elapsed = time.perf_counter() - t0
     profile_stats["total_insert_phrases_time"] += elapsed
     if profile_stats["video_times"]:

@@ -1,13 +1,18 @@
 """
-Thin async wrapper around phrase_finder.extract_german_logic.
+Thin async wrapper around phrase_finder's language-gated dispatcher.
 
-phrase_finder.py lives in subtitle-scraper/ and loads both the spaCy model
-and the verb dictionary at module-import time (module-level globals). It
-resolves its data path from `__file__`, so importing it only requires
-adding subtitle-scraper/ to sys.path — no cwd mutation.
+phrase_finder.py lives in subtitle-scraper/ and loads the German spaCy
+model + verb dictionary at module-import time. Stage 1 of the
+second-language plan (2026-05-21) added `extract_phrases(doc, language)`
+there: German routes to the existing German-specific logic; any other
+language (including the next planned target Spanish 'es') returns an
+empty list — words-only v1.
 
-`_pf` is a normal module reference; the model and dictionary stay resident
-for the lifetime of the process.
+`_pf` is a normal module reference; the model and dictionary stay
+resident for the lifetime of the process. Lazy-loading the German
+resources is deferred to Stage 1b (the trigram-index bootstrap is
+intertwined with verb_blueprint_map; safer to defer than to risk
+subtle import-order regressions in the German hot path).
 """
 import asyncio
 import sys
@@ -23,22 +28,29 @@ if _SCRAPER_PATH not in sys.path:
 import phrase_finder as _pf
 
 
-def _extract(sentence: str) -> list[dict]:
+def _extract(sentence: str, language: str) -> list[dict]:
     """nlp(sentence) → Doc → phrase extraction. Sync — run via executor.
 
-    `extract_german_logic` expects a spaCy Doc (it iterates tokens and reads
-    `token.i`). Passing a string causes AttributeError mid-loop. We do the
-    nlp() conversion here so callers can pass plain text.
+    Non-German languages short-circuit to `[]` inside `extract_phrases` so
+    we still pay the spaCy nlp() cost (cheap; the German model is already
+    in memory). The cost is only avoided when scoring is wholly skipped
+    upstream. That's fine for the matcher route, which is rare-call.
     """
     doc = _pf.nlp(sentence)
-    return _pf.extract_german_logic(doc)
+    return _pf.extract_phrases(doc, language)
 
 
-async def match_sentence(sentence: str) -> list[dict]:
-    """Run nlp() + extract_german_logic in a thread so the sync spaCy call
-    doesn't block the event loop."""
+async def match_sentence(sentence: str, language: str = "de") -> list[dict]:
+    """Run nlp() + extract_phrases in a thread so the sync spaCy call
+    doesn't block the event loop.
+
+    `language` defaults to "de" for backward compatibility with the
+    single-arg callers (POST /api/v1/sentences/match, existing tests).
+    For non-German content pass the matching language; the result will
+    be an empty list (Stage 1, words-only v1 for L2).
+    """
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _extract, sentence)
+    return await loop.run_in_executor(None, _extract, sentence, language)
 
 
 def get_blueprint_map() -> dict[str, str]:
@@ -46,6 +58,8 @@ def get_blueprint_map() -> dict[str, str]:
 
     Used by phrase_service.seed_from_blueprint_map() at application startup
     to populate phrase_table without re-reading the file from disk.
+
+    German-only by design — there is no Spanish/French equivalent yet.
     """
     return _pf.verb_blueprint_map
 
@@ -63,8 +77,12 @@ async def match_sentence_with_ids(
 
     A single batch query looks up all canonical forms so there is at most one
     round-trip to the DB regardless of sentence length.
+
+    `language` now threads through to `match_sentence` so non-German content
+    short-circuits cleanly (returns []). Pre-Stage-1 this method silently
+    ran the German extractor on any input regardless of `language`.
     """
-    phrases = await match_sentence(sentence)
+    phrases = await match_sentence(sentence, language)
     if not phrases:
         return phrases
 

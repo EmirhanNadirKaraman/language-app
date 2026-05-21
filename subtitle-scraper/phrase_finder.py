@@ -393,6 +393,44 @@ def extract_german_logic(doc):
 
     return result
 
+
+# ---------------------------------------------------------------------------
+# Language-gated dispatcher (Stage 1 of second-language plan, 2026-05-21)
+# ---------------------------------------------------------------------------
+#
+# `extract_german_logic` encodes German-specific morphology: separable
+# prefixes, Akk/Dat alignment, reflexive sich, etc. It does not generalise
+# to Spanish / French / etc. The plan (docs/MAINTENANCE.md) is words-only
+# for Spanish v1 — no phrase extractor yet, no grammar rules. Other
+# languages can register their own extractor here later (Stage 4+).
+#
+# Until then, `extract_phrases(doc, "es")` (or any non-German code) returns
+# an empty list — the scraper writes word_table + sentence rows as normal
+# but skips phrase_table inserts. Callers don't need to special-case.
+
+_LANGUAGE_EXTRACTORS = {
+    "de": extract_german_logic,
+}
+
+
+def extract_phrases(doc, language):
+    """Dispatch phrase extraction by content language.
+
+    German routes to `extract_german_logic` (byte-identical behaviour
+    to the pre-Stage-1 call site). Any other language — including the
+    next planned target Spanish ('es') — returns an empty list so the
+    caller can iterate normally and the scraper writes zero phrase rows.
+
+    `doc` is a spaCy Doc; we accept it without inspecting language so
+    the caller is the source of truth (matches scraper detected_lang,
+    matcher request language, chat session language).
+    """
+    extractor = _LANGUAGE_EXTRACTORS.get(language)
+    if extractor is None:
+        return []
+    return extractor(doc)
+
+
 def get_words_array(text):
     """
     Extract words from text and return as a simple array.
