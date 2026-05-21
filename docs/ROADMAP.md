@@ -542,7 +542,7 @@ order. Do not start T3.1 until §8.1 (introduce `VITE_API_BASE_URL`) and
 | #30 | ERD / `docs/SCHEMA.md` | S | Onboarding | `eralchemy` one-shot. |
 | #31 | Extractor thresholds validation harness | M | Robustness | Only if PDF imports start failing. |
 | Hole 27 | Spaced forgetting (auto-demote `known` after long silence) | M–L | Real product change | **Deferred by product decision (2026-05-21)** — manual demotion via Hole 26 already covers "I forgot this". Re-open behind a maintenance-review UX, not as a silent behaviour change. |
-| Hole 10 | Orphan SRS cards cleanup | XS | Operational hygiene | Periodic job. |
+| Hole 10 | Orphan SRS cards cleanup | XS | Operational hygiene | Script + scheduling docs landed 2026-05-21. See [docs/MAINTENANCE.md](./MAINTENANCE.md) — recommended weekly `--apply` at a quiet hour, wire into Render cron or platform scheduler. |
 | Hole 14 | Skip ≠ defer in SRS review | S | UX nit | Tell backend to bury for today. |
 | Hole 33/34 | Per-direction `last_seen`, `(item_id, item_type)` rec keys | S–M | Future-proofing | Do before adding phrase coverage to ranking. |
 

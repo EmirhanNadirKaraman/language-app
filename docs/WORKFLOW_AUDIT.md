@@ -258,7 +258,7 @@ What's still open / accepted-not-closed:
 1. **Hole 23 — dual SRS schedule (accepted).** Reading queue and main SRS queue diverge after the first review; documented as a UX choice. Revisit if duplication starts confusing users.
 2. **Hole 27 — silent forgetting (DEFERRED by product decision, 2026-05-21).** No scheduled auto-demotion of `known` items. Treated as chosen behaviour, not a correctness bug. Manual demotion already covers the one-click "I forgot this" path via Hole 26's reset; re-open when a maintenance-review UX is designed.
 3. **Hole 19 / Hole 20 — free-chat language hardcoded `'de'` + per-message detection.** Bundled into the future multi-language work (#18, #19); zero practical impact while only German exists.
-4. **Hole 10 — orphaned SRS cards (operational hygiene).** `scripts/cleanup_orphan_srs_cards.py` exists; periodic job is a polish task.
+4. **Hole 10 — orphaned SRS cards (operational hygiene).** `scripts/cleanup_orphan_srs_cards.py` exists; periodic job scheduling is documented in [docs/MAINTENANCE.md](./MAINTENANCE.md) (recommended: weekly `--apply` at a quiet hour). Dev DB audit on 2026-05-20 reported 0 orphans, so this is preventive.
 5. **Hole 33 / Hole 34 — per-direction `last_seen` + recommendation keys.** Future-proofing for richer ranking.
 6. **TODO #4b — LISTEN/NOTIFY refactor.** Cost/perf, not correctness; deferred until user count warrants it.
 
