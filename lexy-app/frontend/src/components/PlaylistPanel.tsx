@@ -5,25 +5,7 @@ import { lookupWord, pickSingleOrFirst } from '../api/words';
 import { fetchSuggestions } from '../api/suggest';
 import { generatePlaylist } from '../api/playlists';
 import { formatDuration } from '../utils/recommendationUtils';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const LANGUAGES = [
-    { code: 'de', label: 'German' },
-    { code: 'en', label: 'English' },
-    { code: 'fr', label: 'French' },
-    { code: 'es', label: 'Spanish' },
-    { code: 'it', label: 'Italian' },
-    { code: 'pt', label: 'Portuguese' },
-    { code: 'ja', label: 'Japanese' },
-    { code: 'ru', label: 'Russian' },
-    { code: 'ko', label: 'Korean' },
-    { code: 'tr', label: 'Turkish' },
-    { code: 'pl', label: 'Polish' },
-    { code: 'sv', label: 'Swedish' },
-];
+import { LANGUAGE_OPTIONS } from '../config/languages';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -308,7 +290,7 @@ function BuildView({
                     style={{ ...inputStyle, cursor: 'pointer' }}
                 >
                     <option value="">Select language…</option>
-                    {LANGUAGES.map(l => (
+                    {LANGUAGE_OPTIONS.map(l => (
                         <option key={l.code} value={l.code}>{l.label}</option>
                     ))}
                 </select>

@@ -417,8 +417,12 @@ export interface SRSReviewCard {
   active_level: number;
   display_text: string;
   // Added in #0a-1: prompt = front of the card, answer = back.
-  // For passive cards: prompt is German display, answer is English gloss.
-  // For active cards: swapped.
+  // Backend `review_service.get_due_cards` (T1.2 / Hole 12 fix) sets
+  // prompt_text = English gloss and answer_text = target-language display
+  // form regardless of direction. The two SRS directions differ only in
+  // how the answer is graded (passive = self-grade, active = typed input
+  // → llm_service.evaluate_production). Language-neutral by design — the
+  // dispatcher works the same way for any target language.
   prompt_text: string;
   answer_text: string;
 }
@@ -426,7 +430,7 @@ export interface SRSReviewCard {
 export interface SRSProductionResult {
   card_id: number;
   correct: boolean;
-  expected: string;   // the canonical German form the user should have produced
+  expected: string;   // the canonical target-language form the user should have produced
   submitted: string;  // echoed back
   feedback: string;   // one-sentence explanation
 }

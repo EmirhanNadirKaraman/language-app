@@ -1,11 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import { listBooks, uploadBook, getBook, deleteBook } from '../api/books';
 import type { BookDocument } from '../types';
+import { DEFAULT_LANGUAGE, LANGUAGE_LABELS } from '../config/languages';
 
 interface Props {
   token: string;
   onOpen: (doc: BookDocument) => void;
   onClose: () => void;
+  // Default language for the upload form. Defaults to DEFAULT_LANGUAGE
+  // when the caller doesn't supply one, but the parent route should pass
+  // the user's active recLanguage so a Spanish learner gets a Spanish
+  // default instead of German (Stage 2 of the second-language plan).
+  defaultLanguage?: string;
   // Optional entry point to the saved-selection review queue (#5).
   // Wired by the parent route — undefined hides the button.
   onOpenReadingReview?: () => void;
@@ -25,11 +31,9 @@ const STATUS_COLORS: Record<string, string> = {
   error:      '#d32f2f',
 };
 
-const LANG_LABELS: Record<string, string> = {
-  de: 'German', en: 'English', fr: 'French', es: 'Spanish',
-  it: 'Italian', pt: 'Portuguese', ja: 'Japanese', ru: 'Russian',
-  ko: 'Korean', tr: 'Turkish', pl: 'Polish', sv: 'Swedish',
-};
+// Display labels for book.language chips. Sourced from the shared
+// languages config so adding a language touches one file.
+const LANG_LABELS = LANGUAGE_LABELS;
 
 type SortKey = 'newest' | 'oldest' | 'az' | 'za' | 'language' | 'status';
 
@@ -55,7 +59,13 @@ function sortBooks(books: BookDocument[], key: SortKey): BookDocument[] {
   }
 }
 
-export function BookLibraryPage({ token, onOpen, onClose, onOpenReadingReview }: Props) {
+export function BookLibraryPage({
+  token,
+  onOpen,
+  onClose,
+  defaultLanguage,
+  onOpenReadingReview,
+}: Props) {
   // Theme tokens come from CSS variables in index.css (#20). Local `th`
   // object kept so call sites read cleanly — values are var(--...) strings.
   const th = {
@@ -72,7 +82,7 @@ export function BookLibraryPage({ token, onOpen, onClose, onOpenReadingReview }:
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [title, setTitle]       = useState('');
-  const [language, setLanguage] = useState('de');
+  const [language, setLanguage] = useState(defaultLanguage || DEFAULT_LANGUAGE);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [sortKey, setSortKey]   = useState<SortKey>('newest');
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null); // doc_id pending delete

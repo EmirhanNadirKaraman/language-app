@@ -1,21 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { SRSReviewCard, SRSProductionResult } from '../types';
 import { getDueCards, skipCard, submitReviewAnswer, submitProductionAnswer } from '../api/srs';
-
-const LANGUAGES = [
-    { code: 'de', label: 'German' },
-    { code: 'en', label: 'English' },
-    { code: 'fr', label: 'French' },
-    { code: 'es', label: 'Spanish' },
-    { code: 'it', label: 'Italian' },
-    { code: 'pt', label: 'Portuguese' },
-    { code: 'ja', label: 'Japanese' },
-    { code: 'ru', label: 'Russian' },
-    { code: 'ko', label: 'Korean' },
-    { code: 'tr', label: 'Turkish' },
-    { code: 'pl', label: 'Polish' },
-    { code: 'sv', label: 'Swedish' },
-];
+import { LANGUAGE_OPTIONS } from '../config/languages';
 
 interface Props {
     token: string;
@@ -244,7 +230,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                     value={producedText}
                     onChange={e => setProducedText(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && canSubmit) handleProduce(); }}
-                    placeholder="Type the German answer"
+                    placeholder="Type the answer"
                     disabled={submitting}
                     autoFocus
                     // iOS Safari zooms in on any focused input below 16px font.
@@ -355,7 +341,7 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                     }}
                 >
                     <option value="">Select language…</option>
-                    {LANGUAGES.map(l => (
+                    {LANGUAGE_OPTIONS.map(l => (
                         <option key={l.code} value={l.code}>{l.label}</option>
                     ))}
                 </select>
@@ -575,8 +561,8 @@ export function SRSReviewPage({ token, language, onLanguageChange, onClose }: Pr
                             {/* Instruction */}
                             <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-text-muted)' }}>
                                 {current.direction === 'passive'
-                                    ? 'Recall the German. Reveal, then self-grade.'
-                                    : 'Type the German for this item.'}
+                                    ? 'Recall the answer. Reveal, then self-grade.'
+                                    : 'Type the answer for this item.'}
                             </p>
 
                             {/* Level indicators */}

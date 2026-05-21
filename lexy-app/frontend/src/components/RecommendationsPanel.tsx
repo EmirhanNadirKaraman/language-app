@@ -12,21 +12,7 @@ import type { InsightItem, SearchResult, DueSelectionItem } from '../types';
 import type { WordColorScheme } from '../config/wordColors';
 import type { ChannelAction, GenreAction, UserPreferences } from '../api/settings';
 import { getDueSelections } from '../api/reading';
-
-const LANGUAGES = [
-    { code: 'de', label: 'German' },
-    { code: 'en', label: 'English' },
-    { code: 'fr', label: 'French' },
-    { code: 'es', label: 'Spanish' },
-    { code: 'it', label: 'Italian' },
-    { code: 'pt', label: 'Portuguese' },
-    { code: 'ja', label: 'Japanese' },
-    { code: 'ru', label: 'Russian' },
-    { code: 'ko', label: 'Korean' },
-    { code: 'tr', label: 'Turkish' },
-    { code: 'pl', label: 'Polish' },
-    { code: 'sv', label: 'Swedish' },
-];
+import { LANGUAGE_OPTIONS } from '../config/languages';
 
 interface Props {
     token:              string;
@@ -138,7 +124,7 @@ export function RecommendationsPanel({
                     data-testid="recs-language"
                 >
                     <option value="">Select language…</option>
-                    {LANGUAGES.map(l => (
+                    {LANGUAGE_OPTIONS.map(l => (
                         <option key={l.code} value={l.code}>{l.label}</option>
                     ))}
                 </select>

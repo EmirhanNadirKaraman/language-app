@@ -22,6 +22,7 @@ import { useReminders } from './hooks/useReminders';
 import { usePreferences } from './hooks/usePreferences';
 import { useResolvedTheme } from './hooks/useResolvedTheme';
 import { useViewport } from './hooks/useViewport';
+import { DEFAULT_LANGUAGE, languageLabel } from './config/languages';
 import { getToken } from './auth';
 import { AUTH_EXPIRED_EVENT } from './api/_http';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -217,7 +218,7 @@ function HomePage() {
 
 function HomePageAuthed() {
   const { token, prefs, recLanguage } = useAppCtx();
-  const { terms, query, addTerm, removeTerm, results, total, loading, error, hasMore, loadMore } = useSearch(recLanguage || 'de');
+  const { terms, query, addTerm, removeTerm, results, total, loading, error, hasMore, loadMore } = useSearch(recLanguage || DEFAULT_LANGUAGE);
   const [resultIdx, setResultIdx] = useState(0);
   const [showChat, setShowChat] = useState<'free' | 'guided' | null>(null);
   const [recResult, setRecResult] = useState<SearchResult | null>(null);
@@ -258,7 +259,13 @@ function HomePageAuthed() {
 
   return (
     <>
-      <SearchBar terms={terms} onAddTerm={addTerm} onRemoveTerm={removeTerm} loading={loading} />
+      <SearchBar
+        terms={terms}
+        onAddTerm={addTerm}
+        onRemoveTerm={removeTerm}
+        loading={loading}
+        language={recLanguage || undefined}
+      />
       {error && <p style={{ color: 'red', marginTop: '12px' }}>{error}</p>}
 
       {loading && !currentResult && (
@@ -271,11 +278,14 @@ function HomePageAuthed() {
       {activeResult && (
         <>
           {query && currentResult && !recResult && (
-            <p style={{ margin: '20px 0 14px', fontSize: '22px', lineHeight: 1.4, color: '#1a237e' }}>
-              Aussprache von{' '}
+            <p
+              data-testid="home-result-banner"
+              style={{ margin: '20px 0 14px', fontSize: '22px', lineHeight: 1.4, color: '#1a237e' }}
+            >
+              Pronunciation of{' '}
               <strong style={{ color: '#c0392b' }}>{query}</strong>{' '}
-              in {currentResult.language}{' '}
-              <span style={{ color: '#666', fontSize: '18px' }}>({resultIdx + 1} von {total}):</span>
+              in {languageLabel(currentResult.language)}{' '}
+              <span style={{ color: '#666', fontSize: '18px' }}>({resultIdx + 1} of {total}):</span>
             </p>
           )}
           <PlayerView
@@ -371,7 +381,7 @@ function PlaylistPage() {
 }
 
 function BooksPage() {
-  const { token, prefs } = useAppCtx();
+  const { token, prefs, recLanguage } = useAppCtx();
   const [activeBook, setActiveBook] = useState<BookDocument | null>(null);
   const navigate = useNavigate();
   if (!token) return <Navigate to="/" />;
@@ -390,6 +400,7 @@ function BooksPage() {
       token={token}
       onOpen={setActiveBook}
       onClose={() => navigate('/')}
+      defaultLanguage={recLanguage || undefined}
       onOpenReadingReview={() => navigate('/reading-review')}
     />
   );

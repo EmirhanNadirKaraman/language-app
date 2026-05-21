@@ -1,15 +1,23 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { fetchSuggestions } from '../api/suggest';
 import type { Suggestion } from '../types';
+import { DEFAULT_LANGUAGE } from '../config/languages';
 
 interface Props {
   terms: string[];
   onAddTerm: (word: string) => void;
   onRemoveTerm: (index: number) => void;
   loading: boolean;
+  // Active learning language. Threaded into the suggestions request so a
+  // user on Spanish gets Spanish suggestions instead of German (Stage 2
+  // of the second-language plan). Falls back to DEFAULT_LANGUAGE so
+  // pre-Stage-2 callers / tests that omit the prop keep working.
+  language?: string;
 }
 
-export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
+export function SearchBar({
+  terms, onAddTerm, onRemoveTerm, loading, language,
+}: Props) {
   const [input, setInput] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -37,7 +45,9 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
       abortRef.current = controller;
 
       try {
-        const data = await fetchSuggestions(input.trim(), 'de', controller.signal);
+        const data = await fetchSuggestions(
+          input.trim(), language || DEFAULT_LANGUAGE, controller.signal,
+        );
         const wordSuggestion: Suggestion = { word: input.trim(), score: 1, type: 'word' };
         const phrases = data.filter(s => s.word !== input.trim());
         setSuggestions([wordSuggestion, ...phrases]);
@@ -49,7 +59,7 @@ export function SearchBar({ terms, onAddTerm, onRemoveTerm, loading }: Props) {
     }, 250);
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [input]);
+  }, [input, language]);
 
   const selectSuggestion = useCallback((word: string) => {
     onAddTerm(word);
