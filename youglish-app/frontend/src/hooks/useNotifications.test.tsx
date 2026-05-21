@@ -151,6 +151,98 @@ describe('useNotifications — lifecycle (audit fix C)', () => {
     });
 });
 
+describe('useNotifications — 401 handling', () => {
+    function make401Fetch(calls: FetchCall[], detail: string | null) {
+        return (url: string | URL, init?: RequestInit) => {
+            const signal = init?.signal ?? undefined;
+            calls.push({ url, signal, aborted: false });
+            const bodyJson = detail !== null ? JSON.stringify({ detail }) : '';
+            // Mimic a Response so res.clone().json() works.
+            return Promise.resolve({
+                ok: false,
+                status: 401,
+                body: null,
+                clone() {
+                    return {
+                        json: () =>
+                            detail !== null
+                                ? Promise.resolve(JSON.parse(bodyJson))
+                                : Promise.reject(new Error('not json')),
+                    };
+                },
+            } as unknown as Response);
+        };
+    }
+
+    it('dispatches auth:expired with reason "expired" on token_expired detail', async () => {
+        calls = [];
+        fetchMock = vi.fn(make401Fetch(calls, 'token_expired'));
+        vi.stubGlobal('fetch', fetchMock);
+        const handler = vi.fn();
+        window.addEventListener('auth:expired', handler);
+
+        renderHook(() => useNotifications('tok'));
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+        expect(handler).toHaveBeenCalledTimes(1);
+        const detail = (handler.mock.calls[0][0] as CustomEvent).detail;
+        expect(detail).toEqual({ reason: 'expired' });
+
+        window.removeEventListener('auth:expired', handler);
+    });
+
+    it('dispatches auth:expired with reason "unauthorized" on generic 401', async () => {
+        calls = [];
+        fetchMock = vi.fn(make401Fetch(calls, 'Invalid token'));
+        vi.stubGlobal('fetch', fetchMock);
+        const handler = vi.fn();
+        window.addEventListener('auth:expired', handler);
+
+        renderHook(() => useNotifications('tok'));
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+        expect(handler).toHaveBeenCalledTimes(1);
+        const detail = (handler.mock.calls[0][0] as CustomEvent).detail;
+        expect(detail).toEqual({ reason: 'unauthorized' });
+
+        window.removeEventListener('auth:expired', handler);
+    });
+
+    it('dispatches auth:expired with reason "unauthorized" on 401 with non-JSON body', async () => {
+        calls = [];
+        fetchMock = vi.fn(make401Fetch(calls, null));
+        vi.stubGlobal('fetch', fetchMock);
+        const handler = vi.fn();
+        window.addEventListener('auth:expired', handler);
+
+        renderHook(() => useNotifications('tok'));
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+
+        expect(handler).toHaveBeenCalledTimes(1);
+        const detail = (handler.mock.calls[0][0] as CustomEvent).detail;
+        expect(detail).toEqual({ reason: 'unauthorized' });
+
+        window.removeEventListener('auth:expired', handler);
+    });
+
+    it('401 does not schedule a reconnect', async () => {
+        calls = [];
+        fetchMock = vi.fn(make401Fetch(calls, 'token_expired'));
+        vi.stubGlobal('fetch', fetchMock);
+
+        renderHook(() => useNotifications('tok'));
+        await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+        expect(calls).toHaveLength(1);
+
+        // The reconnect window (and beyond) elapses — no additional fetch.
+        await act(async () => {
+            vi.advanceTimersByTime(30_000);
+            await Promise.resolve();
+        });
+        expect(calls).toHaveLength(1);
+    });
+});
+
 describe('useNotifications — reconnect on network failure', () => {
     function makeFailingFetch(calls: FetchCall[], failTimes: number) {
         let n = 0;

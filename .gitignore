@@ -49,3 +49,7 @@ files/
 client_secret.json
 
 youglish-app/uploads
+
+# Claude Code session/runtime state (lockfiles, local settings)
+.claude/
+

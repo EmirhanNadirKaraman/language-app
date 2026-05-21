@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { apiUrl } from '../api/_baseUrl';
+import { signalAuthExpired } from '../api/_http';
 
 export interface AppNotification {
     id: string;
@@ -61,6 +62,22 @@ export function useNotifications(token: string | null) {
                     signal: controller.signal,
                 });
                 if (controller.signal.aborted) return;
+                // 401: token expired or otherwise invalid. Surface to the rest
+                // of the app via auth:expired (matches the _http.ts contract)
+                // instead of reconnecting silently every 5s forever. The token
+                // state in App.tsx will flip to null and this hook will
+                // unmount its current effect cleanly on the next render.
+                if (res.status === 401) {
+                    let detail = '';
+                    try {
+                        const body = await res.clone().json() as { detail?: unknown };
+                        if (typeof body?.detail === 'string') detail = body.detail;
+                    } catch {
+                        // body wasn't JSON; treat as generic 401.
+                    }
+                    signalAuthExpired(detail === 'token_expired' ? 'expired' : 'unauthorized');
+                    return;
+                }
                 if (!res.ok || !res.body) {
                     scheduleReconnect(controller);
                     return;
