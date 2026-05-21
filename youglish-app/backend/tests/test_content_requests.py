@@ -161,6 +161,167 @@ async def test_list_isolates_users(client: AsyncClient, db_pool):
 
 
 # ---------------------------------------------------------------------------
+# Per-user uniqueness (migration 029)
+# ---------------------------------------------------------------------------
+
+async def test_two_users_same_content_create_separate_rows(client: AsyncClient, db_pool):
+    """User A and User B submitting the same content get distinct request rows.
+
+    Pre-migration-029 behaviour was that User B's POST returned User A's row
+    (preserved via ON CONFLICT on the global UNIQUE). After 029 each user has
+    their own row scoped by (user_id, request_type, content_id).
+    """
+    headers_a, uid_a = await _register_and_get_user(client, db_pool, _email())
+    headers_b, uid_b = await _register_and_get_user(client, db_pool, _email())
+
+    cid = _channel_id()
+    r_a = await client.post(URL, json={"request_type": "channel", "content_id": cid}, headers=headers_a)
+    r_b = await client.post(URL, json={"request_type": "channel", "content_id": cid}, headers=headers_b)
+
+    assert r_a.status_code == 201
+    assert r_b.status_code == 201
+    assert r_a.json()["request_id"] != r_b.json()["request_id"]
+
+    # DB-side check: two rows exist, one per user.
+    rows = await db_pool.fetch(
+        "SELECT user_id::text AS user_id, request_id, status FROM content_request "
+        "WHERE request_type = 'channel' AND content_id = $1 ORDER BY request_id",
+        cid,
+    )
+    assert len(rows) == 2
+    user_ids = {r["user_id"] for r in rows}
+    assert user_ids == {uid_a, uid_b}
+
+
+async def test_user_b_sees_own_request_after_user_a_submitted_same_content(
+    client: AsyncClient, db_pool,
+):
+    headers_a, _ = await _register_and_get_user(client, db_pool, _email())
+    headers_b, _ = await _register_and_get_user(client, db_pool, _email())
+
+    cid = _channel_id()
+    await client.post(URL, json={"request_type": "channel", "content_id": cid}, headers=headers_a)
+    r_b = await client.post(URL, json={"request_type": "channel", "content_id": cid}, headers=headers_b)
+
+    list_b = await client.get(URL, headers=headers_b)
+    assert list_b.status_code == 200
+    body_b = list_b.json()
+    own = [r for r in body_b if r["content_id"] == cid]
+    assert len(own) == 1
+    assert own[0]["request_id"] == r_b.json()["request_id"]
+    assert own[0]["status"] == "pending"
+
+
+async def test_user_a_still_sees_own_request_after_user_b_submitted_same_content(
+    client: AsyncClient, db_pool,
+):
+    """User A's list still shows User A's request; User B's submit must not
+    rebind A's row to B or alter A's status/error."""
+    headers_a, uid_a = await _register_and_get_user(client, db_pool, _email())
+    headers_b, _ = await _register_and_get_user(client, db_pool, _email())
+
+    cid = _channel_id()
+    r_a = await client.post(URL, json={"request_type": "channel", "content_id": cid}, headers=headers_a)
+    a_id = r_a.json()["request_id"]
+    await client.post(URL, json={"request_type": "channel", "content_id": cid}, headers=headers_b)
+
+    list_a = await client.get(URL, headers=headers_a)
+    own = [r for r in list_a.json() if r["content_id"] == cid]
+    assert len(own) == 1
+    assert own[0]["request_id"] == a_id
+
+    # DB row for A still owned by A and untouched.
+    row_a = await db_pool.fetchrow(
+        "SELECT user_id::text AS user_id, status, error FROM content_request WHERE request_id = $1",
+        a_id,
+    )
+    assert row_a["user_id"] == uid_a
+    assert row_a["status"] == "pending"
+    assert row_a["error"] is None
+
+
+async def test_user_b_resubmit_of_failed_does_not_reset_user_a_row(
+    client: AsyncClient, db_pool,
+):
+    """When A's row is in 'failed' status, B's submit must reset only B's row.
+
+    Pre-029 this was the worst symptom: B's resubmit flipped A's failed
+    row to pending and the scraper later notified A (not B). After 029,
+    A's failed row stays failed, B gets their own pending row.
+    """
+    headers_a, _ = await _register_and_get_user(client, db_pool, _email())
+    headers_b, _ = await _register_and_get_user(client, db_pool, _email())
+
+    cid = _channel_id()
+    r_a = await client.post(URL, json={"request_type": "channel", "content_id": cid}, headers=headers_a)
+    a_id = r_a.json()["request_id"]
+    await db_pool.execute(
+        "UPDATE content_request SET status='failed', error='scraper exploded' WHERE request_id = $1",
+        a_id,
+    )
+
+    r_b = await client.post(URL, json={"request_type": "channel", "content_id": cid}, headers=headers_b)
+    assert r_b.status_code == 201
+    assert r_b.json()["status"] == "pending"
+    assert r_b.json()["request_id"] != a_id
+
+    # A's row untouched.
+    row_a = await db_pool.fetchrow(
+        "SELECT status, error FROM content_request WHERE request_id = $1", a_id,
+    )
+    assert row_a["status"] == "failed"
+    assert row_a["error"] == "scraper exploded"
+
+
+async def test_notification_routes_to_submitting_user(client: AsyncClient, db_pool):
+    """The scraper notifies via _notify_user(request_id, ...). With per-user
+    rows, the user_id pulled from content_request is the submitting user's
+    — so the notification lands in *their* notification row, not the
+    earlier submitter's.
+
+    This test simulates the scraper's notification insert directly (we
+    don't spawn the subprocess in tests) to verify the routing contract.
+    """
+    headers_a, uid_a = await _register_and_get_user(client, db_pool, _email())
+    headers_b, uid_b = await _register_and_get_user(client, db_pool, _email())
+
+    cid = _channel_id()
+    r_a = await client.post(URL, json={"request_type": "channel", "content_id": cid}, headers=headers_a)
+    r_b = await client.post(URL, json={"request_type": "channel", "content_id": cid}, headers=headers_b)
+    a_id = r_a.json()["request_id"]
+    b_id = r_b.json()["request_id"]
+
+    # Mirror what _notify_user in subtitle-scraper/pipeline.py does:
+    #   INSERT INTO notification (user_id, type, payload)
+    #   SELECT user_id, $1, $2 FROM content_request WHERE request_id = $3 AND user_id IS NOT NULL
+    import json as _json
+    await db_pool.execute(
+        """
+        INSERT INTO notification (user_id, type, payload)
+        SELECT user_id, $1, $2::jsonb
+          FROM content_request
+         WHERE request_id = $3 AND user_id IS NOT NULL
+        """,
+        "channel_done", _json.dumps({"channel_id": cid}), b_id,
+    )
+
+    rows = await db_pool.fetch(
+        "SELECT user_id::text AS user_id FROM notification "
+        "WHERE type = 'channel_done' AND payload->>'channel_id' = $1",
+        cid,
+    )
+    assert len(rows) == 1
+    assert rows[0]["user_id"] == uid_b
+    assert rows[0]["user_id"] != uid_a
+
+    # Cleanup: per-test notification rows so other suites stay clean.
+    await db_pool.execute(
+        "DELETE FROM notification WHERE type = 'channel_done' AND payload->>'channel_id' = $1",
+        cid,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
 

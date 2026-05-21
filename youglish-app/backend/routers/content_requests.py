@@ -54,13 +54,18 @@ async def submit_request(
     - If the request already exists and failed, it is reset to pending.
     - If it's already pending or done, the existing row is returned unchanged.
     The pipeline is spawned immediately in the background to process it.
+
+    Uniqueness is per-user (migration 029): a different user submitting the
+    same (request_type, content_id) creates a separate row so each user can
+    track their own request and receive their own notifications. Idempotency
+    for the *same* user is preserved via the ON CONFLICT below.
     """
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
             INSERT INTO content_request (user_id, request_type, content_id)
             VALUES ($1, $2, $3)
-            ON CONFLICT (request_type, content_id) DO UPDATE
+            ON CONFLICT (user_id, request_type, content_id) DO UPDATE
                 SET status     = CASE WHEN content_request.status = 'failed'
                                       THEN 'pending'
                                       ELSE content_request.status END,

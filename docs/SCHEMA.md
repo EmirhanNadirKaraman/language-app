@@ -79,7 +79,7 @@ Adjust the user/secrets handling per your own threat model.
 ### Content requests
 | Table | Purpose |
 |---|---|
-| `content_request` | User-submitted channel/video adds. `user_id` becomes NULL on account deletion (audit signal preserved, anonymised). |
+| `content_request` | User-submitted channel/video adds. Uniqueness is per-user (`(user_id, request_type, content_id)`, migration 029); two users requesting the same channel each get their own row + their own notifications. `user_id` becomes NULL on account deletion (audit signal preserved, anonymised). |
 
 ### Usage analytics
 | Table | Purpose |
