@@ -187,7 +187,11 @@ Transition detection uses a pure helper `_is_demotion(prior_status, new_status)`
 
 Regression-guarded by 24 new tests in `test_progression.py` (8 unit + 16 integration), covering each transition + grammar_rule guard + post-demotion climb-back-to-known via production events.
 
-🕳 **HOLE 27 (silent forgetting).** There is no scheduled "did the user forget this?" check. Once an item is `known`, no event can autonomously knock it back to `learning`. Mastery is one-way unless the user manually reclassifies.
+📝 **HOLE 27 (silent forgetting — DEFERRED BY PRODUCT DECISION, 2026-05-21).** There is no scheduled "did the user forget this?" check: once an item is `known`, no event can autonomously knock it back to `learning`. Decided to leave this behaviour as-is for now — auto-demotion needs a UX answer (Anki-style ease-of-recall scoring? Calendar-based decay? A "maybe review this again" prompt instead of a status flip?) that hasn't been made, and shipping a heuristic ahead of the UX commits us to retraining users later.
+
+**Current mitigation in place.** Manual demotion exists and behaves correctly: a user marking a `known` item back to `learning` or `unknown` resets levels and reschedules the SRS card via the `_apply_demotion` branch (Hole 26 fix, 2026-05-19). A user who realises they've forgotten something has a one-click path to fix it. The reading-review "Still learning" outcome on a known item is a separate signal but isn't wired to auto-demote either — same reasoning.
+
+**Re-open when.** Either (a) we add a maintenance-review mode (explicit "test old known items" queue) with its own UX, or (b) user feedback / data shows mastery rot is a meaningful problem. Until then, this is not a correctness bug — it's a chosen product behaviour.
 
 ---
 
@@ -252,7 +256,7 @@ What works (after W1–W13, T1.1–T1.4, and the 2026-05-18/19/20 hole closures)
 
 What's still open / accepted-not-closed:
 1. **Hole 23 — dual SRS schedule (accepted).** Reading queue and main SRS queue diverge after the first review; documented as a UX choice. Revisit if duplication starts confusing users.
-2. **Hole 27 — silent forgetting.** No scheduled auto-demotion of `known` items. Needs a UX call before code.
+2. **Hole 27 — silent forgetting (DEFERRED by product decision, 2026-05-21).** No scheduled auto-demotion of `known` items. Treated as chosen behaviour, not a correctness bug. Manual demotion already covers the one-click "I forgot this" path via Hole 26's reset; re-open when a maintenance-review UX is designed.
 3. **Hole 19 / Hole 20 — free-chat language hardcoded `'de'` + per-message detection.** Bundled into the future multi-language work (#18, #19); zero practical impact while only German exists.
 4. **Hole 10 — orphaned SRS cards (operational hygiene).** `scripts/cleanup_orphan_srs_cards.py` exists; periodic job is a polish task.
 5. **Hole 33 / Hole 34 — per-direction `last_seen` + recommendation keys.** Future-proofing for richer ranking.

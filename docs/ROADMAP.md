@@ -345,7 +345,10 @@ old Tier 2 ordering for the moment.
 - **T2.2 LISTEN/NOTIFY (#4b)** — cost not correctness. Defer until
   user count + cost signal warrants it.
 - **T3.3 multi-language pipeline (#18, #19)** — feature, not a bug.
-- **Hole 27 spaced forgetting** — needs a UX call before code.
+- **Hole 27 spaced forgetting** — DEFERRED by product decision
+  (2026-05-21). Re-classified from "open hole" to chosen behaviour;
+  re-open when a maintenance-review UX is designed. Manual demotion
+  (Hole 26) remains the in-place mitigation.
 - **Hole 23 dual-schedule** — accepted, not closed; revisit on
   complaints.
 - **#26 a11y, #30 ERD, #31 extractor harness, Hole 10 orphan SRS** —
@@ -538,7 +541,7 @@ order. Do not start T3.1 until §8.1 (introduce `VITE_API_BASE_URL`) and
 | #28 | Clean `index.css` + `App.css` of Panda/Vite leftovers | XS | Polish | 10 min. |
 | #30 | ERD / `docs/SCHEMA.md` | S | Onboarding | `eralchemy` one-shot. |
 | #31 | Extractor thresholds validation harness | M | Robustness | Only if PDF imports start failing. |
-| Hole 27 | Spaced forgetting (auto-demote `known` after long silence) | M–L | Real product change | Needs UX call: do users want to be re-tested on items they marked known? |
+| Hole 27 | Spaced forgetting (auto-demote `known` after long silence) | M–L | Real product change | **Deferred by product decision (2026-05-21)** — manual demotion via Hole 26 already covers "I forgot this". Re-open behind a maintenance-review UX, not as a silent behaviour change. |
 | Hole 10 | Orphan SRS cards cleanup | XS | Operational hygiene | Periodic job. |
 | Hole 14 | Skip ≠ defer in SRS review | S | UX nit | Tell backend to bury for today. |
 | Hole 33/34 | Per-direction `last_seen`, `(item_id, item_type)` rec keys | S–M | Future-proofing | Do before adding phrase coverage to ranking. |
@@ -577,7 +580,7 @@ at the bottom of this file.
 **3. Avoid right now.**
 - #5 reconciliation (Hole 23) — no user signal yet.
 - #5e backfill — recommended forward-only, don't touch prod data.
-- Hole 27 spaced forgetting — needs a UX decision, not a code change.
+- Hole 27 spaced forgetting — DEFERRED by product decision (2026-05-21); not a code task at all until a maintenance-review UX is designed.
 - Starting #34 before T1+T2 land.
 - New top-level Python files / new `src/app/` modules — refactor is being
   deleted, not extended.
