@@ -115,7 +115,23 @@ async def upload_book(
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
 
-    file_bytes = await file.read()
+    # Size enforcement is two-layered:
+    #   1. If Starlette set file.size from Content-Length, reject *before*
+    #      reading any of the body. Honest clients pay no I/O for the rejection.
+    #   2. Bounded read of at most _MAX_UPLOAD_BYTES+1 bytes. Defends against
+    #      a missing/lying Content-Length: we only ever materialise max+1
+    #      bytes in memory instead of an unbounded body. Note: Starlette has
+    #      already spooled the full request body to disk before this handler
+    #      runs — the production-grade fix for the spool itself belongs in
+    #      middleware or the reverse proxy. This route-level guard at least
+    #      keeps the in-memory bytes object capped.
+    if file.size is not None and file.size > _MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds maximum size of {_MAX_UPLOAD_MB} MB",
+        )
+
+    file_bytes = await file.read(_MAX_UPLOAD_BYTES + 1)
     if len(file_bytes) > _MAX_UPLOAD_BYTES:
         raise HTTPException(
             status_code=413,
