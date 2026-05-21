@@ -1,4 +1,5 @@
 import { apiUrl } from './_baseUrl';
+import { assertOkJson } from './_http';
 import type {
     InsightCardsResponse,
     PrepViewData,
@@ -19,8 +20,7 @@ export async function fetchInsightCards(
     const res = await fetch(apiUrl(`/api/v1/insights/cards?${params}`), {
         headers: authHeaders(token),
     });
-    if (!res.ok) throw new Error('Failed to fetch insight cards');
-    return res.json();
+    return assertOkJson<InsightCardsResponse>(res, 'Failed to fetch insight cards');
 }
 
 export async function fetchPrepData(
@@ -37,8 +37,7 @@ export async function fetchPrepData(
     const res = await fetch(apiUrl(`/api/v1/insights/prep?${params}`), {
         headers: authHeaders(token),
     });
-    if (!res.ok) throw new Error('Failed to fetch prep data');
-    return res.json();
+    return assertOkJson<PrepViewData>(res, 'Failed to fetch prep data');
 }
 
 export async function generateExamples(
@@ -52,8 +51,7 @@ export async function generateExamples(
         headers: authHeaders(token),
         body: JSON.stringify({ item_id: itemId, item_type: itemType, language }),
     });
-    if (!res.ok) throw new Error('Failed to generate examples');
-    return res.json();
+    return assertOkJson<GenerateExamplesResponse>(res, 'Failed to generate examples');
 }
 
 export async function fetchGrammarRule(
@@ -65,8 +63,7 @@ export async function fetchGrammarRule(
     const res = await fetch(apiUrl(`/api/v1/insights/grammar/${slug}?${params}`), {
         headers: authHeaders(token),
     });
-    if (!res.ok) throw new Error('Failed to fetch grammar rule');
-    return res.json();
+    return assertOkJson<GrammarRuleDetail>(res, 'Failed to fetch grammar rule');
 }
 
 export async function generateGrammarExplanation(
@@ -79,6 +76,5 @@ export async function generateGrammarExplanation(
         method: 'POST',
         headers: authHeaders(token),
     });
-    if (!res.ok) throw new Error('Failed to generate grammar explanation');
-    return res.json();
+    return assertOkJson<GrammarRuleExplainResponse>(res, 'Failed to generate grammar explanation');
 }

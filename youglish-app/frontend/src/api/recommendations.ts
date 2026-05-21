@@ -1,4 +1,5 @@
 import { apiUrl } from './_baseUrl';
+import { assertOkJson } from './_http';
 import type {
     FollowedChannelVideosResponse,
     ItemRecommendationsResponse,
@@ -24,8 +25,7 @@ export async function fetchItemRecommendations(
     const res = await fetch(apiUrl(`/api/v1/recommendations/items?${params}`), {
         headers: authHeaders(token),
     });
-    if (!res.ok) throw new Error('Failed to fetch item recommendations');
-    return res.json();
+    return assertOkJson<ItemRecommendationsResponse>(res, 'Failed to fetch item recommendations');
 }
 
 export async function fetchVideoRecommendations(
@@ -37,8 +37,7 @@ export async function fetchVideoRecommendations(
     const res = await fetch(apiUrl(`/api/v1/recommendations/videos?${params}`), {
         headers: authHeaders(token),
     });
-    if (!res.ok) throw new Error('Failed to fetch video recommendations');
-    return res.json();
+    return assertOkJson<VideoRecommendationsResponse>(res, 'Failed to fetch video recommendations');
 }
 
 export async function fetchSentenceRecommendations(
@@ -50,8 +49,7 @@ export async function fetchSentenceRecommendations(
     const res = await fetch(apiUrl(`/api/v1/recommendations/sentences?${params}`), {
         headers: authHeaders(token),
     });
-    if (!res.ok) throw new Error('Failed to fetch sentence recommendations');
-    return res.json();
+    return assertOkJson<SentenceRecommendationsResponse>(res, 'Failed to fetch sentence recommendations');
 }
 
 export async function fetchFollowedChannelVideos(
@@ -63,6 +61,5 @@ export async function fetchFollowedChannelVideos(
     const res = await fetch(apiUrl(`/api/v1/recommendations/followed-channel-videos?${params}`), {
         headers: authHeaders(token),
     });
-    if (!res.ok) throw new Error('Failed to fetch followed channel videos');
-    return res.json();
+    return assertOkJson<FollowedChannelVideosResponse>(res, 'Failed to fetch followed channel videos');
 }

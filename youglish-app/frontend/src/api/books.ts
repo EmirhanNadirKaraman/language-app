@@ -1,4 +1,5 @@
 import { apiUrl } from './_baseUrl';
+import { assertOk, assertOkJson } from './_http';
 import type {
   BookDocument,
   BookPageSummary,
@@ -13,19 +14,6 @@ function authHeaders(token: string): Record<string, string> {
 
 function jsonHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
-}
-
-async function assertOk(res: Response): Promise<void> {
-  if (!res.ok) {
-    let message = res.statusText;
-    try {
-      const body = await res.json();
-      message = body?.detail ?? message;
-    } catch {
-      // ignore parse error
-    }
-    throw new Error(message);
-  }
 }
 
 // ── Upload ────────────────────────────────────────────────────────────────────
@@ -46,30 +34,26 @@ export async function uploadBook(
     headers: authHeaders(token),
     body: form,
   });
-  await assertOk(res);
-  return res.json() as Promise<BookDocument>;
+  return assertOkJson<BookDocument>(res, 'Failed to upload book');
 }
 
 // ── Book list / detail ────────────────────────────────────────────────────────
 
 export async function listBooks(token: string): Promise<BookDocument[]> {
   const res = await fetch(apiUrl('/api/v1/books'), { headers: authHeaders(token) });
-  await assertOk(res);
-  return res.json() as Promise<BookDocument[]>;
+  return assertOkJson<BookDocument[]>(res, 'Failed to fetch books');
 }
 
 export async function getBook(token: string, docId: string): Promise<BookDocument> {
   const res = await fetch(apiUrl(`/api/v1/books/${docId}`), { headers: authHeaders(token) });
-  await assertOk(res);
-  return res.json() as Promise<BookDocument>;
+  return assertOkJson<BookDocument>(res, 'Failed to fetch book');
 }
 
 // ── Pages ─────────────────────────────────────────────────────────────────────
 
 export async function listPages(token: string, docId: string): Promise<BookPageSummary[]> {
   const res = await fetch(apiUrl(`/api/v1/books/${docId}/pages`), { headers: authHeaders(token) });
-  await assertOk(res);
-  return res.json() as Promise<BookPageSummary[]>;
+  return assertOkJson<BookPageSummary[]>(res, 'Failed to fetch pages');
 }
 
 export async function getPage(
@@ -80,8 +64,7 @@ export async function getPage(
   const res = await fetch(apiUrl(`/api/v1/books/${docId}/pages/${pageNumber}`), {
     headers: authHeaders(token),
   });
-  await assertOk(res);
-  return res.json() as Promise<BookPageDetail>;
+  return assertOkJson<BookPageDetail>(res, 'Failed to fetch page');
 }
 
 export function getPageImageUrl(docId: string, pageNumber: number): string {
@@ -105,8 +88,7 @@ export async function patchBlock(
     headers: jsonHeaders(token),
     body: JSON.stringify(patch),
   });
-  await assertOk(res);
-  return res.json() as Promise<BookBlock>;
+  return assertOkJson<BookBlock>(res, 'Failed to update block');
 }
 
 // ── LLM repair ────────────────────────────────────────────────────────────────
@@ -120,8 +102,7 @@ export async function repairBlock(
     method: 'POST',
     headers: authHeaders(token),
   });
-  await assertOk(res);
-  return res.json() as Promise<LLMRepairResponse>;
+  return assertOkJson<LLMRepairResponse>(res, 'Failed to repair block');
 }
 
 export async function deleteBook(token: string, docId: string): Promise<void> {
@@ -129,7 +110,7 @@ export async function deleteBook(token: string, docId: string): Promise<void> {
     method: 'DELETE',
     headers: authHeaders(token),
   });
-  await assertOk(res);
+  await assertOk(res, 'Failed to delete book');
 }
 
 export async function deletePage(token: string, docId: string, pageNumber: number): Promise<void> {
@@ -137,7 +118,7 @@ export async function deletePage(token: string, docId: string, pageNumber: numbe
     method: 'DELETE',
     headers: authHeaders(token),
   });
-  await assertOk(res);
+  await assertOk(res, 'Failed to delete page');
 }
 
 export async function patchPageSentenceCount(
@@ -151,7 +132,7 @@ export async function patchPageSentenceCount(
     headers: jsonHeaders(token),
     body: JSON.stringify({ sentence_count: sentenceCount }),
   });
-  await assertOk(res);
+  await assertOk(res, 'Failed to update sentence count');
 }
 
 export async function batchRepairPage(
@@ -163,6 +144,7 @@ export async function batchRepairPage(
     method: 'POST',
     headers: authHeaders(token),
   });
-  await assertOk(res);
-  return res.json();
+  return assertOkJson<{ repaired: number; errors: number; total_candidates: number }>(
+    res, 'Failed to batch-repair page',
+  );
 }

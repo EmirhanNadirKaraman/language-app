@@ -36,7 +36,12 @@ export function GuidedChatPage({ result, token, targetItemId, targetItemType, on
         // the surface form to a row for display. Any match works.
         lookupWord(token, session.target_word, result.language)
             .then(pickSingleOrFirst)
-            .then(setTargetLookup);
+            .then(setTargetLookup)
+            // lookupWord now throws on non-2xx (assertOkJson). The display is
+            // best-effort, so on failure (incl. 401 → auth:expired already
+            // dispatched) fall back to null without surfacing an unhandled
+            // rejection.
+            .catch(() => setTargetLookup(null));
     }, [session?.target_word, token, result.language]);
 
     return (

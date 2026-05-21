@@ -1,4 +1,5 @@
 import { apiUrl } from './_baseUrl';
+import { assertOkJson } from './_http';
 import type { PlaylistResult } from '../types';
 
 export async function generatePlaylist(
@@ -20,6 +21,5 @@ export async function generatePlaylist(
             max_videos: maxVideos,
         }),
     });
-    if (!res.ok) throw new Error('Failed to generate playlist');
-    return res.json();
+    return assertOkJson<PlaylistResult>(res, 'Failed to generate playlist');
 }

@@ -1,4 +1,6 @@
 import { apiUrl } from './_baseUrl';
+import { assertOkJson } from './_http';
+
 function authHeaders(token: string): HeadersInit {
     return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
@@ -23,15 +25,10 @@ export async function submitContentRequest(
         headers: authHeaders(token),
         body: JSON.stringify({ request_type: requestType, content_id: contentId }),
     });
-    if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail ?? 'Failed to submit request');
-    }
-    return res.json();
+    return assertOkJson<ContentRequest>(res, 'Failed to submit request');
 }
 
 export async function listContentRequests(token: string): Promise<ContentRequest[]> {
     const res = await fetch(apiUrl('/api/v1/content-requests'), { headers: authHeaders(token) });
-    if (!res.ok) throw new Error('Failed to fetch requests');
-    return res.json();
+    return assertOkJson<ContentRequest[]>(res, 'Failed to fetch requests');
 }

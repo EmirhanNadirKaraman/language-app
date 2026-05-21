@@ -1,4 +1,5 @@
 import { apiUrl } from './_baseUrl';
+import { assertOk, assertOkJson } from './_http';
 import type { SRSReviewCard, SRSProductionResult } from '../types';
 
 function authHeaders(token: string): HeadersInit {
@@ -12,8 +13,7 @@ export async function getDueCards(
 ): Promise<SRSReviewCard[]> {
     const url = apiUrl(`/api/v1/srs/due?language=${encodeURIComponent(language)}&limit=${limit}`);
     const res = await fetch(url, { headers: authHeaders(token) });
-    if (!res.ok) throw new Error('Failed to fetch due cards');
-    return res.json() as Promise<SRSReviewCard[]>;
+    return assertOkJson<SRSReviewCard[]>(res, 'Failed to fetch due cards');
 }
 
 export async function submitReviewAnswer(
@@ -26,7 +26,7 @@ export async function submitReviewAnswer(
         headers: authHeaders(token),
         body: JSON.stringify({ correct }),
     });
-    if (!res.ok) throw new Error('Failed to submit review answer');
+    await assertOk(res, 'Failed to submit review answer');
 }
 
 /**
@@ -41,8 +41,9 @@ export async function skipCard(
         method: 'POST',
         headers: authHeaders(token),
     });
-    if (!res.ok) throw new Error(`Failed to skip card (${res.status})`);
-    return res.json() as Promise<{ card_id: number; due_date: string }>;
+    return assertOkJson<{ card_id: number; due_date: string }>(
+        res, `Failed to skip card (${res.status})`,
+    );
 }
 
 /**
@@ -60,9 +61,7 @@ export async function submitProductionAnswer(
         headers: authHeaders(token),
         body: JSON.stringify({ answer }),
     });
-    if (!res.ok) {
-        const detail = await res.json().catch(() => ({} as { detail?: string }));
-        throw new Error(detail.detail || `Failed to submit production answer (${res.status})`);
-    }
-    return res.json() as Promise<SRSProductionResult>;
+    return assertOkJson<SRSProductionResult>(
+        res, `Failed to submit production answer (${res.status})`,
+    );
 }

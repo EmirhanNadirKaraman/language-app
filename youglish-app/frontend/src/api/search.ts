@@ -1,5 +1,12 @@
 import { apiUrl } from './_baseUrl';
+import { assertOkJson } from './_http';
 import type { SearchResponse, VideoSentence } from '../types';
+
+// These endpoints are intentionally unauthenticated on the backend
+// (CLAUDE.md §7: "public legacy endpoints"). assertOkJson still parses
+// error details cleanly; 401 isn't expected here, but if the backend ever
+// auth-gates these the shared handler will route through signalAuthExpired
+// without further changes.
 
 export async function fetchSearch(
   query: string,
@@ -12,27 +19,23 @@ export async function fetchSearch(
   if (language) params.set('language', language);
 
   const res = await fetch(apiUrl(`/api/search?${params}`), { signal });
-  if (!res.ok) throw new Error(`Search failed: ${res.status}`);
-  return res.json();
+  return assertOkJson<SearchResponse>(res, `Search failed: ${res.status}`);
 }
 
 export async function fetchLanguages(): Promise<string[]> {
   const res = await fetch(apiUrl('/api/languages'));
-  if (!res.ok) throw new Error('Failed to fetch languages');
-  return res.json();
+  return assertOkJson<string[]>(res, 'Failed to fetch languages');
 }
 
 export async function fetchCategories(): Promise<string[]> {
   const res = await fetch(apiUrl('/api/categories'));
-  if (!res.ok) throw new Error('Failed to fetch categories');
-  return res.json();
+  return assertOkJson<string[]>(res, 'Failed to fetch categories');
 }
 
 export async function fetchWordForms(query: string): Promise<string[]> {
   const params = new URLSearchParams({ q: query });
   const res = await fetch(apiUrl(`/api/word-forms?${params}`));
-  if (!res.ok) throw new Error(`Word forms failed: ${res.status}`);
-  return res.json();
+  return assertOkJson<string[]>(res, `Word forms failed: ${res.status}`);
 }
 
 export async function fetchVideoSentences(
@@ -40,6 +43,5 @@ export async function fetchVideoSentences(
 ): Promise<VideoSentence[]> {
   const params = new URLSearchParams({ video_id: videoId });
   const res = await fetch(apiUrl(`/api/video-sentences?${params}`));
-  if (!res.ok) throw new Error('Failed to fetch sentences');
-  return res.json();
+  return assertOkJson<VideoSentence[]>(res, 'Failed to fetch sentences');
 }

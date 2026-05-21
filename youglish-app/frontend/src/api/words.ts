@@ -1,5 +1,6 @@
 import type { WordLookupResponse, WordLookupResult } from '../types';
 import { apiUrl } from './_baseUrl';
+import { assertOk, assertOkJson } from './_http';
 
 function authHeaders(token: string): HeadersInit {
     return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
@@ -10,6 +11,11 @@ function authHeaders(token: string): HeadersInit {
  * interactive picker can disambiguate when multiple meanings exist (W3 /
  * Hole 2). Non-interactive callers that just want "a match" use
  * `pickSingleOrFirst()`.
+ *
+ * Errors are thrown via `assertOkJson` so a 401 mid-session triggers the
+ * shared auth-expiry flow. Callers that don't want a thrown error wrap in
+ * try/catch — `useWordStatus.selectWord` and `useWordStatus.toggleWordStatus`
+ * both do (audit fix B).
  */
 export async function lookupWord(
     token: string,
@@ -20,12 +26,7 @@ export async function lookupWord(
         apiUrl(`/api/v1/words/by-text?word=${encodeURIComponent(word)}&language=${encodeURIComponent(language)}`),
         { headers: authHeaders(token) },
     );
-    if (!res.ok) {
-        // Treat HTTP failure as not-found so callers don't crash on transient
-        // errors; the caller can still detect via candidates being empty.
-        return { status: 'not_found', item: null, candidates: [] };
-    }
-    return res.json();
+    return assertOkJson<WordLookupResponse>(res, 'Failed to look up word');
 }
 
 /**
@@ -53,7 +54,7 @@ export async function setWordStatus(
         headers: authHeaders(token),
         body: JSON.stringify({ status }),
     });
-    if (!res.ok) throw new Error('Failed to update status');
+    await assertOk(res, 'Failed to update status');
 }
 
 export async function recordTranscriptClick(
@@ -61,8 +62,9 @@ export async function recordTranscriptClick(
     wordId: number,
     sentenceId?: number | null,
 ): Promise<void> {
-    // Caller treats this as non-blocking — but we throw on non-2xx so the
-    // hook can surface failures via console.warn instead of silently dropping.
+    // Caller treats this as non-blocking — assertOk still throws on non-2xx so
+    // the hook surfaces failures via console.warn instead of silently dropping.
+    // 401 routes through the shared auth-expiry flow.
     const res = await fetch(apiUrl(`/api/v1/words/word/${wordId}/transcript-click`), {
         method: 'POST',
         headers: authHeaders(token),
@@ -70,9 +72,7 @@ export async function recordTranscriptClick(
             sentenceId != null ? { sentence_id: sentenceId } : {},
         ),
     });
-    if (!res.ok) {
-        throw new Error(`transcript-click failed: ${res.status}`);
-    }
+    await assertOk(res, `transcript-click failed: ${res.status}`);
 }
 
 export async function learnWordAnyway(
@@ -88,11 +88,7 @@ export async function learnWordAnyway(
         headers: authHeaders(token),
         body: JSON.stringify({ text, language }),
     });
-    if (!res.ok) {
-        const detail = await res.text().catch(() => '');
-        throw new Error(detail || `learn-anyway failed: ${res.status}`);
-    }
-    return res.json();
+    return assertOkJson<WordLookupResult>(res, `learn-anyway failed: ${res.status}`);
 }
 
 
@@ -107,5 +103,5 @@ export async function setItemStatus(
         headers: authHeaders(token),
         body: JSON.stringify({ status }),
     });
-    if (!res.ok) throw new Error('Failed to update status');
+    await assertOk(res, 'Failed to update status');
 }
