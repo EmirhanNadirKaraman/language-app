@@ -112,3 +112,58 @@ On a healthy DB the count stays at 0. A non-zero count for several
 weeks running points at an upstream issue (catalog cleanup that
 doesn't cascade properly) — investigate `srs_cleanup_service.find_orphan_srs_cards`
 output before assuming it's normal.
+
+---
+
+## spaCy language models
+
+The scraper (`subtitle-scraper/pipeline.py:LANG_MODEL_MAP`) loads a spaCy
+pipeline per detected language. The models are NOT pinned in
+`lexy-app/backend/requirements.txt` — they ship as separate wheels and
+are installed via `python -m spacy download <name>`. Every host that
+runs the scraper (dev machine, Render worker, CI) needs every model
+the scraper might dispatch to.
+
+### Required models
+
+| Language | Model | Use |
+|---|---|---|
+| German (`de`) | `de_core_news_md` | Scraper ingest + matcher_service phrase extraction. **Must remain installed** — German is the current production target. |
+| Spanish (`es`) | `es_core_news_sm` | **Stage 1 of the second-language plan** (not yet wired). Smaller footprint than `_md`; words-only v1 doesn't need word vectors. Matches the pipeline's existing `LANG_MODEL_MAP["es"]` entry. |
+| Others (`fr es it pt ru en ja ko`) | `*_core_news_sm` / `en_core_web_sm` | Optional. Install only on hosts that will scrape those languages. |
+
+### Install
+
+```bash
+# Activate the backend venv first, then:
+python -m spacy download es_core_news_sm
+# (German, already in place on existing hosts:)
+python -m spacy download de_core_news_md
+```
+
+### Verify
+
+```bash
+python -c "import spacy; nlp = spacy.load('es_core_news_sm'); \
+           print(nlp('Hola mundo')[0].lemma_)"
+# Should print: hola
+```
+
+### Stage 0 status (this commit)
+
+- `language_table` already contains the `'es'` row (verified live
+  2026-05-21); migration 030 lands the idempotent INSERT in version
+  control so a fresh-DB setup picks it up too.
+- **No runtime behaviour changed.** Spanish ingestion is gated behind
+  Stage 1 (`extract_phrases(doc, language)` dispatch in `phrase_finder`
+  + scraper, planned next).
+- **German phrase extraction is unchanged** — Stage 1 will keep the
+  existing `extract_german_logic` behind the `'de'` branch of the
+  dispatch table byte-for-byte. German users see no difference.
+- **Spanish v1 is words-only.** Phrase extraction for Spanish is
+  Stage 4 (post-MVP, optional). When Spanish content gets ingested,
+  phrase rows simply won't be created — words + sentences only.
+
+If a Stage-1 PR ever needs to test against Spanish locally, the spaCy
+model install above is the prerequisite; the migration in this commit
+is the schema-side prerequisite.
