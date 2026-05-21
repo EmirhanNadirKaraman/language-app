@@ -45,9 +45,11 @@ class _FakeCursor:
     def __init__(self, rows):
         self._rows = rows
         self.last_sql = None
+        self.last_params: tuple | None = None
 
-    def execute(self, sql, *args):
+    def execute(self, sql, params=None):
         self.last_sql = sql
+        self.last_params = params
 
     def fetchall(self):
         return self._rows
@@ -74,6 +76,29 @@ def test_load_channels_reads_db_rows(pipeline_module):
 def test_load_channels_empty_db(pipeline_module):
     cursor = _FakeCursor([])
     assert pipeline_module.load_channels(cursor) == []
+
+
+def test_load_channels_without_language_filter_omits_where_language(pipeline_module):
+    """Default call (no language arg) keeps the pre-existing SQL shape —
+    no `language = %s` clause, no params. Locks back-compat for every
+    call site that passed only the cursor."""
+    cursor = _FakeCursor([])
+    pipeline_module.load_channels(cursor)
+    assert "language = " not in cursor.last_sql
+    assert cursor.last_params is None
+
+
+def test_load_channels_with_language_filters_query(pipeline_module):
+    """`language='es'` appends `AND language = %s` and passes the code as
+    a bind parameter (no string interpolation — guards against the SQL-
+    injection-by-accident an f-string would invite)."""
+    cursor = _FakeCursor([("UCx", "Spanish Channel", "es")])
+    result = pipeline_module.load_channels(cursor, language="es")
+
+    assert result == [{"id": "UCx", "name": "Spanish Channel", "language": "es"}]
+    assert "active = TRUE" in cursor.last_sql
+    assert "language = %s" in cursor.last_sql
+    assert cursor.last_params == ("es",)
 
 
 def test_no_scraper_code_reads_legacy_flat_files():

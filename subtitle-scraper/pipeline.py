@@ -72,11 +72,24 @@ def connect():
     )
 
 
-def load_channels(cursor) -> list[dict]:
-    """Load active channels from the database."""
-    cursor.execute(
-        "SELECT youtube_channel_id, channel_name, language FROM channel WHERE active = TRUE"
-    )
+def load_channels(cursor, language: str | None = None) -> list[dict]:
+    """Load active channels from the database.
+
+    When `language` is supplied, only channels with that language code are
+    returned. Omitting the argument keeps the pre-existing behaviour
+    (all active channels regardless of language).
+    """
+    if language is None:
+        cursor.execute(
+            "SELECT youtube_channel_id, channel_name, language "
+            "FROM channel WHERE active = TRUE"
+        )
+    else:
+        cursor.execute(
+            "SELECT youtube_channel_id, channel_name, language "
+            "FROM channel WHERE active = TRUE AND language = %s",
+            (language,),
+        )
     return [
         {"id": row[0], "name": row[1] or row[0], "language": row[2]}
         for row in cursor.fetchall()
@@ -642,11 +655,18 @@ def process_pending_requests(
             logger.exception("[request] error processing %s %s", request_type, content_id)
 
 
-def main():
+def main(language: str | None = None):
+    """Run the channel-loop scraper. With `language`, restricts to that
+    language only — both the initial load and the post-content-request
+    reload below are filtered. Useful for language-scoped dogfood runs
+    without flipping channel.active flags."""
     connection = connect()
     cursor = connection.cursor()
 
-    channels = load_channels(cursor)
+    if language is not None:
+        logger.info("Language filter active: only processing %r channels", language)
+
+    channels = load_channels(cursor, language=language)
     logger.info("Loaded %d channels total", len(channels))
 
     cursor.execute("SELECT video_id FROM video")
@@ -667,8 +687,9 @@ def main():
         cursor, connection, nlp_cache, sentence_types, db_words, processed_videos, blacklist
     )
 
-    # Reload channels in case a channel request just added new ones
-    channels = load_channels(cursor)
+    # Reload channels in case a channel request just added new ones.
+    # Apply the same language filter so the second pass stays scoped.
+    channels = load_channels(cursor, language=language)
 
     # Build one lazy iterator per channel
     channel_iters = [
@@ -797,9 +818,22 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--requests-only", action="store_true",
                         help="Process pending content requests and exit (skip channel loop)")
+    parser.add_argument(
+        "--language", "-L", default=None,
+        help=(
+            "Restrict the channel loop to channels matching this language code "
+            "(e.g. 'de', 'es'). Default = all active channels. Has no effect "
+            "with --requests-only (content_request has no language field)."
+        ),
+    )
     args = parser.parse_args()
 
     if args.requests_only:
+        if args.language:
+            logger.warning(
+                "--language %r ignored: --requests-only processes content "
+                "requests, which have no language field.", args.language,
+            )
         run_pending_requests_only()
     else:
-        main()
+        main(language=args.language)
