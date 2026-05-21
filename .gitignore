@@ -53,3 +53,7 @@ lexy-app/uploads
 # Claude Code session/runtime state (lockfiles, local settings)
 .claude/
 
+# Scraper runtime artifacts — per-video transcript JSON cache, written
+# by subtitle-scraper/pipeline.py on every run. Not source.
+subtitle-scraper/transcript_cache/
+
