@@ -1,9 +1,23 @@
+"""
+Search / corpus endpoints.
+
+Audit #7 / 2026-05-21: these endpoints expose the scraped video + sentence
+corpus, suggestions, and word-form expansions. They are now authenticated
+— logged-out users see nothing about the corpus. Truly public routes
+(auth/register, auth/login, /privacy static, client-error reporter) are
+intentionally not gated and live elsewhere.
+
+The `/api/languages` and `/api/categories` endpoints leak less, but they
+also exist purely to feed authenticated UIs (SettingsPanel, channel-prefs).
+They're gated too so the policy is uniform: "no token, no corpus".
+"""
 from fastapi import APIRouter, Depends, Query
+from ..core.deps import get_current_user
 from ..database import get_pool
 from ..models.schemas import SearchResponse, SuggestionResult, VideoSentence
 from ..services import search_service
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
 @router.get("/search", response_model=SearchResponse)

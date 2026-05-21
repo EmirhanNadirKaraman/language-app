@@ -179,6 +179,43 @@ type HomeNavState = {
 };
 
 function HomePage() {
+  const { token } = useAppCtx();
+  // Audit #7: corpus search is auth-only. Show a friendly prompt for
+  // logged-out users instead of letting them hit a 401 wall mid-typing.
+  // The Layout's top-right LoginForm provides the sign-in path. Authed
+  // body is in HomePageAuthed so useSearch + downstream hooks only run
+  // when a token actually exists (no rules-of-hooks divergence across
+  // login state).
+  if (!token) {
+    return (
+      <section
+        aria-labelledby="home-signed-out-heading"
+        style={{ padding: 'clamp(24px, 6vw, 48px) 0', textAlign: 'center' }}
+      >
+        <h2
+          id="home-signed-out-heading"
+          style={{ margin: 0, fontSize: 'clamp(20px, 4vw, 26px)', color: 'var(--color-text-strong)' }}
+        >
+          Sign in to start learning
+        </h2>
+        <p style={{
+          margin: '12px auto 0',
+          maxWidth: '520px',
+          fontSize: '15px',
+          color: 'var(--color-text-muted)',
+          lineHeight: 1.5,
+        }}>
+          Search videos in context, build your vocabulary, and practice
+          recognition + production with spaced repetition. Use the sign-in
+          button at the top of the page to get started.
+        </p>
+      </section>
+    );
+  }
+  return <HomePageAuthed />;
+}
+
+function HomePageAuthed() {
   const { token, prefs, recLanguage } = useAppCtx();
   const { terms, query, addTerm, removeTerm, results, total, loading, error, hasMore, loadMore } = useSearch(recLanguage || 'de');
   const [resultIdx, setResultIdx] = useState(0);
