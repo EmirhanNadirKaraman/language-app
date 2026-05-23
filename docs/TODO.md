@@ -380,11 +380,34 @@ Coverage of the batch: 8 cleaner + 4 merger + 4 guard + 2 noise + 1 knowledge + 
   - 🟡 **Part 3 (per-format audio-track inspection) — deferred, optional.** Current impl uses the single `info["language"]` hint, not per-stream dub detection. Sufficient for now; revisit only if mis-tagging recurs on bilingual-audio videos.
   - The `--requests-only` video path benefits automatically from parts 1 & 2 (it calls `get_transcript` with no language).
 
-### 36. 🟡 Spanish-specific phrase extractor (post-MVP)
-**File:** `subtitle-scraper/phrase_finder.py` (`_LANGUAGE_EXTRACTORS` registry)
-**Problem:** Spanish v1 is words-only — `extract_phrases(doc, 'es')` returns `[]`. No Spanish collocations / reflexive verbs / clitic patterns are captured.
-**Fix:** Write `extract_spanish_logic(doc)` (reflexives `lavarse`, prepositional verb patterns, clitic-attached infinitives) and register it under `'es'` in `_LANGUAGE_EXTRACTORS`. Mirror the German extractor's output shape. Only worth doing once Spanish corpus + usage justify it.
-**Blocks:** nothing — purely additive. German behaviour untouched by design.
+### 36. 🟡 Spanish phrase extractor — first slice shipped 2026-05-24; deeper patterns deferred
+**File:** `subtitle-scraper/phrase_finder.py` (`extract_spanish_logic`, registered under `'es'` in `_LANGUAGE_EXTRACTORS`)
+**Problem:** Spanish v1 was words-only — `extract_phrases(doc, 'es')` returned `[]`.
+**Status (first slice, #36):** ✅ `extract_spanish_logic(doc)` ships two pattern families:
+  - **Reflexive verbs** — finite verb + an agreeing reflexive clitic (me/te/se/nos/os); person/number agreement rejects non-reflexive object clitics ("me ve" ≠ `verse`). Canonical = verb lemma + "se" (e.g. "Nos acostamos…" → `acostarse`).
+  - **Verb + preposition** — conservative allowlist (`depender de`, `pensar en`, `hablar de`, `soñar con`, `esperar a`, `tratar de`, `ayudar a`, `aprender a`, `empezar a`, `acabar de`). Canonical = "&lt;lemma&gt; &lt;prep&gt;".
+  Output shape is identical to the German extractor (`dictionary_entry`/`sentence_phrase`/`logic`/`match_type`/`indices`), so `pipeline.insert_phrases` consumes it unchanged. Tests: `tests/test_spanish_phrase_extractor.py`.
+**Deferred (later slices):**
+  - Clitic-attached infinitives ("quiero lavarme") + imperatives ("lávate") — enclitics that `es_core_news_sm` fuses into one token.
+  - Broader verb+prep coverage (promote the allowlist to data/config), idioms, MWEs, subjunctive patterns.
+  - **Lemma quality:** spaCy mis-lemmatizes some verbs (`ducha`→`duchaber`, `ducho`→`duchir`), so canonicals are sometimes imperfect. **Verified 2026-05-24: this is a lemmatizer-data bug shared by `es_core_news_sm`, `_md` AND `_lg`** — bumping the model size does NOT fix it (`_lg` does fix peripheral cases like bare "Me lavo"→`lavar`, but not the `duchar` family). The real fix is a lemma-override layer — see #39. Detection itself is reliable; only the canonical is affected.
+**Blocks:** nothing — purely additive. German behaviour untouched (regression-guarded by `tests/test_phrase_dispatcher.py` + backend `test_matcher.py`).
+
+### 39. 🟡 Lemma-override layer — slice 1 shipped 2026-05-24; community-signal slice 2 deferred
+**Origin:** #36 first slice surfaced that spaCy's Spanish lemmatizer hard-codes wrong lemmas for some verbs (`ducha`→`duchaber`, `ducho`→`duchir`); confirmed identical across `es_core_news_sm`/`_md`/`_lg` (2026-05-24). No static model fixes it, so phrase canonicals built from `lemma + "se"` are sometimes wrong.
+**Fix (recommended): a curated override table.** `lemma_override` consulted by the extractor before trusting spaCy's lemma. Seed it from an LLM pass (Haiku validates/normalizes a batch of extracted canonicals — cheap, cached) and/or a hand-curated list of known errors. Deterministic, correct, simple. Applies to German too if needed.
+**Status — slice 1 SHIPPED (2026-05-24):** the deterministic foundation.
+  - Migration 033: `lemma_override(id, language, observed_lemma, corrected_lemma, surface_form, pos, source, status, confidence, created_at, updated_at)`. v1 keys on `(language, observed_lemma)` (partial-unique where surface_form/pos NULL); `surface_form`/`pos` reserved for context-sensitive slice-2 rows. Seeded `es: duchaber→duchar, duchir→duchar` (source=`manual`).
+  - `phrase_finder.extract_phrases(doc, language, overrides=None)` → extractors apply the map at the single point the verb lemma is read (before `+"se"` and before the verb+prep allowlist check). German extractor accepts the param but doesn't apply it (no German seeds yet; byte-identical).
+  - `pipeline.load_lemma_overrides(cursor, language)` loads active context-free rows; `populate` loads once per video and threads them into `insert_phrases`. Backend matcher intentionally NOT wired (see finding below).
+  - Tests: `tests/test_spanish_phrase_extractor.py` (override fixes `ducharse`, doesn't touch unrelated lemmas, None==pre-#39, loader, end-to-end through `insert_phrases`).
+  - **Finding (separate bug, NOT fixed here):** `matcher_service._extract` parses *every* language with the German model (`_pf.nlp`), so the backend chat matcher feeds Spanish through `de_core_news_sm` before `extract_phrases(doc,'es')`. Spanish phrase matching in chat is unreliable regardless of overrides; wiring overrides there is premature until the matcher selects the per-language model. Track as its own item.
+**Slice 2 (DEFERRED) — community signal + promotion (design items 3-5):** user flagging endpoint + `lemma_flag`/candidate table + promotion (admin/LLM adjudication). Plus an LLM seeding pass over existing canonicals, and (after the matcher-model fix) backend override consultation.
+**Stretch idea (user, 2026-05-24): community voting on lemma corrections.** Let users vote; once a quorum agrees, the override is applied.
+  - *Implementable?* The CRUD is easy: a `lemma_vote` table + endpoint + a threshold check that promotes a winning correction into `lemma_override`. The lookup layer is the same as the curated approach.
+  - *Will it work correctly?* Risky as the PRIMARY mechanism. (1) Our users are **learners** — by definition the least-qualified to adjudicate lemmatization, and most don't know what a "lemma" is. (2) Lemma correctness is **objective**, not a matter of opinion to vote on — `duchar` is simply right; voting can converge on a wrong answer. (3) Needs abuse/sybil protection, quorum tuning, and moderation — real cost for worse accuracy than an LLM/curated table. (4) Context-sensitivity (noun "ducha" vs verb) makes a flat surface→lemma vote ambiguous.
+  - *Better shape if we want community input:* let users **flag** "this looks wrong" (low-skill, low-stakes signal), then route flagged items to an **LLM adjudicator or admin** that writes the override — community surfaces candidates, an authority decides correctness. Keeps the crowd doing what it's good at (spotting oddities) and keeps correctness with something qualified.
+**Blocks:** higher-quality Spanish (and any future L2) phrase canonicals; cleaner SRS/display surfaces.
 
 ### 37. 🟡 One video can only be ingested in a single language (no multi-track capture)
 **Files:** `subtitle-scraper/pipeline.py` (`get_transcript`, `populate`, `main` loop, `processed_videos`/`video_blacklist` dedup), `video` / `sentence` / `word_to_sentence` schema, downstream `videos.py` + frontend video→sentence views.

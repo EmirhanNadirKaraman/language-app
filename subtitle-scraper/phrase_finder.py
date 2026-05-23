@@ -147,11 +147,17 @@ def get_object_token(child):
         return "jdn." if is_person else "etw."
     return "etw."
 
-def extract_german_logic(doc):
+def extract_german_logic(doc, overrides=None):
     """
     Extract phrases from a pre-computed spaCy doc.
     Pass a doc (from nlp.pipe or nlp(text)) instead of raw text to avoid redundant NLP.
+
+    `overrides` (#39) is accepted for a uniform extractor signature but NOT applied
+    here in slice 1 — no German lemma overrides are seeded yet. German behaviour is
+    byte-identical to the pre-#39 call. (German lemma overrides can be wired the same
+    way as Spanish if a need shows up.)
     """
+    _ = overrides  # reserved; see docstring
     result = []
     consumed = set()
 
@@ -395,40 +401,178 @@ def extract_german_logic(doc):
 
 
 # ---------------------------------------------------------------------------
-# Language-gated dispatcher (Stage 1 of second-language plan, 2026-05-21)
+# Spanish phrase extractor — first slice (#36, 2026-05-23)
 # ---------------------------------------------------------------------------
 #
-# `extract_german_logic` encodes German-specific morphology: separable
-# prefixes, Akk/Dat alignment, reflexive sich, etc. It does not generalise
-# to Spanish / French / etc. The plan (docs/MAINTENANCE.md) is words-only
-# for Spanish v1 — no phrase extractor yet, no grammar rules. Other
-# languages can register their own extractor here later (Stage 4+).
+# Words-only Spanish v1 gets its first real phrase extractor. Deliberately a
+# NARROW first slice — two pattern families only:
+#   1. Reflexive verbs                 "me lavo"      -> "lavarse"
+#   2. Verb + preposition (allowlist)  "dependo de …" -> "depender de"
+# Clitic-attached infinitives ("quiero lavarme"), imperatives ("lávate"),
+# subjunctive, idioms and multiword expressions are intentionally deferred.
 #
-# Until then, `extract_phrases(doc, "es")` (or any non-German code) returns
-# an empty list — the scraper writes word_table + sentence rows as normal
-# but skips phrase_table inserts. Callers don't need to special-case.
+# Output shape is IDENTICAL to extract_german_logic so pipeline.insert_phrases
+# consumes it unchanged: each dict carries dictionary_entry / sentence_phrase /
+# logic / match_type / indices. Spanish has no blueprint dictionary (that's
+# German-only, loaded from final_result.txt), so the canonical form is
+# CONSTRUCTED from the sentence — `dictionary_entry` doubles as the
+# phrase_blueprint lookup_key and is deduped downstream via ON CONFLICT.
 
-_LANGUAGE_EXTRACTORS = {
-    "de": extract_german_logic,
+# Reflexive clitic -> (verb Person, allowed verb Numbers | None=any). Requiring
+# person/number agreement between the clitic and its finite verb rejects
+# non-reflexive object clitics — e.g. "me ve" ("sees me"): ve is 3rd person,
+# the clitic "me" is 1st -> no match.
+_ES_REFLEXIVE_CLITICS = {
+    "me":  ("1", {"Sing"}),
+    "te":  ("2", {"Sing"}),
+    "se":  ("3", None),
+    "nos": ("1", {"Plur"}),
+    "os":  ("2", {"Plur"}),
+}
+
+# Allowlisted verb+preposition collocations (verb lemma, preposition). Kept
+# conservative on purpose — only emit for a known pair, never guess.
+_ES_VERB_PREP = {
+    ("depender", "de"), ("pensar", "en"), ("hablar", "de"), ("soñar", "con"),
+    ("esperar", "a"), ("tratar", "de"), ("ayudar", "a"), ("aprender", "a"),
+    ("empezar", "a"), ("acabar", "de"),
 }
 
 
-def extract_phrases(doc, language):
+def _es_clitic_agrees(verb, person, numbers):
+    """True if finite `verb`'s morphology agrees with a reflexive clitic of the
+    given person/number. Permissive when the model didn't tag Person (rare) so
+    valid reflexives on under-analysed tokens aren't silently dropped."""
+    vp = verb.morph.get("Person")
+    if not vp:
+        return True
+    if person not in vp:
+        return False
+    if numbers is None:
+        return True
+    vn = verb.morph.get("Number")
+    if not vn:
+        return True
+    return any(n in numbers for n in vn)
+
+
+def _es_prep_candidates(verb):
+    """Prepositions syntactically attached to `verb`: direct ADP children, plus
+    ADP 'case' markers heading the verb's oblique/object phrases (e.g. in
+    'dependo de mis padres', 'de' is a case-child of the obl noun 'padres')."""
+    out = []
+    for child in verb.children:
+        if child.pos_ == "ADP":
+            out.append((child.lemma_.lower(), child.i))
+        else:
+            for grand in child.children:
+                if grand.pos_ == "ADP" and grand.dep_ == "case":
+                    out.append((grand.lemma_.lower(), grand.i))
+    return out
+
+
+def extract_spanish_logic(doc, overrides=None):
+    """First-slice Spanish phrase extractor (reflexives + allowlisted
+    verb+preposition). Returns extract_german_logic's dict shape. `doc` must be
+    a Spanish spaCy Doc; the caller owns model selection.
+
+    `overrides` (#39) is an optional {observed_lemma: corrected_lemma} map that
+    patches spaCy lemmatizer errors (e.g. `duchaber`→`duchar`) before the
+    canonical is built. Applied at the single point where the verb lemma is
+    read, so both the reflexive (`lemma + "se"`) and verb+prep canonicals use
+    the corrected lemma. `None`/empty trusts spaCy."""
+    overrides = overrides or {}
+    result = []
+    # Dedup canonicals within this doc. NB: the pipeline passes one sentence per
+    # doc, so this is effectively per-sentence; a multi-sentence doc would dedup
+    # across sentences too (acceptable for v1).
+    seen = set()
+
+    def _emit(canonical, indices, match_type, logic):
+        if canonical in seen:
+            return
+        seen.add(canonical)
+        idx = sorted(set(indices))
+        result.append({
+            "dictionary_entry": canonical,
+            "sentence_phrase": [doc[i].text for i in idx],
+            "logic": logic,
+            "match_type": match_type,
+            "indices": idx,
+        })
+
+    for token in doc:
+        if token.pos_ != "VERB":
+            continue
+        verb_lemma = token.lemma_.lower()
+        # #39: patch known spaCy lemmatizer errors before building any canonical.
+        verb_lemma = overrides.get(verb_lemma, verb_lemma)
+
+        # 1. Reflexive verbs: finite verb + an agreeing reflexive clitic child.
+        for child in token.children:
+            if child.pos_ != "PRON":
+                continue
+            spec = _ES_REFLEXIVE_CLITICS.get(child.text.lower())
+            if spec is None:
+                continue
+            person, numbers = spec
+            if _es_clitic_agrees(token, person, numbers):
+                # lemma is the bare infinitive ("lavar"); guard the rare case
+                # where the model already returns the reflexive lemma.
+                canonical = verb_lemma if verb_lemma.endswith("se") else f"{verb_lemma}se"
+                _emit(canonical, [token.i, child.i], "es_reflexive",
+                      f"{verb_lemma} + {child.text.lower()} (reflexive)")
+
+        # 2. Verb + preposition from the allowlist.
+        for prep_lemma, prep_i in _es_prep_candidates(token):
+            if (verb_lemma, prep_lemma) in _ES_VERB_PREP:
+                _emit(f"{verb_lemma} {prep_lemma}", [token.i, prep_i],
+                      "es_verb_prep", f"{verb_lemma} -> {prep_lemma}")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Language-gated dispatcher (Stage 1 of second-language plan, 2026-05-21;
+# Spanish first-slice extractor registered 2026-05-23, #36)
+# ---------------------------------------------------------------------------
+#
+# `extract_german_logic` encodes German-specific morphology (separable
+# prefixes, Akk/Dat alignment, reflexive sich); `extract_spanish_logic` is a
+# narrow first slice for Spanish (reflexives + allowlisted verb+prep). Any
+# OTHER language code still returns an empty list — the scraper writes
+# word_table + sentence rows as normal but skips phrase rows. Callers don't
+# need to special-case.
+
+_LANGUAGE_EXTRACTORS = {
+    "de": extract_german_logic,
+    "es": extract_spanish_logic,
+}
+
+
+def extract_phrases(doc, language, overrides=None):
     """Dispatch phrase extraction by content language.
 
     German routes to `extract_german_logic` (byte-identical behaviour
-    to the pre-Stage-1 call site). Any other language — including the
-    next planned target Spanish ('es') — returns an empty list so the
-    caller can iterate normally and the scraper writes zero phrase rows.
+    to the pre-Stage-1 call site); Spanish ('es') routes to
+    `extract_spanish_logic` (first slice, #36). Any other language returns
+    an empty list so the caller can iterate normally and the scraper writes
+    zero phrase rows for it.
 
     `doc` is a spaCy Doc; we accept it without inspecting language so
     the caller is the source of truth (matches scraper detected_lang,
     matcher request language, chat session language).
+
+    `overrides` (#39) is an optional {observed_lemma: corrected_lemma} map the
+    caller loads from the `lemma_override` table (scraper:
+    `pipeline.load_lemma_overrides`). It patches spaCy lemmatizer errors before
+    canonicals are built. `None`/empty means "trust spaCy" — the pre-#39
+    behaviour, so existing call sites are unaffected.
     """
     extractor = _LANGUAGE_EXTRACTORS.get(language)
     if extractor is None:
         return []
-    return extractor(doc)
+    return extractor(doc, overrides)
 
 
 def get_words_array(text):

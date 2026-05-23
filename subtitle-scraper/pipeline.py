@@ -256,21 +256,40 @@ def fetch_category(video_id: str) -> str:
     return meta["category"] if meta else "other"
 
 
-def insert_phrases(cursor, sentence_ids, docs, language):
+def load_lemma_overrides(cursor, language):
+    """Read active context-free lemma overrides for `language` (#39).
+
+    Returns {observed_lemma: corrected_lemma} — consulted by `extract_phrases`
+    to patch spaCy lemmatizer errors (e.g. `duchaber`→`duchar`) before phrase
+    canonicals are built. v1 reads only context-free rows (surface_form / pos
+    NULL); context-sensitive overrides are a later slice. Missing table or no
+    rows → empty map (callers then trust spaCy unchanged).
+    """
+    cursor.execute(
+        "SELECT observed_lemma, corrected_lemma FROM lemma_override "
+        "WHERE language = %s AND status = 'active' "
+        "AND surface_form IS NULL AND pos IS NULL",
+        (language,),
+    )
+    return {row[0]: row[1] for row in cursor.fetchall()}
+
+
+def insert_phrases(cursor, sentence_ids, docs, language, overrides=None):
     """Insert phrase rows for sentences in `docs`.
 
-    Phrase extraction is German-only in v1; other languages route through
-    `extract_phrases(doc, language)` and get back an empty list. The
-    caller (populate) no longer needs to gate on language — passing the
-    detected language through is enough.
+    Phrase extraction routes through `extract_phrases(doc, language, overrides)`;
+    languages without a registered extractor get back an empty list, so the
+    caller (populate) doesn't gate on language. `overrides` (#39) is the
+    {observed_lemma: corrected_lemma} map the caller loads once via
+    `load_lemma_overrides`; None means "trust spaCy" (pre-#39 behaviour).
 
-    Stage 1 / second-language plan, 2026-05-21.
+    Stage 1 / second-language plan, 2026-05-21; lemma overrides 2026-05-24 (#39).
     """
     # Phase 1: collect all phrases and unique blueprints across all sentences
     all_phrase_data = []  # [(sid, phrases_list), ...]
     unique_blueprints = set()
     for sid, doc in zip(sentence_ids, docs):
-        phrases = extract_phrases(doc, language)
+        phrases = extract_phrases(doc, language, overrides)
         if not phrases:
             continue
         all_phrase_data.append((sid, phrases))
@@ -446,7 +465,10 @@ def populate(cursor, connection, db_words, video_id, title, thumbnail_url,
 
     # Dispatch by language — `insert_phrases` is a no-op for any language
     # without a registered extractor (Stage 1 / second-language plan).
-    insert_phrases(cursor, sentence_ids, docs, language)
+    # Load lemma overrides once per video (#39) and pass them down so phrase
+    # canonicals are patched at generation time.
+    overrides = load_lemma_overrides(cursor, language)
+    insert_phrases(cursor, sentence_ids, docs, language, overrides)
 
     connection.commit()
 

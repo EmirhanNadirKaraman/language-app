@@ -90,8 +90,12 @@ def test_de_separable_verb_blueprint_preserved(german_doc):
 # Non-German path — words-only v1, no extractor
 # ---------------------------------------------------------------------------
 
-def test_es_dispatch_returns_empty(german_doc):
-    """Spanish has no extractor in v1 — words-only. Returns []."""
+def test_es_dispatch_routes_to_spanish_extractor(german_doc):
+    """Spanish now has a first-slice extractor (#36): 'es' routes to
+    extract_spanish_logic, no longer a no-op. A *German* doc carries no
+    Spanish reflexive/verb-prep patterns, so the result is still [] here —
+    real Spanish extraction is covered in tests/test_spanish_phrase_extractor.py."""
+    assert pf._LANGUAGE_EXTRACTORS["es"] is pf.extract_spanish_logic
     assert pf.extract_phrases(german_doc, "es") == []
 
 
@@ -147,12 +151,12 @@ def _load_scraper_pipeline():
 
 
 def test_insert_phrases_spanish_is_noop_and_does_not_crash(german_doc):
-    """pipeline.insert_phrases(..., language='es') must return without
-    touching the cursor at all — Spanish has no extractor in v1, so no
-    phrase_blueprint / sentence_to_phrase INSERTs should fire.
-
-    Uses a real German Doc to exercise the loop body (the dispatcher
-    short-circuits inside extract_phrases, so any Doc shape works)."""
+    """pipeline.insert_phrases(..., language='es') on a GERMAN doc touches
+    nothing: the Spanish extractor (#36) finds no Spanish reflexive/verb-prep
+    patterns in German text, so it returns [] and no phrase_blueprint /
+    sentence_to_phrase INSERTs fire. This is a cross-language-doc safety guard;
+    the positive Spanish insert path is covered in
+    tests/test_spanish_phrase_extractor.py."""
     from unittest.mock import MagicMock
     scraper = _load_scraper_pipeline()
 

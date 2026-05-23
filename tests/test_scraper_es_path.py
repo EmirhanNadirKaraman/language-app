@@ -2,10 +2,16 @@
 Stage 4 of second-language plan (2026-05-21).
 
 End-to-end smoke test of the subtitle scraper's `populate()` against a
-Spanish fixture transcript. Pins the v1 invariant: Spanish ingestion
-produces Spanish word/sentence rows but NO Spanish phrase rows and
-NEVER reaches `extract_german_logic` (the German-specific phrase
-extractor stays untouched).
+Spanish fixture transcript. Pins: Spanish ingestion produces Spanish
+word/sentence rows and NEVER reaches `extract_german_logic` (the
+German-specific extractor stays untouched).
+
+Updated 2026-05-23 (#36): Spanish phrase extraction shipped a first slice
+(reflexives + allowlisted verb+prep). This fixture deliberately contains no
+such patterns, so it still writes zero phrase rows — that assertion is now
+fixture-dependent, not a blanket "Spanish never extracts phrases" invariant.
+The positive Spanish extract→insert path is covered in
+tests/test_spanish_phrase_extractor.py.
 
 Strategy: narrow function-level test against `subtitle-scraper/pipeline.py`
 with a fake psycopg2-shaped cursor that records every `execute()` /
@@ -239,9 +245,11 @@ def test_spanish_ingest_writes_spanish_sentences(es_nlp, es_transcript):
 
 
 def test_spanish_ingest_inserts_no_phrases(es_nlp, es_transcript, monkeypatch):
-    """phrase_blueprint / sentence_to_phrase MUST NOT be written for
-    Spanish. Spy on extract_phrases to confirm the dispatcher is called
-    with 'es' and returns []."""
+    """This fixture has no first-slice phrase patterns (no reflexives /
+    allowlisted verb+prep), so no phrase_blueprint / sentence_to_phrase rows
+    are written and the dispatcher is only ever called with 'es'. Guards
+    against spurious extraction on plain Spanish; the positive case lives in
+    tests/test_spanish_phrase_extractor.py (#36)."""
     scraper = _load_scraper_pipeline()
     cursor = _FakeCursor(sentence_ids=[1, 2], word_rows=[])
     conn = _FakeConnection()
@@ -249,9 +257,9 @@ def test_spanish_ingest_inserts_no_phrases(es_nlp, es_transcript, monkeypatch):
     extract_calls: list[str] = []
     orig_extract = pf.extract_phrases
 
-    def spy(doc, language):
+    def spy(doc, language, overrides=None):
         extract_calls.append(language)
-        return orig_extract(doc, language)
+        return orig_extract(doc, language, overrides)
 
     monkeypatch.setattr(scraper, "extract_phrases", spy)
 
@@ -290,9 +298,9 @@ def test_spanish_ingest_does_not_call_german_extractor(es_nlp, es_transcript, mo
     calls = {"n": 0}
     orig = pf.extract_german_logic
 
-    def spy(doc):
+    def spy(doc, overrides=None):
         calls["n"] += 1
-        return orig(doc)
+        return orig(doc, overrides)
 
     monkeypatch.setattr(pf, "extract_german_logic", spy)
     # _LANGUAGE_EXTRACTORS holds a direct reference captured at import — patch it too.
@@ -325,9 +333,9 @@ def test_german_path_still_calls_extract_german_logic(monkeypatch):
     calls = {"n": 0}
     orig = pf.extract_german_logic
 
-    def spy(doc):
+    def spy(doc, overrides=None):
         calls["n"] += 1
-        return orig(doc)
+        return orig(doc, overrides)
 
     monkeypatch.setattr(pf, "extract_german_logic", spy)
     monkeypatch.setitem(pf._LANGUAGE_EXTRACTORS, "de", spy)
