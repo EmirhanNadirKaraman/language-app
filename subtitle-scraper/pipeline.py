@@ -72,24 +72,34 @@ def connect():
     )
 
 
-def load_channels(cursor, language: str | None = None) -> list[dict]:
+def load_channels(
+    cursor,
+    language: str | None = None,
+    channel_id: str | None = None,
+) -> list[dict]:
     """Load active channels from the database.
 
-    When `language` is supplied, only channels with that language code are
-    returned. Omitting the argument keeps the pre-existing behaviour
-    (all active channels regardless of language).
+    Optional filters (AND-combined; both default off → all active channels):
+      language   — restrict to a language code ('de', 'es', …).
+      channel_id — restrict to a single youtube_channel_id. Useful for
+                   single-channel dogfood runs without flipping active flags.
+
+    Both filters still require active = TRUE.
     """
-    if language is None:
-        cursor.execute(
-            "SELECT youtube_channel_id, channel_name, language "
-            "FROM channel WHERE active = TRUE"
-        )
-    else:
-        cursor.execute(
-            "SELECT youtube_channel_id, channel_name, language "
-            "FROM channel WHERE active = TRUE AND language = %s",
-            (language,),
-        )
+    conditions = ["active = TRUE"]
+    params: list = []
+    if language is not None:
+        conditions.append("language = %s")
+        params.append(language)
+    if channel_id is not None:
+        conditions.append("youtube_channel_id = %s")
+        params.append(channel_id)
+
+    sql = (
+        "SELECT youtube_channel_id, channel_name, language "
+        "FROM channel WHERE " + " AND ".join(conditions)
+    )
+    cursor.execute(sql, params if params else None)
     return [
         {"id": row[0], "name": row[1] or row[0], "language": row[2]}
         for row in cursor.fetchall()
@@ -759,11 +769,15 @@ def process_pending_requests(
             logger.exception("[request] error processing %s %s", request_type, content_id)
 
 
-def main(language: str | None = None, lister: str = "auto"):
-    """Run the channel-loop scraper. With `language`, restricts to that
-    language only — both the initial load and the post-content-request
-    reload below are filtered. Useful for language-scoped dogfood runs
-    without flipping channel.active flags.
+def main(language: str | None = None, lister: str = "auto",
+         channel_id: str | None = None):
+    """Run the channel-loop scraper.
+
+    Filters (both optional):
+      language   — restrict to a language code. Filters both the initial
+                   load and the post-content-request reload below.
+      channel_id — restrict to a single youtube_channel_id (single-channel
+                   dogfood without flipping active flags).
 
     `lister` selects the channel-video listing backend (auto | scrapetube
     | yt-dlp); see list_channel_videos."""
@@ -772,9 +786,11 @@ def main(language: str | None = None, lister: str = "auto"):
 
     if language is not None:
         logger.info("Language filter active: only processing %r channels", language)
+    if channel_id is not None:
+        logger.info("Channel filter active: only processing %s", channel_id)
     logger.info("Channel lister: %s", lister)
 
-    channels = load_channels(cursor, language=language)
+    channels = load_channels(cursor, language=language, channel_id=channel_id)
     logger.info("Loaded %d channels total", len(channels))
 
     cursor.execute("SELECT video_id FROM video")
@@ -797,8 +813,8 @@ def main(language: str | None = None, lister: str = "auto"):
     )
 
     # Reload channels in case a channel request just added new ones.
-    # Apply the same language filter so the second pass stays scoped.
-    channels = load_channels(cursor, language=language)
+    # Apply the same filters so the second pass stays scoped.
+    channels = load_channels(cursor, language=language, channel_id=channel_id)
 
     # Build one lazy candidate iterator per channel via the chosen lister.
     channel_iters = [
@@ -948,6 +964,14 @@ if __name__ == "__main__":
             "channel when scrapetube yields nothing)."
         ),
     )
+    parser.add_argument(
+        "--channel", "-c", default=None,
+        help=(
+            "Restrict the channel loop to a single youtube_channel_id "
+            "(e.g. UCAQH04GK7-OfQC6nkzAucLw). Combines with --language. "
+            "No effect with --requests-only."
+        ),
+    )
     args = parser.parse_args()
 
     if args.requests_only:
@@ -956,6 +980,11 @@ if __name__ == "__main__":
                 "--language %r ignored: --requests-only processes content "
                 "requests, which have no language field.", args.language,
             )
+        if args.channel:
+            logger.warning(
+                "--channel %r ignored: --requests-only processes content "
+                "requests, not the channel loop.", args.channel,
+            )
         run_pending_requests_only(lister=args.lister)
     else:
-        main(language=args.language, lister=args.lister)
+        main(language=args.language, lister=args.lister, channel_id=args.channel)

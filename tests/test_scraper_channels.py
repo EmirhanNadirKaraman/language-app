@@ -98,7 +98,28 @@ def test_load_channels_with_language_filters_query(pipeline_module):
     assert result == [{"id": "UCx", "name": "Spanish Channel", "language": "es"}]
     assert "active = TRUE" in cursor.last_sql
     assert "language = %s" in cursor.last_sql
-    assert cursor.last_params == ("es",)
+    assert cursor.last_params == ["es"]
+
+
+def test_load_channels_with_channel_id_filters_query(pipeline_module):
+    """`channel_id=...` appends `AND youtube_channel_id = %s`, bound."""
+    cursor = _FakeCursor([("UCuned", "UNED", "es")])
+    result = pipeline_module.load_channels(cursor, channel_id="UCuned")
+
+    assert result == [{"id": "UCuned", "name": "UNED", "language": "es"}]
+    assert "active = TRUE" in cursor.last_sql
+    assert "youtube_channel_id = %s" in cursor.last_sql
+    assert cursor.last_params == ["UCuned"]
+
+
+def test_load_channels_language_and_channel_id_combine(pipeline_module):
+    """Both filters AND-combine; params preserve order (language, channel)."""
+    cursor = _FakeCursor([("UCuned", "UNED", "es")])
+    pipeline_module.load_channels(cursor, language="es", channel_id="UCuned")
+
+    assert "language = %s" in cursor.last_sql
+    assert "youtube_channel_id = %s" in cursor.last_sql
+    assert cursor.last_params == ["es", "UCuned"]
 
 
 # ---------------------------------------------------------------------------

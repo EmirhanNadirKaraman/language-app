@@ -355,6 +355,26 @@ Coverage of the batch: 8 cleaner + 4 merger + 4 guard + 2 noise + 1 knowledge + 
 **Problem:** `extract_german_logic(doc)` is hard-wired. Any non-German content gets no phrases extracted.
 **Fix:** Add `extract_phrases(doc, language)` dispatcher. Even no-op stubs for other languages would let the pipeline run cleanly.
 **Blocks:** opening the app to a second language.
+**Status:** ✅ dispatcher shipped 2026-05-21 (Stage 1 of the second-language plan). `extract_phrases(doc, language)` routes `de`→`extract_german_logic`, everything else→`[]`. Spanish-specific extractor still TODO (Stage 6 / item #36).
+
+### 35. 🟡 Subtitle-language selection ignores the video's original audio language
+**Files:** `subtitle-scraper/transcript_fetcher.py:fetch_with_retries` (the `language_codes` loop), `subtitle-scraper/pipeline.py:LANG_TRANSCRIPT_CODES`, `pipeline.py:get_transcript`
+**Problem:** Many channels publish a video with **manual subtitles in several languages** (creator-uploaded EN + ES + …) or only auto-translations. Today the fetcher walks a fixed code list and takes the first manual track it finds. For the channel loop the requested language biases this; for `--requests-only` video requests there's no hint, so `LANG_TRANSCRIPT_CODES` dict-order wins (English first). Net effects observed during the Spanish dogfood (2026-05-23):
+  - A Spanish-spoken enchufetv video with a manual **English** track + Spanish only as auto-translation got ingested as `language='en'` — the audio is Spanish, but the wrong subtitle track was chosen.
+  - We have no signal for "what language is actually spoken in this video," so we can't prefer the matching subtitle track.
+**What to add:**
+  1. **Detect the original audio language.** yt-dlp's info dict exposes hints — `info.get("language")` (the uploader-declared primary language) and per-format `language` tags on the audio streams; the *original* audio track is often flagged (`format_note`/`language_preference`, or the track without a dub marker). Capture this in `transcript_fetcher`.
+  2. **Prefer the subtitle track matching the original audio** when multiple manual tracks exist, instead of fixed dict-order. Fall back to the requested/seeded language, then to auto-generated in that language, then skip.
+  3. **Handle multi-language channels** where different videos are in different languages — store the *detected* language per video (already done) but pick the subtitle track from the audio language, not the channel's seed language.
+**Why it matters:** unlocks creators who subtitle in multiple languages (the common case for big channels) and stops mis-tagging Spanish-audio videos as English. Pairs with #18 (move `LANG_TRANSCRIPT_CODES` to config) and the eventual auto-caption fallback decision.
+**Risk:** medium — yt-dlp's original-audio signal isn't 100% reliable across all videos; needs a sane fallback chain and probably a per-video override. Don't let a wrong guess silently ingest the wrong language — when unsure, prefer the seeded/requested language.
+**Blocks:** real multi-language corpus volume; clean Spanish ingestion from mixed-subtitle channels.
+
+### 36. 🟡 Spanish-specific phrase extractor (post-MVP)
+**File:** `subtitle-scraper/phrase_finder.py` (`_LANGUAGE_EXTRACTORS` registry)
+**Problem:** Spanish v1 is words-only — `extract_phrases(doc, 'es')` returns `[]`. No Spanish collocations / reflexive verbs / clitic patterns are captured.
+**Fix:** Write `extract_spanish_logic(doc)` (reflexives `lavarse`, prepositional verb patterns, clitic-attached infinitives) and register it under `'es'` in `_LANGUAGE_EXTRACTORS`. Mirror the German extractor's output shape. Only worth doing once Spanish corpus + usage justify it.
+**Blocks:** nothing — purely additive. German behaviour untouched by design.
 
 ### 20. ✅ Dark mode theme system — RESOLVED 2026-05-19
 **What landed**
