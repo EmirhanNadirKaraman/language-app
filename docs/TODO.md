@@ -380,6 +380,22 @@ Coverage of the batch: 8 cleaner + 4 merger + 4 guard + 2 noise + 1 knowledge + 
 **Fix:** Write `extract_spanish_logic(doc)` (reflexives `lavarse`, prepositional verb patterns, clitic-attached infinitives) and register it under `'es'` in `_LANGUAGE_EXTRACTORS`. Mirror the German extractor's output shape. Only worth doing once Spanish corpus + usage justify it.
 **Blocks:** nothing — purely additive. German behaviour untouched by design.
 
+### 37. 🟡 One video can only be ingested in a single language (no multi-track capture)
+**Files:** `subtitle-scraper/pipeline.py` (`get_transcript`, `populate`, `main` loop, `processed_videos`/`video_blacklist` dedup), `video` / `sentence` / `word_to_sentence` schema, downstream `videos.py` + frontend video→sentence views.
+**Problem:** A single video that ships manual subtitles in **multiple languages** (e.g. a TED talk originally in Spanish with both ES and EN manual subtitle tracks, possibly plus an EN dub audio track) can only be captured **once, in one language**. The current model assumes one video = one language:
+  - `video.video_id` is the PK and carries a single `language`; `sentence` rows FK to `video_id`; `word_to_sentence` hangs off those sentences.
+  - The scraper's `processed_videos` set + `get_transcript` select exactly one subtitle track per `video_id` (see #35 — it picks the original-audio-language track, or the seeded `--language` track). A second run on the same `video_id` is skipped as already-processed.
+  - So the ES and EN tracks of the same talk are mutually exclusive: whichever is selected first wins; the other is never ingested.
+**Why it might be worth doing:** the same video in two languages is genuinely useful learning material — aligned content for cross-language reference, and it doubles usable corpus for free on bilingual channels (TED, news, institutional). A learner studying ES gets the ES track; the EN track of the same talk could serve EN learners or power translation/i+1 alignment.
+**Why it's costly (the assumptions to unwind):**
+  1. **Schema** — `video_id` can no longer be the unit of language. Either make the unit `(video_id, language)` (composite key on `video`, cascade to `sentence`), or split into a `video` (metadata, one row) + `video_track`/`transcript` (per-language, sentences hang off the track). The latter is cleaner but a bigger migration.
+  2. **Scraper dedup** — `processed_videos` and `video_blacklist` must become language-aware (`(video_id, language)`), so a video processed in ES can still be processed in EN.
+  3. **Transcript selection** — `get_transcript` would need a "fetch ALL available manual tracks" mode rather than "pick one", and the loop would ingest each.
+  4. **Downstream** — `videos.py` reading-stats, search, and any frontend that assumes one language per video need to handle a video appearing under multiple languages. The polymorphic `(item_id, item_type)` learning model is already language-agnostic per item, so `user_word_knowledge`/`srs_cards` are fine — the work is all in content tables + scraper + video-facing views.
+**Decision needed first:** is bilingual capture actually wanted, or is one-track-per-video (the simpler model) sufficient? Don't build the schema change speculatively. If yes, prefer the `video` + `video_track` split over composite-keying `video` (less churn on existing FKs).
+**Risk:** high — touches the most-referenced content tables (`video`, `sentence`) and the scraper's core loop. Sequence it behind a clear product decision.
+**Relation to #35:** #35 makes the *single* track we pick the right one (original audio language). #37 is the orthogonal question of capturing *more than one* track. They don't conflict; #37 supersedes the one-track limit only if/when bilingual capture is committed to.
+
 ### 20. ✅ Dark mode theme system — RESOLVED 2026-05-19
 **What landed**
 
