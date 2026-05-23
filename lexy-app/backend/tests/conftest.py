@@ -76,3 +76,32 @@ async def cleanup(db_pool):
     # fixture cheap when the limiter module isn't loaded.
     from backend.services import rate_limiter
     rate_limiter.reset_for_tests()
+
+
+async def _reap_word_ids(pool, word_ids: list[int]) -> None:
+    """Delete synthetic word_table rows a test created.
+
+    word_table is GLOBAL (not user-scoped), so the autouse user cleanup above
+    can't reach these rows — without this they accumulate forever and break
+    LIMIT-1 picks in other suites. Safe + order-independent because:
+      * word_table's FK children (word_to_sentence, word_strength,
+        most_frequent_words) are ON DELETE CASCADE;
+      * user_word_knowledge / srs_cards have NO FK to word_table (they use the
+        polymorphic (item_id, item_type) key) and are removed via the user
+        CASCADE, so they never block this delete.
+    Idempotent: deleting an already-gone id is a no-op.
+    """
+    if not word_ids:
+        return
+    await pool.execute("DELETE FROM word_table WHERE word_id = ANY($1::int[])", word_ids)
+
+
+@pytest.fixture
+async def tracked_words(db_pool):
+    """Registry for synthetic word_table rows a test inserts. Append each
+    created word_id (helpers like test_words._create_ambiguous_word do this for
+    you); the teardown reaps them via _reap_word_ids so word_table stays clean.
+    """
+    created: list[int] = []
+    yield created
+    await _reap_word_ids(db_pool, created)

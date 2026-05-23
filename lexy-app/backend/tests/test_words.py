@@ -29,10 +29,14 @@ async def _registered_token(client: AsyncClient) -> str:
 
 
 async def _get_word_id(db_pool) -> int:
-    """Return any word_id from word_table, or skip the test if table is empty."""
-    word_id = await db_pool.fetchval("SELECT word_id FROM word_table LIMIT 1")
+    """Return a real word_id from word_table, or skip the test if none exists.
+    Excludes synthetic test surfaces (which carry digits/underscores) so a
+    LIMIT-1 grab can't return another suite's leftover fixture row."""
+    word_id = await db_pool.fetchval(
+        "SELECT word_id FROM word_table WHERE word !~ '[0-9_]' ORDER BY word_id LIMIT 1"
+    )
     if word_id is None:
-        pytest.skip("word_table is empty — run the subtitle pipeline first")
+        pytest.skip("word_table has no plain word — run the subtitle pipeline first")
     return word_id
 
 
@@ -162,10 +166,14 @@ async def test_invalid_item_type_returns_422(client: AsyncClient, db_pool):
 
 
 async def _get_word_text_and_language(db_pool) -> tuple[str, str]:
-    """Return (word, language) for any word in word_table, skipping if empty."""
-    row = await db_pool.fetchrow("SELECT word, language FROM word_table LIMIT 1")
+    """Return (word, language) for a real word, skipping if none. Excludes
+    synthetic test surfaces (digits/underscores) so leftover fixture rows from
+    other suites can't be picked by a LIMIT-1 grab."""
+    row = await db_pool.fetchrow(
+        "SELECT word, language FROM word_table WHERE word !~ '[0-9_]' ORDER BY word_id LIMIT 1"
+    )
     if row is None:
-        pytest.skip("word_table is empty — run the subtitle pipeline first")
+        pytest.skip("word_table has no plain word — run the subtitle pipeline first")
     return row["word"], row["language"]
 
 
@@ -247,12 +255,14 @@ async def test_by_text_returns_not_found_for_unknown_word_not_in_db(client: Asyn
 # ---------------------------------------------------------------------------
 
 async def _get_word_for_lookup(db_pool) -> tuple[int, str, str]:
-    """Return (word_id, word_text, language) for a row that supports by-text lookup."""
+    """Return (word_id, word_text, language) for a real row that supports
+    by-text lookup. Excludes synthetic test surfaces (digits/underscores)."""
     row = await db_pool.fetchrow(
-        "SELECT word_id, word, language FROM word_table LIMIT 1"
+        "SELECT word_id, word, language FROM word_table WHERE word !~ '[0-9_]' "
+        "ORDER BY word_id LIMIT 1"
     )
     if row is None:
-        pytest.skip("word_table is empty")
+        pytest.skip("word_table has no plain word")
     return row["word_id"], row["word"], row["language"]
 
 
@@ -396,7 +406,7 @@ async def _user_id_for(db_pool, token: str) -> str:
     return str(row["user_id"])
 
 
-async def test_learn_anyway_creates_word_table_row(client: AsyncClient, db_pool):
+async def test_learn_anyway_creates_word_table_row(client: AsyncClient, db_pool, tracked_words):
     token = await _registered_token(client)
     headers = {"Authorization": f"Bearer {token}"}
     text = _unique_text()
@@ -404,6 +414,7 @@ async def test_learn_anyway_creates_word_table_row(client: AsyncClient, db_pool)
     resp = await client.post(LEARN_ANYWAY, json={"text": text, "language": "de"}, headers=headers)
     assert resp.status_code == 200
     body = resp.json()
+    tracked_words.append(body["word_id"])
     assert body["word"].lower() == text.lower()
     assert body["current_status"] == "learning"
 
@@ -417,7 +428,7 @@ async def test_learn_anyway_creates_word_table_row(client: AsyncClient, db_pool)
     assert row["lemma"] == text
 
 
-async def test_learn_anyway_does_not_duplicate_existing_word(client: AsyncClient, db_pool):
+async def test_learn_anyway_does_not_duplicate_existing_word(client: AsyncClient, db_pool, tracked_words):
     token = await _registered_token(client)
     headers = {"Authorization": f"Bearer {token}"}
     text = _unique_text()
@@ -426,6 +437,7 @@ async def test_learn_anyway_does_not_duplicate_existing_word(client: AsyncClient
     r2 = await client.post(LEARN_ANYWAY, json={"text": text, "language": "de"}, headers=headers)
     assert r1.status_code == 200 and r2.status_code == 200
     assert r1.json()["word_id"] == r2.json()["word_id"], "idempotent: same word_id on re-call"
+    tracked_words.append(r1.json()["word_id"])
 
     count = await db_pool.fetchval(
         "SELECT COUNT(*) FROM word_table WHERE word = $1 AND language = $2",
@@ -434,7 +446,7 @@ async def test_learn_anyway_does_not_duplicate_existing_word(client: AsyncClient
     assert count == 1
 
 
-async def test_learn_anyway_creates_user_word_knowledge_learning(client: AsyncClient, db_pool):
+async def test_learn_anyway_creates_user_word_knowledge_learning(client: AsyncClient, db_pool, tracked_words):
     token = await _registered_token(client)
     headers = {"Authorization": f"Bearer {token}"}
     text = _unique_text()
@@ -442,6 +454,7 @@ async def test_learn_anyway_creates_user_word_knowledge_learning(client: AsyncCl
     resp = await client.post(LEARN_ANYWAY, json={"text": text, "language": "de"}, headers=headers)
     assert resp.status_code == 200
     word_id = resp.json()["word_id"]
+    tracked_words.append(word_id)
     uid = await _user_id_for(db_pool, token)
 
     row = await db_pool.fetchrow(
@@ -459,7 +472,7 @@ async def test_learn_anyway_creates_user_word_knowledge_learning(client: AsyncCl
     assert row["times_used_correctly"] == 0
 
 
-async def test_learn_anyway_creates_both_srs_cards(client: AsyncClient, db_pool):
+async def test_learn_anyway_creates_both_srs_cards(client: AsyncClient, db_pool, tracked_words):
     """status_marked_learning creates passive AND active cards (#0b)."""
     token = await _registered_token(client)
     headers = {"Authorization": f"Bearer {token}"}
@@ -467,6 +480,7 @@ async def test_learn_anyway_creates_both_srs_cards(client: AsyncClient, db_pool)
 
     resp = await client.post(LEARN_ANYWAY, json={"text": text, "language": "de"}, headers=headers)
     word_id = resp.json()["word_id"]
+    tracked_words.append(word_id)
     uid = await _user_id_for(db_pool, token)
 
     directions = await db_pool.fetch(
@@ -515,11 +529,15 @@ async def test_learn_anyway_over_max_length_returns_422(client: AsyncClient):
 # W3 / Hole 2 — disambiguation of ambiguous surface forms
 # ---------------------------------------------------------------------------
 
-async def _create_ambiguous_word(db_pool, surface: str = None) -> tuple[str, list[int]]:
+async def _create_ambiguous_word(db_pool, tracked: list[int], surface: str = None) -> tuple[str, list[int]]:
     """Create 2 word_table rows sharing (word, language) but with different
     POS — simulates the "die Bank" (bench / financial institution) case.
     Returns (surface, [word_id_noun, word_id_verb]). UNIQUE(word, language, pos)
-    allows the two rows."""
+    allows the two rows. Every created word_id is appended to `tracked` (the
+    tracked_words fixture) so the rows are reaped after the test — word_table is
+    global, so unreaped synthetic rows pollute every other suite's LIMIT-1
+    picks. The random `Bnk_<hex>` surface keeps inserts unique per call, so
+    parallel xdist workers never share (and so never trample) a row."""
     if surface is None:
         surface = f"Bnk_{uuid.uuid4().hex[:8]}"
     rows = []
@@ -539,6 +557,7 @@ async def _create_ambiguous_word(db_pool, surface: str = None) -> tuple[str, lis
                 surface, pos,
             )
         rows.append(row["word_id"])
+    tracked.extend(rows)
     return surface, rows
 
 
@@ -557,9 +576,9 @@ async def test_by_text_single_match_returns_single_status(client: AsyncClient, d
         assert len(body["candidates"]) == 1
 
 
-async def test_by_text_ambiguous_returns_all_candidates_not_arbitrary_pick(client: AsyncClient, db_pool):
+async def test_by_text_ambiguous_returns_all_candidates_not_arbitrary_pick(client: AsyncClient, db_pool, tracked_words):
     """Hole 2 regression guard: multi-match must surface ALL candidates."""
-    surface, word_ids = await _create_ambiguous_word(db_pool)
+    surface, word_ids = await _create_ambiguous_word(db_pool, tracked_words)
     token = await _registered_token(client)
     resp = await client.get(BY_TEXT, params={"word": surface, "language": "de"},
                             headers={"Authorization": f"Bearer {token}"})
@@ -570,9 +589,9 @@ async def test_by_text_ambiguous_returns_all_candidates_not_arbitrary_pick(clien
     assert candidate_ids == set(word_ids)
 
 
-async def test_by_text_candidates_include_user_progress_fields(client: AsyncClient, db_pool):
+async def test_by_text_candidates_include_user_progress_fields(client: AsyncClient, db_pool, tracked_words):
     """Candidates carry per-user current_status / passive_level (UI needs to show them)."""
-    surface, word_ids = await _create_ambiguous_word(db_pool)
+    surface, word_ids = await _create_ambiguous_word(db_pool, tracked_words)
     token = await _registered_token(client)
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -587,9 +606,9 @@ async def test_by_text_candidates_include_user_progress_fields(client: AsyncClie
     assert by_id[word_ids[1]]["current_status"] is None
 
 
-async def test_by_text_candidates_sorted_deterministically(client: AsyncClient, db_pool):
+async def test_by_text_candidates_sorted_deterministically(client: AsyncClient, db_pool, tracked_words):
     """Sort: exact case-insensitive word match first, then lemma asc, then word_id."""
-    surface, word_ids = await _create_ambiguous_word(db_pool)
+    surface, word_ids = await _create_ambiguous_word(db_pool, tracked_words)
     token = await _registered_token(client)
     resp = await client.get(BY_TEXT, params={"word": surface, "language": "de"},
                             headers={"Authorization": f"Bearer {token}"})
@@ -603,9 +622,9 @@ async def test_by_text_candidates_sorted_deterministically(client: AsyncClient, 
     assert candidates[1]["pos"] == "VERB"
 
 
-async def test_by_text_candidates_include_pos_field(client: AsyncClient, db_pool):
+async def test_by_text_candidates_include_pos_field(client: AsyncClient, db_pool, tracked_words):
     """W3 added `pos` to the WordLookupResult shape."""
-    surface, _ = await _create_ambiguous_word(db_pool)
+    surface, _ = await _create_ambiguous_word(db_pool, tracked_words)
     token = await _registered_token(client)
     resp = await client.get(BY_TEXT, params={"word": surface, "language": "de"},
                             headers={"Authorization": f"Bearer {token}"})
@@ -614,7 +633,7 @@ async def test_by_text_candidates_include_pos_field(client: AsyncClient, db_pool
     assert poss == {"NOUN", "VERB"}
 
 
-async def test_learn_anyway_still_works_after_lookup_refactor(client: AsyncClient, db_pool):
+async def test_learn_anyway_still_works_after_lookup_refactor(client: AsyncClient, db_pool, tracked_words):
     """W2 path still works: learn-anyway creates a row + flips status to learning."""
     token = await _registered_token(client)
     headers = {"Authorization": f"Bearer {token}"}
@@ -622,5 +641,45 @@ async def test_learn_anyway_still_works_after_lookup_refactor(client: AsyncClien
     resp = await client.post(LEARN_ANYWAY, json={"text": text, "language": "de"}, headers=headers)
     assert resp.status_code == 200
     body = resp.json()
+    tracked_words.append(body["word_id"])
     assert body["current_status"] == "learning"
     assert body["pos"] == "X"  # sparse placeholder retained
+
+
+# ---------------------------------------------------------------------------
+# word_table pollution cleanup — proof of the tracked_words reap mechanism
+# ---------------------------------------------------------------------------
+
+async def test_reap_word_ids_removes_synthetic_rows(db_pool):
+    """Proof that the tracked_words teardown actually deletes what it tracks.
+
+    word_table is global (not user-scoped), so the autouse user cleanup can't
+    reap synthetic rows — this `_reap_word_ids` call (run by the tracked_words
+    fixture after every test) is what keeps the table from accumulating
+    ζtest_/Bnk_ pollution. Insert two synthetic rows, reap by id, confirm gone,
+    and confirm a second reap is a harmless no-op."""
+    from .conftest import _reap_word_ids
+
+    ids = []
+    for surface in (f"ζtest_{uuid.uuid4().hex[:8]}", f"Bnk_{uuid.uuid4().hex[:8]}"):
+        wid = await db_pool.fetchval(
+            "INSERT INTO word_table (word, language, pos, tag, lemma) "
+            "VALUES ($1, 'de', 'X', 'X', $1) RETURNING word_id",
+            surface,
+        )
+        ids.append(wid)
+
+    present = await db_pool.fetchval(
+        "SELECT count(*) FROM word_table WHERE word_id = ANY($1::int[])", ids
+    )
+    assert present == 2
+
+    await _reap_word_ids(db_pool, ids)
+    after = await db_pool.fetchval(
+        "SELECT count(*) FROM word_table WHERE word_id = ANY($1::int[])", ids
+    )
+    assert after == 0, "reap must delete all tracked synthetic rows"
+
+    # Idempotent: reaping already-gone ids (and an empty list) must not error.
+    await _reap_word_ids(db_pool, ids)
+    await _reap_word_ids(db_pool, [])
