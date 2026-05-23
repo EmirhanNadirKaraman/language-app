@@ -369,6 +369,10 @@ Coverage of the batch: 8 cleaner + 4 merger + 4 guard + 2 noise + 1 knowledge + 
 **Why it matters:** unlocks creators who subtitle in multiple languages (the common case for big channels) and stops mis-tagging Spanish-audio videos as English. Pairs with #18 (move `LANG_TRANSCRIPT_CODES` to config) and the eventual auto-caption fallback decision.
 **Risk:** medium — yt-dlp's original-audio signal isn't 100% reliable across all videos; needs a sane fallback chain and probably a per-video override. Don't let a wrong guess silently ingest the wrong language — when unsure, prefer the seeded/requested language.
 **Blocks:** real multi-language corpus volume; clean Spanish ingestion from mixed-subtitle channels.
+**Status (2026-05-23):** 🟡 partial — parts 1 & 2 (manual-track tier) shipped. `pipeline.get_original_audio_language(video_id)` reads `info["language"]`, normalizes (`es-419`→`es`), returns None for unknown/missing. `get_transcript`'s auto-detect branch floats the original-audio language to the front of the search order, so a video with manual EN **and** manual ES + ES audio now tags `es`. Explicit `--language` path is intentionally untouched (seed language stays authoritative — protects the 248-video UNED run). **Still open:**
+  - Auto-generated-caption fallback in the audio language (the enchufetv case: ES audio, manual EN only, ES exists *only* as auto-translation → still tags EN or skips). Deferred — quality tradeoff, needs a decision on accepting auto captions.
+  - Part 3 (per-format audio-track inspection) — current impl uses the single `info["language"]` hint, not per-stream dub detection. Sufficient for now.
+  - The `--requests-only` video path benefits automatically (it calls `get_transcript` with no language).
 
 ### 36. 🟡 Spanish-specific phrase extractor (post-MVP)
 **File:** `subtitle-scraper/phrase_finder.py` (`_LANGUAGE_EXTRACTORS` registry)

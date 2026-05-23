@@ -126,11 +126,41 @@ def upsert_channel(cursor, channel_id: str, channel_name: str, language: str | N
     return cursor.fetchone()[0]
 
 
+def get_original_audio_language(video_id) -> str | None:
+    """Best-effort original audio language of a video, from yt-dlp metadata.
+
+    yt-dlp surfaces the uploader-declared / YouTube-detected primary language
+    as info["language"] (e.g. 'es', 'es-419', 'en'). We normalize to the base
+    code and only return it when it's a language we have a spaCy model for —
+    otherwise None (caller falls back to the fixed search order).
+
+    TODO #35: used to bias subtitle-track selection toward the spoken
+    language for videos that ship subtitles in several languages, instead of
+    the old English-first dict-order bias.
+    """
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    opts = {"skip_download": True, "quiet": True, "no_warnings": True}
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception:
+        logger.warning("Could not probe audio language for %s", video_id, exc_info=True)
+        return None
+    raw = info.get("language")
+    if not raw:
+        return None
+    base = raw.split("-")[0].split("_")[0].lower()
+    return base if base in LANG_MODEL_MAP else None
+
+
 def get_transcript(video_id, language=None):
     """
     Fetch a transcript for a video via yt-dlp with caching and retries.
     - If language is given, look for that language specifically.
-    - If language is None, auto-detect from any available transcript.
+    - If language is None, auto-detect: prefer the subtitle track matching the
+      video's ORIGINAL AUDIO language (TODO #35), then fall back to the fixed
+      language order. This stops a Spanish-audio video that also ships English
+      manual subs from being mis-tagged 'en' just because English sorts first.
     Returns (snippets, detected_lang, actual_language_code, transcript_source)
     or (None, None, None, None).
     """
@@ -141,8 +171,16 @@ def get_transcript(video_id, language=None):
             )
             return snippets, language, actual_code, source
 
-        # Auto-detect: try each known language in order
-        for lang_code, codes in LANG_TRANSCRIPT_CODES.items():
+        # Auto-detect. Build the language search order, floating the original
+        # audio language to the front when we can detect it so its manual
+        # subtitle track wins over an alphabetically-earlier one.
+        ordered = list(LANG_TRANSCRIPT_CODES.items())
+        audio_lang = get_original_audio_language(video_id)
+        if audio_lang and audio_lang in LANG_TRANSCRIPT_CODES:
+            logger.info("Original audio language for %s: %s — trying it first", video_id, audio_lang)
+            ordered.sort(key=lambda kv: 0 if kv[0] == audio_lang else 1)
+
+        for lang_code, codes in ordered:
             try:
                 snippets, actual_code, source = fetch_with_retries(video_id, codes)
                 sample = " ".join(s["text"] for s in snippets[:20])
