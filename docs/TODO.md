@@ -6,7 +6,7 @@
 
 Bugs and pending work, ordered so that earlier items unblock later items. "Blocks: …" lists downstream work that depends on the fix.
 
-Status legend: 🔴 will fail / data risk · 🟠 correctness / reliability · 🟡 tech debt · 🟢 polish
+Status legend: 🔴 will fail / data risk · 🟠 correctness / reliability · 🟡 tech debt · 🟢 polish · ✅ resolved · 🚫 won't do / dropped (product decision)
 
 ---
 
@@ -132,7 +132,7 @@ All three sub-issues closed in this session:
 
 See `progression_service.py:_RULES` docstrings and §5e below for the manual-known backfill question.
 
-### 5e. 🟡 Backfill: pre-2026-05-18 manual-known users have inflated active progress
+### 5e. 🚫 Backfill: pre-2026-05-18 manual-known users have inflated active progress — WON'T DO (forward-only) 2026-05-23
 **Tables:** `user_word_knowledge.active_level`, `user_word_knowledge.times_used_correctly`, `srs_cards` (direction='active')
 **Problem:** Before #5d's status_marked_known fix, every manual "Known" click bumped `active_level +1`, `times_used_correctly +1`, and either created or advanced the active SRS card via the SM-2 correct branch. Users who frontloaded their vocab by marking things known therefore have phantom active mastery that doesn't reflect actual production.
 **Identification:** rows in `word_usage_events` with `context='status_change' AND outcome='correct'` are manual-known events (per `routers/words.py:85` outcome mapping). Counting them per (user_id, item_id) gives the inflation count.
@@ -158,12 +158,16 @@ UPDATE user_word_knowledge uwk SET
 -- status='known' filter excludes them from /srs/due anyway.
 ```
 **Recommendation:** ship forward-only. Inflation is small per user (1 per known click) and isn't load-bearing — `status='known'` is the field that drives downstream filtering. Backfill only if analytics depending on `active_level` shows skew.
+**Decision (2026-05-23):** 🚫 won't do. Forward-only accepted. The SQL above is preserved as a runbook should `active_level` analytics ever show meaningful skew — reopen then.
 
-### 6. 🟠 `users.settings` JSONB hides channel/genre preferences
+### 6. ✅ `users.settings` JSONB hides channel/genre preferences — RESOLVED 2026-05-23
 **File:** `lexy-app/backend/services/settings_service.py`
 **Problem:** Memory entry `project_db_migration_todo.md` flags two remaining JSON-in-DB problems — channel preferences are one. Filtering recommendations by followed channels means JSON queries on every call.
-**Fix:** Promote `followed_channels`, `followed_genres`, `excluded_categories` into proper join tables (`user_followed_channel`, `user_followed_genre`). Migrate existing JSON rows. Keep `settings` JSONB for genuinely freeform prefs (colour scheme overrides, etc.).
-**Blocks:** efficient recommendation filtering, audit/admin views on what users follow.
+**Resolution:** Both preference families are relational now.
+  - **Channels** → `user_channel_preference (user_id, youtube_channel_id, preference_kind ∈ {followed,liked,disliked})`, migration 027 (T1.4, 2026-05-20). Backfilled from the JSONB arrays; source of truth flipped to the table.
+  - **Genres / categories** → `user_video_category (uid, video_category, preference)` since #5d. `settings_service` reads `liked_categories`/`disliked_categories` from there and aliases them to `liked_genres`/`disliked_genres` on the wire (settings_service.py:150–168).
+  - `settings` JSONB now holds only genuinely freeform / lookup data — the `channel_names` display-name cache and freeform prefs — exactly as the original "keep settings JSONB for freeform prefs" plan prescribed.
+**Residual (not blocking):** migration 027 intentionally left the legacy channel JSONB keys in place for one release as a read-ignored fallback; a future migration can `DELETE` them once we've confirmed no consumer reads them.
 
 ### 7. ✅ Channel flat files vs. DB — RESOLVED 2026-05-20
 - Runtime was already DB-only (`pipeline.py:load_channels(cursor)` queries `channel` table; no file fallback existed).
@@ -350,14 +354,13 @@ Coverage of the batch: 8 cleaner + 4 merger + 4 guard + 2 noise + 1 knowledge + 
 **Problem:** Adding a new language requires editing three dicts + installing a spaCy model + restarting the scraper.
 **Fix:** Move to a `language_config` table (or a YAML file checked into the repo): `(code, spacy_model, transcript_codes[], has_morphology, active)`. Load on scraper start.
 
-### 19. 🟡 Phrase extraction is German-only
+### 19. ✅ Phrase extraction is German-only — RESOLVED 2026-05-21
 **File:** `subtitle-scraper/phrase_finder.py`, called from `subtitle-scraper/pipeline.py:376`
 **Problem:** `extract_german_logic(doc)` is hard-wired. Any non-German content gets no phrases extracted.
-**Fix:** Add `extract_phrases(doc, language)` dispatcher. Even no-op stubs for other languages would let the pipeline run cleanly.
-**Blocks:** opening the app to a second language.
-**Status:** ✅ dispatcher shipped 2026-05-21 (Stage 1 of the second-language plan). `extract_phrases(doc, language)` routes `de`→`extract_german_logic`, everything else→`[]`. Spanish-specific extractor still TODO (Stage 6 / item #36).
+**Resolution:** `extract_phrases(doc, language)` dispatcher shipped 2026-05-21 (Stage 1 of the second-language plan). Routes `de`→`extract_german_logic`, every other language→`[]`, so the pipeline runs cleanly for any language. `insert_phrases` is a no-op for non-German by design (pipeline.py:447–449). The "opens the app to a second language" goal is met — Spanish ingests words-only and clean.
+**Remainder:** a Spanish-*specific* extractor (real collocations/reflexives) is tracked separately as **#36** — purely additive, post-MVP.
 
-### 35. 🟡 Subtitle-language selection ignores the video's original audio language
+### 35. ✅/🚫 Subtitle-language selection ignores the video's original audio language — manual-track preference RESOLVED 2026-05-23; auto-caption fallback WON'T DO (product policy)
 **Files:** `subtitle-scraper/transcript_fetcher.py:fetch_with_retries` (the `language_codes` loop), `subtitle-scraper/pipeline.py:LANG_TRANSCRIPT_CODES`, `pipeline.py:get_transcript`
 **Problem:** Many channels publish a video with **manual subtitles in several languages** (creator-uploaded EN + ES + …) or only auto-translations. Today the fetcher walks a fixed code list and takes the first manual track it finds. For the channel loop the requested language biases this; for `--requests-only` video requests there's no hint, so `LANG_TRANSCRIPT_CODES` dict-order wins (English first). Net effects observed during the Spanish dogfood (2026-05-23):
   - A Spanish-spoken enchufetv video with a manual **English** track + Spanish only as auto-translation got ingested as `language='en'` — the audio is Spanish, but the wrong subtitle track was chosen.
@@ -369,10 +372,13 @@ Coverage of the batch: 8 cleaner + 4 merger + 4 guard + 2 noise + 1 knowledge + 
 **Why it matters:** unlocks creators who subtitle in multiple languages (the common case for big channels) and stops mis-tagging Spanish-audio videos as English. Pairs with #18 (move `LANG_TRANSCRIPT_CODES` to config) and the eventual auto-caption fallback decision.
 **Risk:** medium — yt-dlp's original-audio signal isn't 100% reliable across all videos; needs a sane fallback chain and probably a per-video override. Don't let a wrong guess silently ingest the wrong language — when unsure, prefer the seeded/requested language.
 **Blocks:** real multi-language corpus volume; clean Spanish ingestion from mixed-subtitle channels.
-**Status (2026-05-23):** 🟡 partial — parts 1 & 2 (manual-track tier) shipped. `pipeline.get_original_audio_language(video_id)` reads `info["language"]`, normalizes (`es-419`→`es`), returns None for unknown/missing. `get_transcript`'s auto-detect branch floats the original-audio language to the front of the search order, so a video with manual EN **and** manual ES + ES audio now tags `es`. Explicit `--language` path is intentionally untouched (seed language stays authoritative — protects the 248-video UNED run). **Still open:**
-  - Auto-generated-caption fallback in the audio language (the enchufetv case: ES audio, manual EN only, ES exists *only* as auto-translation → still tags EN or skips). Deferred — quality tradeoff, needs a decision on accepting auto captions.
-  - Part 3 (per-format audio-track inspection) — current impl uses the single `info["language"]` hint, not per-stream dub detection. Sufficient for now.
-  - The `--requests-only` video path benefits automatically (it calls `get_transcript` with no language).
+**PRODUCT POLICY (2026-05-23): manual target-language subtitles ONLY.** We deliberately do **not** ingest auto-generated captions — machine-transcribed quality is too unreliable to be safe learning material (wrong words, missing punctuation, no speaker boundaries). The scraper already prefers manual tracks; that policy stays. If a video/channel has no manual subtitle track in the target language, **skip it** — do not fall back to auto captions.
+
+**Status (2026-05-23):**
+  - ✅ **Parts 1 & 2 (manual-track preference) — RESOLVED.** `pipeline.get_original_audio_language(video_id)` reads `info["language"]`, normalizes (`es-419`→`es`), returns None for unknown/missing. `get_transcript`'s auto-detect branch floats the original-audio language to the front of the search order, so a video with manual EN **and** manual ES + ES audio now tags `es`. Explicit `--language` path is intentionally untouched (seed language stays authoritative — protects the 248-video UNED run). This is fully in line with the manual-only policy: it only ever reorders among *manual* tracks.
+  - 🚫 **Auto-generated-caption fallback — WON'T DO.** The enchufetv case (ES audio, manual EN only, ES exists *only* as an auto-translation) will keep tagging EN or skipping. That is the intended outcome under the manual-only policy, not a gap to close. Grow the Spanish corpus from channels/videos that ship **manual Spanish subtitles** (e.g. the UNED educational channel) rather than relaxing the quality bar.
+  - 🟡 **Part 3 (per-format audio-track inspection) — deferred, optional.** Current impl uses the single `info["language"]` hint, not per-stream dub detection. Sufficient for now; revisit only if mis-tagging recurs on bilingual-audio videos.
+  - The `--requests-only` video path benefits automatically from parts 1 & 2 (it calls `get_transcript` with no language).
 
 ### 36. 🟡 Spanish-specific phrase extractor (post-MVP)
 **File:** `subtitle-scraper/phrase_finder.py` (`_LANGUAGE_EXTRACTORS` registry)
@@ -585,10 +591,11 @@ Regression-guarded by 6 new tests in `tests/test_llm_cache_migration.py`: concur
 
 **Known limitation.** In-process per-process locks. Multi-worker deployments (gunicorn `--workers N`, multi-pod K8s) won't coordinate across processes — Worker A and Worker B can each see a miss and each call the provider. Same scope as `services/rate_limiter.py`; same eventual fix (Redis or `pg_advisory_xact_lock`). Documented in the module docstring.
 
-### 25. 🟢 Word-status data duplicated across services
+### 25. 🚫 Word-status data duplicated across services — DROPPED 2026-05-23
 **Files:** several services do their own `SELECT … FROM user_word_knowledge WHERE …`
 **Problem:** No single `word_service.get_knowledge(user_id, item_id, item_type)`. Refactors are painful.
-**Fix:** Extract a single accessor and route all reads through it.
+**Fix (not pursued):** Extract a single accessor and route all reads through it.
+**Decision (2026-05-23):** 🚫 dropped. Audit found the call sites read different column subsets for different purposes, so a single accessor would either over-fetch or grow a pile of flags — no clean shared shape, zero would-be adopters that benefit. Reopen only if a concrete refactor is actually blocked by the duplication.
 
 ---
 
@@ -786,10 +793,10 @@ Closes the PWA stage: Lighthouse PWA audit's "no maskable/png icon" warning is g
 - Tighten the 900px max-width container
 - Touch-target audit (44px minimum)
 
-### 28. 🟢 Clean `index.css` and `App.css`
-**Files:** `lexy-app/frontend/src/index.css`, `App.css`
+### 28. ✅ Clean `index.css` and `App.css` — RESOLVED 2026-05-23 (done in W8)
+**Files:** `lexy-app/frontend/src/index.css`, ~~`App.css`~~
 **Problem:** Mostly commented-out Panda-CSS skeleton and Vite template leftovers.
-**Fix:** Delete the dead bits; keep only what's used.
+**Resolution:** `App.css` deleted in W8. `index.css` is now 163 lines of the live theme system — `:root` / `[data-theme]` CSS-variable blocks (71 lines reference `--color-*` / `data-theme` / `:root`), zero Panda references, no commented-out skeleton. Only what's used remains.
 
 ### 29. ✅ Backend end-to-end progression loop test — RESOLVED 2026-05-19
 New file `tests/test_e2e_learning_loop.py` with two tests:
@@ -798,10 +805,10 @@ New file `tests/test_e2e_learning_loop.py` with two tests:
 
 LLM is mocked via `llm_service._MOCK = True`. The active production exact-match fast path means the loop never makes an LLM call for evaluation either.
 
-### 30. 🟢 Documentation / ERD
-**Files:** none
+### 30. ✅ Documentation / ERD — RESOLVED 2026-05-23
+**Files:** `docs/SCHEMA.md`
 **Problem:** 25+ migrations, no schema diagram. New contributors guess relationships.
-**Fix:** Generate ERD via `eralchemy` or hand-draw. Drop a `docs/SCHEMA.md` linking each table to its owning service.
+**Resolution:** `docs/SCHEMA.md` written (184 lines) — documents the tables, the polymorphic `(item_id, item_type)` key, and links tables to their owning services. Satisfies the "drop a `docs/SCHEMA.md` linking each table to its owning service" plan. A rendered ERD image was not generated (text doc judged sufficient); add `eralchemy` output later if a visual is wanted.
 
 ### 31. 🟢 Two-pass extractor thresholds
 **File:** `pdf_text_extraction/config.py:220–311`
