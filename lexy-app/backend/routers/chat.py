@@ -173,28 +173,37 @@ async def send_message(
         word_matches=result["word_matches"],
     )
 
-    # Server-side vocabulary matching: find learning-status words that appear
-    # in the user's message. `language_detected` (from the LLM) drives the
-    # event:
-    #   == session_language → free_chat_used_correctly  (target-language
-    #                                                    production: both
-    #                                                    passive + active
-    #                                                    tracks advance)
-    #   == 'mixed'          → free_chat_mixed_lang      (passive credit only)
-    #   == 'en' / other     → skip                      (user wasn't
-    #                                                    practising the
-    #                                                    target language)
+    # Server-side vocabulary matching. We ALWAYS scan the user's message for
+    # target-language learning items the user is tracking — even when the LLM
+    # labels the whole message "en". A learner who writes "Yesterday I bought
+    # Brot" still produced the German learning word "Brot" and earns (passive)
+    # credit for it; the old gate skipped matching entirely on an "en" label
+    # and dropped that credit on the floor.
+    #
+    # `language_detected` now only decides whether the use ALSO earns active
+    # production credit:
+    #   == session_language     → free_chat_used_correctly (passive + active)
+    #   else, but items matched → free_chat_mixed_lang     (passive only)
+    #   else (nothing matched)  → no progression event
+    #
+    # Active credit is never granted for an "en" or "mixed" turn. Matching is
+    # scoped to word_table/phrase_table in `session_language` AND the user's
+    # own non-known items, so the only false-positive surface is a homograph
+    # the user is actively learning (e.g. German "war"/"die" inside an English
+    # sentence) — and that only ever yields passive credit.
+    #
+    # Cost note: match_learning_words runs spaCy phrase extraction, so it now
+    # runs on every free-chat turn regardless of detected language (previously
+    # skipped for pure-English turns). Free chat is one-message-at-a-time, so
+    # the extra per-turn cost is acceptable.
     language_detected = result.get("language_detected", "en")
-    if language_detected in (session_language, "mixed"):
-        _event = (
-            "free_chat_used_correctly" if language_detected == session_language
-            else "free_chat_mixed_lang"
-        )
-        _analytics_outcome = "used" if language_detected == session_language else "seen"
-        matched = await chat_service.match_learning_words(
-            pool, user_id, body.content, session_language,
-        )
-
+    matched = await chat_service.match_learning_words(
+        pool, user_id, body.content, session_language,
+    )
+    if matched:
+        target_language_turn = language_detected == session_language
+        _event = "free_chat_used_correctly" if target_language_turn else "free_chat_mixed_lang"
+        _analytics_outcome = "used" if target_language_turn else "seen"
         for match in matched:
             # Progression update — awaited; these are primary knowledge-state changes
             await progression_service.apply_progression(

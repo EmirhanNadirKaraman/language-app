@@ -18,7 +18,7 @@ Test runner: pytest + pytest-asyncio. Fixtures in `conftest.py` provide `db_pool
 |---|---|
 | `test_auth.py` | register, login, JWT token validation |
 | `test_chat.py` | session lifecycle (create, get, messages), free + guided |
-| `test_free_chat_progression.py` | language_detected → free_chat_{matched,used_correctly,mixed_lang} → progression |
+| `test_free_chat_progression.py` | free-chat crediting: target word always scanned; de→both tracks, mixed/en-with-target→passive only, en-without-target→no progression |
 | `test_grammar_rules_srs.py` | grammar rule via `/words/{type}/{id}/status`; status_marked_learning currently creates passive only (grammar_rule guard added in this session) |
 | `test_llm_cache.py` | cache key generation, hit/miss, TTL |
 | `test_matcher.py` | phrase matching via `/sentences/match` — ❌ all 5 tests fail (pre-existing: phrase_finder called with str, expects spaCy Doc — `phrase_finder.py:151`) |
@@ -124,7 +124,21 @@ gaps closed.
 
 ## Tests added in this session
 
-🆕 **2026-05-19 (latest) — Dark-mode coverage (#20b)**
+🆕 **2026-05-23 (latest) — free-chat mixed-language crediting fix**
+
+A target-language learning word in a free-chat message the LLM labelled `"en"` was getting **zero** credit ("Yesterday I bought Brot" → Brot ignored). `routers/chat.py` now ALWAYS runs `match_learning_words` for the session language; `language_detected` only gates ACTIVE credit. Rule: `== session_language` → `free_chat_used_correctly` (passive+active); else if items matched → `free_chat_mixed_lang` (passive only); else no event. No progression-rule changes.
+
+| File | Change |
+|---|---|
+| `routers/chat.py` | Removed the `language_detected in (session_language, "mixed")` gate around matching. Match is now unconditional; the event is chosen from `language_detected == session_language`. |
+| `tests/test_free_chat_progression.py` | Split `test_english_message_triggers_no_progression` → `test_english_message_without_target_word_triggers_no_progression` (gibberish content). +`test_english_label_with_target_word_advances_passive_only` (en+target word → passive only; asserts no active SRS card fabricated). Hardened `_get_word` + the lemma-test query to skip `word_table` test-fixture pollution. |
+| `tests/test_chat_language.py` | +`test_spanish_english_label_with_target_word_advances_passive_only`, +`test_spanish_es_label_advances_both_tracks` (real-DB Spanish: en→passive-only, es→both tracks). |
+
+**Net delta:** +4 tests, 1 split/renamed. Targeted files: 34 passed, 1 skipped. Full backend suite: **590 passed, 2 skipped, 0 failed.**
+
+**Known pre-existing issue (NOT fixed here):** `test_words.py:381` generates `ζtest_<hex>` / `Bnk_<hex>` word surfaces inserted into the un-user-scoped `word_table`; the autouse user-cleanup can't reap them, so ~177 orphan rows have accumulated. Their digit/underscore surfaces can't round-trip the message tokenizer, so a `LIMIT 1` grab silently broke 6 match-based tests. `test_free_chat_progression.py`'s helpers are now hardened against them; the root fix (purge rows + add a `word_table` cleanup to `test_words.py`) is deferred.
+
+🆕 **2026-05-19 — Dark-mode coverage (#20b)**
 
 Follow-up pass to #20a converting the 22 components that were still rendering hardcoded light colors. 23 components edited in total. Semantic palettes (status pills, mistake/freq badges, word-status colors, PrefButton accents, LLM tint colors) intentionally kept fixed.
 

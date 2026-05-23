@@ -324,3 +324,131 @@ async def test_spanish_free_chat_returns_no_phrase_matches(db_pool):
     # Phrase extractor is a no-op for Spanish (Stage 1 dispatcher) —
     # no Spanish phrase rows can come back.
     assert phrase_matches == []
+
+
+# ---------------------------------------------------------------------------
+# Mixed-language crediting fix (2026-05-23) on a non-German target.
+# Mirrors test_free_chat_progression.py's German cases for Spanish: an
+# EN-labelled message that contains a Spanish learning word still earns
+# passive credit; an ES-labelled message earns both tracks. Real DB, so we
+# assert the persisted levels, not just the event name.
+# ---------------------------------------------------------------------------
+
+async def _register_with_uid(client: AsyncClient, db_pool) -> tuple[dict, str]:
+    email = make_test_email()
+    await client.post("/api/v1/auth/register", json={"email": email, "password": "password123"})
+    r = await client.post("/api/v1/auth/login", json={"email": email, "password": "password123"})
+    headers = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    uid = str(await db_pool.fetchval("SELECT user_id FROM users WHERE email = $1", email))
+    return headers, uid
+
+
+async def _seed_es_learning_word(db_pool, uid: str, surface: str) -> int:
+    word_id = await db_pool.fetchval(
+        """
+        INSERT INTO word_table (word, lemma, pos, tag, language)
+        VALUES ($1, $1, 'X', 'X', 'es')
+        ON CONFLICT (word, language, pos) DO UPDATE SET word = EXCLUDED.word
+        RETURNING word_id
+        """,
+        surface,
+    )
+    await db_pool.execute(
+        """
+        INSERT INTO user_word_knowledge
+            (user_id, item_id, item_type, status, passive_level, active_level)
+        VALUES ($1::uuid, $2, 'word', 'learning', 1, 0)
+        ON CONFLICT (user_id, item_id, item_type) DO UPDATE SET status = 'learning'
+        """,
+        uid, word_id,
+    )
+    return word_id
+
+
+async def _es_levels(db_pool, uid: str, word_id: int) -> dict:
+    row = await db_pool.fetchrow(
+        "SELECT passive_level, active_level FROM user_word_knowledge "
+        "WHERE user_id = $1::uuid AND item_id = $2 AND item_type = 'word'",
+        uid, word_id,
+    )
+    return dict(row) if row else {"passive_level": 0, "active_level": 0}
+
+
+async def _create_es_session(client: AsyncClient, headers: dict) -> str:
+    resp = await client.post(
+        "/api/v1/chat/sessions",
+        json={"session_type": "free", "language": "es"},
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    return resp.json()["session_id"]
+
+
+def _es_reply(language_detected: str) -> dict:
+    return {
+        "reply": "ok",
+        "language_detected": language_detected,
+        "corrections": [],
+        "word_matches": [],
+    }
+
+
+async def test_spanish_english_label_with_target_word_advances_passive_only(
+    client: AsyncClient, db_pool,
+):
+    """Spanish session, language_detected='en', message contains a Spanish
+    learning word → free_chat_mixed_lang: passive grows, active does not.
+    Spanish phrase extraction is a no-op, so only the word advances."""
+    headers, uid = await _register_with_uid(client, db_pool)
+    word_id = await _seed_es_learning_word(db_pool, uid, "hola")
+    sid = await _create_es_session(client, headers)
+
+    before = await _es_levels(db_pool, uid, word_id)
+
+    with patch(
+        "backend.routers.chat.llm_service.evaluate_and_reply",
+        new_callable=AsyncMock,
+        return_value=_es_reply("en"),
+    ):
+        r = await client.post(
+            f"/api/v1/chat/sessions/{sid}/messages",
+            json={"content": "hola"},
+            headers=headers,
+        )
+    assert r.status_code == 201
+
+    after = await _es_levels(db_pool, uid, word_id)
+    assert after["passive_level"] > before["passive_level"], (
+        "Spanish word in an EN-labelled message should earn passive credit"
+    )
+    assert after["active_level"] == before["active_level"], (
+        "active_level must NOT change for an EN-labelled message"
+    )
+
+
+async def test_spanish_es_label_advances_both_tracks(client: AsyncClient, db_pool):
+    """Spanish session, language_detected='es', message contains a Spanish
+    learning word → free_chat_used_correctly: passive AND active grow. The
+    real-DB complement of test_free_chat_es_used_correctly_event_path (which
+    only checks the event name under mocks)."""
+    headers, uid = await _register_with_uid(client, db_pool)
+    word_id = await _seed_es_learning_word(db_pool, uid, "gato")
+    sid = await _create_es_session(client, headers)
+
+    before = await _es_levels(db_pool, uid, word_id)
+
+    with patch(
+        "backend.routers.chat.llm_service.evaluate_and_reply",
+        new_callable=AsyncMock,
+        return_value=_es_reply("es"),
+    ):
+        r = await client.post(
+            f"/api/v1/chat/sessions/{sid}/messages",
+            json={"content": "gato"},
+            headers=headers,
+        )
+    assert r.status_code == 201
+
+    after = await _es_levels(db_pool, uid, word_id)
+    assert after["passive_level"] > before["passive_level"], "passive should grow for es+es"
+    assert after["active_level"] > before["active_level"], "active should grow for es+es"

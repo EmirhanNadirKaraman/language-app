@@ -15,7 +15,8 @@
 
 ## Edge cases
 
-- `language_detected='en'` → no `apply_progression` call is made for any matched word
+- `language_detected='en'` **with** a target-language learning word present → `free_chat_mixed_lang` (passive credit only; active track untouched). Mixed-language crediting fix, 2026-05-23: a learner who writes "Yesterday I bought Brot" still produced the German word and earns passive credit even though the LLM labelled the whole message English. The message is ALWAYS scanned for target-language items; `language_detected` only gates whether active credit is also granted.
+- `language_detected='en'` **with no** target-language learning word present → no `apply_progression` call is made
 - A word with status `known` is NOT matched by `match_learning_words()` and receives no progression update
 - Empty message (no alphabetic tokens) → `match_learning_words()` returns `[]`, no progression
 - Message containing only numbers and punctuation → no matches, no progression

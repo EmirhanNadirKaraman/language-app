@@ -10,9 +10,13 @@ Covers:
     - match_learning_words: surface match, lemma match, known excluded,
       empty text, numbers only, deduplication
   Integration (real DB, mocked LLM):
-    - German message  → free_chat_used_correctly (both tracks advance)
-    - Mixed message   → free_chat_mixed_lang     (passive only)
-    - English message → no progression
+    - German message (de)            → free_chat_used_correctly (both tracks advance)
+    - Mixed message                  → free_chat_mixed_lang     (passive only)
+    - English label + target word    → free_chat_mixed_lang     (passive only)
+                                       [mixed-language crediting fix, 2026-05-23 —
+                                        a target-language word in an English-classified
+                                        message still earns passive credit]
+    - English label + no target word → no progression
     - free_chat_matched is NOT fired by the chat router (confirmed by event mapping)
 """
 import uuid
@@ -48,9 +52,19 @@ async def _register_and_login(client: AsyncClient, db_pool, email: str) -> tuple
 
 
 async def _get_word(db_pool) -> tuple[int, str, str]:
-    row = await db_pool.fetchrow("SELECT word_id, word, language FROM word_table LIMIT 1")
+    # Exclude test-fixture pollution: other suites (e.g. test_words.py's
+    # "learn anyway" path) insert synthetic surfaces like 'ζtest_<hex>' /
+    # 'Bnk_<hex>' into the un-user-scoped word_table and the autouse cleanup
+    # (which only deletes test users) can't reap them. Those surfaces contain
+    # digits/underscores, which real corpus words never do — and they can't
+    # round-trip the message tokenizer, so a LIMIT-1 grab of one silently
+    # breaks every match-based test. Pick a plain word and stay deterministic.
+    row = await db_pool.fetchrow(
+        "SELECT word_id, word, language FROM word_table "
+        "WHERE word !~ '[0-9_]' ORDER BY word_id LIMIT 1"
+    )
     if row is None:
-        pytest.skip("word_table is empty — run the subtitle pipeline first")
+        pytest.skip("word_table has no plain word — run the subtitle pipeline first")
     return row["word_id"], row["word"], row["language"]
 
 
@@ -141,6 +155,7 @@ async def test_match_finds_word_by_lemma(client: AsyncClient, db_pool):
         """
         SELECT word_id, word, lemma, language FROM word_table
          WHERE lemma IS NOT NULL AND LOWER(lemma) != LOWER(word)
+           AND word !~ '[0-9_]' AND lemma !~ '[0-9_]'
          LIMIT 1
         """
     )
@@ -368,8 +383,12 @@ async def test_mixed_message_advances_passive_only(client: AsyncClient, db_pool)
     assert after["active_level"]  == before_active, "active_level must NOT change for mixed"
 
 
-async def test_english_message_triggers_no_progression(client: AsyncClient, db_pool):
-    """language_detected='en' → no apply_progression call is made."""
+async def test_english_label_with_target_word_advances_passive_only(client: AsyncClient, db_pool):
+    """Mixed-language crediting fix (2026-05-23): a target-language learning
+    word that appears in a message the LLM labels 'en' still earns PASSIVE
+    credit (free_chat_mixed_lang) — passive_level grows, active does NOT, and
+    no active SRS card is fabricated. Before the fix the 'en' label skipped
+    matching entirely and this word got nothing."""
     word_id, word, language = await _get_word(db_pool)
     if language != "de":
         pytest.skip("Need a German word for this test")
@@ -379,6 +398,8 @@ async def test_english_message_triggers_no_progression(client: AsyncClient, db_p
     session_id = await _create_free_session(client, headers)
 
     before = await _get_knowledge(db_pool, uid, word_id)
+    before_passive = before["passive_level"] if before else 0
+    before_active  = before["active_level"]  if before else 0
 
     with patch(
         "backend.routers.chat.llm_service.evaluate_and_reply",
@@ -393,6 +414,56 @@ async def test_english_message_triggers_no_progression(client: AsyncClient, db_p
     assert resp.status_code == 201
 
     after = await _get_knowledge(db_pool, uid, word_id)
+    assert after["passive_level"] > before_passive, (
+        "passive_level should grow for an EN-labelled message containing a target word"
+    )
+    assert after["active_level"] == before_active, (
+        "active_level must NOT change for an EN-labelled message"
+    )
+
+    # "active SRS does not advance": _mark_learning inserts uwk directly (no
+    # apply_progression), so no active card exists, and free_chat_mixed_lang
+    # has no active_srs action — confirm none was fabricated.
+    active_card = await db_pool.fetchval(
+        """
+        SELECT 1 FROM srs_cards
+         WHERE user_id = $1::uuid AND item_id = $2 AND item_type = 'word'
+           AND direction = 'active'
+        """,
+        uid, word_id,
+    )
+    assert active_card is None, "no active SRS card should be created for a mixed-credit turn"
+
+
+async def test_english_message_without_target_word_triggers_no_progression(client: AsyncClient, db_pool):
+    """language_detected='en' AND the message contains no target-language
+    learning word → no progression at all. Complement of the case above: the
+    always-on matcher finds nothing, so no event fires."""
+    word_id, word, language = await _get_word(db_pool)
+    if language != "de":
+        pytest.skip("Need a German word for this test")
+
+    headers, uid = await _register_and_login(client, db_pool, _email())
+    await _mark_learning(db_pool, uid, word_id)
+    session_id = await _create_free_session(client, headers)
+
+    before = await _get_knowledge(db_pool, uid, word_id)
+
+    # Gibberish content — deterministically contains none of the user's
+    # learning words regardless of what _get_word returned.
+    with patch(
+        "backend.routers.chat.llm_service.evaluate_and_reply",
+        new_callable=AsyncMock,
+        return_value=_llm_result("en"),
+    ):
+        resp = await client.post(
+            f"{SESSIONS}/{session_id}/messages",
+            json={"content": "qwerty asdfgh zxcvbn"},
+            headers=headers,
+        )
+    assert resp.status_code == 201
+
+    after = await _get_knowledge(db_pool, uid, word_id)
     if after and before:
-        assert after["passive_level"] == before["passive_level"], "No progression for English"
-        assert after["active_level"]  == before["active_level"],  "No progression for English"
+        assert after["passive_level"] == before["passive_level"], "No progression when no target word present"
+        assert after["active_level"]  == before["active_level"],  "No progression when no target word present"
