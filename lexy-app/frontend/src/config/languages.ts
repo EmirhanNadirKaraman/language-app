@@ -49,3 +49,17 @@ export function languageLabel(code: string | null | undefined): string {
   if (!code) return '';
   return LANGUAGE_LABELS[code] ?? code.toUpperCase();
 }
+
+// Autocomplete suggestion source, chosen by the user via the SearchBar
+// control. Mirrors the backend's /api/suggest `kind` param.
+export type SuggestKind = 'words' | 'phrases' | 'both';
+
+// Languages that have a phrase-suggestion source (backend
+// search_service.PHRASE_LANGUAGES). Only these show the words/phrases/both
+// selector; others are words-only. German is the only one today; extend
+// when a phrase extractor for another language ships (TODO #36).
+const PHRASE_SUPPORT = new Set<string>(['de']);
+
+export function hasPhraseSupport(code: string | null | undefined): boolean {
+  return !!code && PHRASE_SUPPORT.has(code);
+}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { fetchSuggestions } from '../api/suggest';
 import type { Suggestion } from '../types';
-import { DEFAULT_LANGUAGE } from '../config/languages';
+import { DEFAULT_LANGUAGE, hasPhraseSupport, type SuggestKind } from '../config/languages';
 
 interface Props {
   terms: string[];
@@ -15,6 +15,12 @@ interface Props {
   language?: string;
 }
 
+const SUGGEST_KIND_OPTIONS: { value: SuggestKind; label: string }[] = [
+  { value: 'words',   label: 'Words' },
+  { value: 'phrases', label: 'Phrases' },
+  { value: 'both',    label: 'Both' },
+];
+
 export function SearchBar({
   terms, onAddTerm, onRemoveTerm, loading, language,
 }: Props) {
@@ -22,9 +28,17 @@ export function SearchBar({
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
+  // User-selected suggestion source. Only meaningful (and only shown) for
+  // languages with a phrase source — German today. Default 'both' so German
+  // keeps phrase suggestions; for word-only languages the effective kind is
+  // forced to 'words' below regardless of this state.
+  const [kind, setKind] = useState<SuggestKind>('both');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const phraseCapable = hasPhraseSupport(language);
+  const effectiveKind: SuggestKind = phraseCapable ? kind : 'words';
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -46,11 +60,11 @@ export function SearchBar({
 
       try {
         const data = await fetchSuggestions(
-          input.trim(), language || DEFAULT_LANGUAGE, controller.signal,
+          input.trim(), language || DEFAULT_LANGUAGE, controller.signal, effectiveKind,
         );
         const wordSuggestion: Suggestion = { word: input.trim(), score: 1, type: 'word' };
-        const phrases = data.filter(s => s.word !== input.trim());
-        setSuggestions([wordSuggestion, ...phrases]);
+        const rest = data.filter(s => s.word !== input.trim());
+        setSuggestions([wordSuggestion, ...rest]);
         setShowDropdown(true);
         setActiveIdx(-1);
       } catch {
@@ -59,7 +73,7 @@ export function SearchBar({
     }, 250);
 
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [input, language]);
+  }, [input, language, effectiveKind]);
 
   const selectSuggestion = useCallback((word: string) => {
     onAddTerm(word);
@@ -95,8 +109,43 @@ export function SearchBar({
   };
 
   return (
-    <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-      <div style={{ position: 'relative', flex: 1 }}>
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      {phraseCapable && (
+        <div
+          role="group"
+          aria-label="Suggestion type"
+          data-testid="suggest-kind"
+          style={{ display: 'inline-flex', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--color-input-border)', flexShrink: 0 }}
+        >
+          {SUGGEST_KIND_OPTIONS.map(opt => {
+            const active = kind === opt.value;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setKind(opt.value)}
+                aria-pressed={active}
+                data-testid={`suggest-kind-${opt.value}`}
+                style={{
+                  minHeight: '42px',
+                  padding: '0 12px',
+                  border: 'none',
+                  borderLeft: opt.value !== 'words' ? '1px solid var(--color-input-border)' : 'none',
+                  background: active ? 'var(--color-primary-soft)' : 'var(--color-surface)',
+                  color: active ? 'var(--color-primary-on-soft)' : 'var(--color-text-muted)',
+                  fontSize: '13px',
+                  fontWeight: active ? 700 : 400,
+                  cursor: 'pointer',
+                  touchAction: 'manipulation',
+                }}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
         <div
           onClick={() => inputRef.current?.focus()}
           style={{

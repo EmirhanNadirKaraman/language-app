@@ -313,21 +313,109 @@ async def get_video_sentences(
     ]
 
 
+SUGGEST_KINDS = ("words", "phrases", "both")
+
+# Languages that have a phrase-suggestion source. phrase_blueprint is the
+# German verb-blueprint table (no language column), so today only German has
+# phrases. Extend this when a phrase extractor for another language lands
+# (TODO #36) and that language's blueprints get a language scope.
+PHRASE_LANGUAGES = ("de",)
+
+
+async def _suggest_words(pool, query: str, language: str, limit: int) -> list[dict]:
+    """Frequency-ranked word prefix match, language-scoped (TODO #38 route B).
+
+    Case-insensitive prefix over word_table; DISTINCT ON (lower(word))
+    collapses casing variants to the highest-frequency casing; ranked by the
+    precomputed `frequency` column (migration 032). Index-assisted via
+    ix_word_table_lang_lower_word.
+    """
+    rows = await pool.fetch(
+        """
+        SELECT word, frequency
+          FROM (
+              SELECT DISTINCT ON (lower(word)) word, frequency
+                FROM word_table
+               WHERE language = $1
+                 AND lower(word) LIKE lower($2) || '%'
+               ORDER BY lower(word), frequency DESC
+          ) t
+         ORDER BY frequency DESC, word ASC
+         LIMIT $3
+        """,
+        language, query, limit,
+    )
+    return [{"word": r["word"], "score": float(r["frequency"]), "type": "word"} for r in rows]
+
+
+async def _suggest_phrases(pool, query: str, limit: int) -> list[dict]:
+    """German verb-blueprint phrase suggestions (the pre-route-B behaviour).
+
+    phrase_blueprint has no language column — it's German-only — so callers
+    gate this on PHRASE_LANGUAGES. Ranked by trigram similarity to the
+    typed query.
+    """
+    rows = await pool.fetch(
+        r"""
+        SELECT blueprint AS word, strict_word_similarity($1, lookup_key) AS score
+          FROM phrase_blueprint
+         WHERE strict_word_similarity($1, lookup_key) > 0.3
+           AND lookup_key ~* ('\m' || $1 || '\M')
+         ORDER BY score DESC
+         LIMIT $2
+        """,
+        query, limit,
+    )
+    return [{"word": r["word"], "score": float(r["score"]), "type": "phrase"} for r in rows]
+
+
 async def suggest(
     pool: asyncpg.Pool,
     query: str,
     language: str | None,
     limit: int = 10,
+    kind: str = "words",
 ) -> list[dict]:
-    rows = await pool.fetch("""
-        SELECT blueprint AS word, strict_word_similarity($1, lookup_key) AS score, 'phrase'::text AS type
-        FROM phrase_blueprint
-        WHERE strict_word_similarity($1, lookup_key) > 0.3
-          AND lookup_key ~* ('\m' || $1 || '\M')
-        ORDER BY score DESC
-        LIMIT $2
-    """, query, limit)
-    return [{"word": r["word"], "score": float(r["score"]), "type": r["type"]} for r in rows]
+    """Autocomplete suggestions for `query` in `language`.
+
+    `kind` (chosen by the user via the SearchBar control) selects the source:
+      'words'   — frequency-ranked word prefix matches (route B). Default.
+      'phrases' — German verb-blueprint phrase matches (only meaningful for
+                  PHRASE_LANGUAGES; empty otherwise).
+      'both'    — phrases first (capped at ~half the limit so words still
+                  show), then frequency-ranked words fill the rest.
+
+    Words and phrases rank on different scales (frequency count vs trigram
+    similarity), so 'both' keeps them in separate sections rather than
+    interleaving by score. The frontend differentiates by `type`.
+
+    Returns [{word, score, type ∈ {'word','phrase'}}].
+    """
+    q = query.strip()
+    if not q or not language:
+        return []
+    if kind not in SUGGEST_KINDS:
+        kind = "words"
+
+    want_words = kind in ("words", "both")
+    want_phrases = kind in ("phrases", "both") and language in PHRASE_LANGUAGES
+
+    words = await _suggest_words(pool, q, language, limit) if want_words else []
+    phrases = await _suggest_phrases(pool, q, limit) if want_phrases else []
+
+    if kind == "words":
+        return words[:limit]
+    if kind == "phrases":
+        return phrases[:limit]
+
+    # 'both' — reserve up to half the slots for phrases so words always show,
+    # then fill the remainder with words.
+    if not phrases:
+        return words[:limit]
+    if not words:
+        return phrases[:limit]
+    phrase_slots = min(len(phrases), max(1, limit // 2))
+    return phrases[:phrase_slots] + words[: limit - phrase_slots]
 
 
 async def get_word_forms(pool: asyncpg.Pool, terms: list[str]) -> list[str]:

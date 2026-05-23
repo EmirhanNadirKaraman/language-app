@@ -396,6 +396,25 @@ Coverage of the batch: 8 cleaner + 4 merger + 4 guard + 2 noise + 1 knowledge + 
 **Risk:** high — touches the most-referenced content tables (`video`, `sentence`) and the scraper's core loop. Sequence it behind a clear product decision.
 **Relation to #35:** #35 makes the *single* track we pick the right one (original audio language). #37 is the orthogonal question of capturing *more than one* track. They don't conflict; #37 supersedes the one-track limit only if/when bilingual capture is committed to.
 
+### 38. ✅ SearchBar autocomplete (`/api/suggest`) is German-phrase-only — RESOLVED 2026-05-23 (route B)
+**Resolution:** rewrote `search_service.suggest` to do a frequency-ranked, language-scoped word prefix match (route B — precompute). Migration 032 adds `word_table.frequency` (INT, backfilled from `word_to_sentence` counts) + a functional prefix index `(language, lower(word) text_pattern_ops)`; the scraper's new `recompute_word_frequencies()` refreshes it at the end of each run. `suggest` now: `WHERE language=$1 AND lower(word) LIKE lower($2)||'%'`, `DISTINCT ON (lower(word))` (collapses casing), `ORDER BY frequency DESC`. Live-verified: `univ`/es → universidad(195), universidades(40), universal(24)…; `hist`/es → historia(312)…. Query dropped from ~280ms (live aggregate) to ~9ms (indexed column). Response shape unchanged (`{word, score, type}`; `score` now carries frequency, `type='word'`) so the frontend needed no change. 6 tests in `test_suggest.py`. **Remaining (optional):** German now gets *word* suggestions instead of phrase suggestions — if phrase suggestions are still wanted for German, `UNION` `phrase_blueprint` back in. Original writeup below.
+
+**Files:** `lexy-app/backend/services/search_service.py:suggest`, `lexy-app/backend/routers/search.py` (`/suggest`), frontend `SearchBar.tsx` + `api/suggest.ts`.
+**Found:** 2026-05-23 during the Spanish dogfood. Typing `univ` with `language=es` returned `[]` even though `search?q=universidad&language=es` returns 107 hits.
+**Problem:** `search_service.suggest` only queries `phrase_blueprint`:
+```sql
+SELECT blueprint AS word, strict_word_similarity($1, lookup_key) AS score, 'phrase' AS type
+FROM phrase_blueprint
+WHERE strict_word_similarity($1, lookup_key) > 0.3 AND lookup_key ~* ('\m' || $1 || '\M')
+```
+Two defects:
+  1. **Ignores the `language` argument entirely** — the param is accepted by the router + service but never used in the query.
+  2. **Phrase-only, German-only** — `phrase_blueprint` is the German verb-blueprint table (seeded from the German verb dictionary). It has no `language` column and no Spanish/other-language rows, and it never suggests plain words. So autocomplete returns German verb phrases for German queries and **nothing at all** for any other language.
+**User-visible impact:** medium. Spanish (and any non-German) learners get an empty autocomplete dropdown as they type. Search still works if they type the full word and submit — so it's degraded UX, not broken. German users only ever see phrase suggestions, never word suggestions.
+**Fix:** make `suggest` word-capable and language-aware. Query `word_table` filtered by `language` with a prefix/trigram match (the codebase already uses `similarity()` / `strict_word_similarity` + the `~* '\m…\M'` word-boundary pattern elsewhere), returning `type='word'`. Optionally `UNION` the existing `phrase_blueprint` rows for German so German keeps phrase suggestions too. Thread `language` into the query (it's already plumbed from the frontend's `recLanguage`).
+**Risk:** low — additive query change in one function; `/suggest` is already auth-gated (#7) and has no dedicated test, so add one (word suggestions returned for `es`, language filter respected, German still gets phrase suggestions).
+**Relation:** independent of #35/#37; pure search-UX fix. Pairs naturally with confirming search/suggest parity across languages.
+
 ### 20. ✅ Dark mode theme system — RESOLVED 2026-05-19
 **What landed**
 

@@ -807,6 +807,33 @@ def process_pending_requests(
             logger.exception("[request] error processing %s %s", request_type, content_id)
 
 
+def recompute_word_frequencies(cursor, connection) -> int:
+    """Refresh word_table.frequency from current word_to_sentence counts.
+
+    frequency powers the SearchBar autocomplete ranking (TODO #38, route B
+    — migration 032). Recomputed at the end of each scraper run so newly
+    ingested words/sentences are reflected. Single bulk UPDATE; only rows
+    whose count actually changed are written. Returns rows updated.
+    """
+    cursor.execute(
+        """
+        UPDATE word_table wt
+           SET frequency = sub.c
+          FROM (
+              SELECT word_id, COUNT(*) AS c
+                FROM word_to_sentence
+               GROUP BY word_id
+          ) sub
+         WHERE wt.word_id = sub.word_id
+           AND wt.frequency <> sub.c
+        """
+    )
+    updated = cursor.rowcount
+    connection.commit()
+    logger.info("Recomputed word frequencies: %d row(s) updated", updated)
+    return updated
+
+
 def main(language: str | None = None, lister: str = "auto",
          channel_id: str | None = None):
     """Run the channel-loop scraper.
@@ -944,6 +971,7 @@ def main(language: str | None = None, lister: str = "auto",
 
         channel_iters = next_round
 
+    recompute_word_frequencies(cursor, connection)
     logger.info("Done.")
 
 
@@ -972,6 +1000,7 @@ def run_pending_requests_only(lister: str = "auto") -> None:
         cursor, connection, nlp_cache, sentence_types, db_words, processed_videos, blacklist,
         lister=lister,
     )
+    recompute_word_frequencies(cursor, connection)
     connection.close()
     logger.info("Done.")
 

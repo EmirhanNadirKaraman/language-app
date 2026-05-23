@@ -36,9 +36,13 @@ async def search(
 async def suggest(
     q: str = Query(..., min_length=1),
     language: str | None = Query(default=None),
+    kind: str = Query(default="words", pattern="^(words|phrases|both)$"),
     pool=Depends(get_pool),
 ):
-    return await search_service.suggest(pool, q, language)
+    # `kind` is chosen by the user via the SearchBar control: words |
+    # phrases | both. Phrases only exist for German today (see
+    # search_service.PHRASE_LANGUAGES); other languages get words regardless.
+    return await search_service.suggest(pool, q, language, kind=kind)
 
 
 @router.get("/video-sentences", response_model=list[VideoSentence])

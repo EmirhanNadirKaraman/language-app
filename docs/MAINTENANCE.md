@@ -236,3 +236,32 @@ button:
 Locked by a Vitest assertion in
 `lexy-app/frontend/src/components/ContentRequestPage.mobile.test.tsx`
 so the note can't accidentally disappear in a future refactor.
+
+---
+
+## Word-frequency column (autocomplete ranking)
+
+`word_table.frequency` (migration 032) powers the SearchBar autocomplete
+ranking — most-common-words-matching-the-prefix, per language (TODO #38).
+It's a precomputed count of how many sentences each word appears in
+(`word_to_sentence` rows per `word_id`).
+
+**Kept fresh by the scraper.** `subtitle-scraper/pipeline.py:recompute_word_frequencies()`
+runs a single bulk `UPDATE` at the end of every scraper run (both the
+channel loop and `--requests-only`), so newly ingested words rank
+correctly. No separate cron needed for normal operation.
+
+**Manual recompute** (e.g. after a bulk DB edit, or if you suspect drift):
+
+```sql
+UPDATE word_table wt
+   SET frequency = sub.c
+  FROM (SELECT word_id, COUNT(*) AS c FROM word_to_sentence GROUP BY word_id) sub
+ WHERE wt.word_id = sub.word_id AND wt.frequency <> sub.c;
+```
+
+Drift is harmless to correctness — a stale `frequency` only mis-ranks
+autocomplete slightly (recent words may rank a touch low until the next
+scraper run). The autocomplete query itself reads the column through the
+`ix_word_table_lang_lower_word` functional index (≈9ms vs ≈280ms for the
+old per-keystroke aggregation).
