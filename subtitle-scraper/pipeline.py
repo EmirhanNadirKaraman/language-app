@@ -434,28 +434,128 @@ def _mark_request(cursor, connection, request_id: int, status: str, error: str |
     connection.commit()
 
 
+# ---------------------------------------------------------------------------
+# Channel video listing — pluggable backend (scrapetube | yt-dlp | auto)
+# ---------------------------------------------------------------------------
+#
+# scrapetube scrapes YouTube's web pages and breaks whenever YouTube shifts
+# its markup (observed returning 0 videos for every channel in May 2026).
+# yt-dlp is far more resilient but heavier. We support both and default to
+# 'auto': try scrapetube first (cheap, lazy), fall back to yt-dlp per-channel
+# when scrapetube yields nothing.
+#
+# Every backend yields the SAME normalized candidate dict so the call sites
+# don't care which lister produced it:
+#     {"video_id": str, "title": str, "thumbnail_url": str}
+
+VALID_LISTERS = ("auto", "scrapetube", "yt-dlp")
+
+# yt-dlp enumerates the whole channel; cap how many entries we pull per run
+# so a 10k-video channel doesn't block the listing step. scrapetube is lazy
+# and needs no cap.
+YTDLP_LIST_LIMIT = 300
+
+
+def _iter_scrapetube(youtube_channel_id: str):
+    """Yield normalized candidates from scrapetube. Malformed entries skipped."""
+    for v in scrapetube.get_channel(youtube_channel_id):
+        try:
+            yield {
+                "video_id":      v["videoId"],
+                "title":         v["title"]["runs"][0]["text"],
+                "thumbnail_url": v["thumbnail"]["thumbnails"][-1]["url"],
+            }
+        except (KeyError, IndexError, TypeError):
+            continue
+
+
+def _iter_ytdlp(youtube_channel_id: str):
+    """Yield normalized candidates from yt-dlp's flat channel extraction.
+
+    extract_flat avoids per-video metadata round-trips; playlist_items caps
+    the pull at YTDLP_LIST_LIMIT. yt-dlp is imported lazily so hosts that
+    only ever use scrapetube don't pay the import.
+    """
+    import yt_dlp  # lazy
+
+    url = f"https://www.youtube.com/channel/{youtube_channel_id}/videos"
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": True,
+        "skip_download": True,
+        "playlist_items": f"1:{YTDLP_LIST_LIMIT}",
+    }
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception:
+        logger.warning("yt-dlp channel listing failed for %s", youtube_channel_id, exc_info=True)
+        return
+    for entry in (info.get("entries") or []):
+        if not entry or not entry.get("id"):
+            continue
+        thumbs = entry.get("thumbnails") or []
+        yield {
+            "video_id":      entry["id"],
+            "title":         entry.get("title") or entry["id"],
+            "thumbnail_url": thumbs[-1]["url"] if thumbs else "",
+        }
+
+
+def list_channel_videos(youtube_channel_id: str, lister: str = "auto"):
+    """Yield normalized video candidates for a channel via the chosen backend.
+
+    lister:
+      'scrapetube' — scrapetube only
+      'yt-dlp'     — yt-dlp only
+      'auto'       — scrapetube first; if it produced zero candidates, fall
+                     back to yt-dlp for this channel.
+    """
+    if lister == "scrapetube":
+        yield from _iter_scrapetube(youtube_channel_id)
+        return
+    if lister == "yt-dlp":
+        yield from _iter_ytdlp(youtube_channel_id)
+        return
+
+    # auto
+    produced = False
+    for cand in _iter_scrapetube(youtube_channel_id):
+        produced = True
+        yield cand
+    if not produced:
+        logger.info(
+            "scrapetube returned 0 videos for %s — falling back to yt-dlp",
+            youtube_channel_id,
+        )
+        yield from _iter_ytdlp(youtube_channel_id)
+
+
 def _scan_channel_videos(  # noqa: PLR0913
     cursor, connection,
     youtube_channel_id: str, internal_channel_id: int, language: str | None,
     nlp_cache: dict, sentence_types: dict, db_words: set,
     processed_videos: set, blacklist: set,
     skip_video_id: str | None = None,
+    lister: str = "auto",
 ) -> int:
     """Iterate a channel's videos and process any that haven't been seen yet.
 
     skip_video_id: video already processed by the caller — skip without counting.
+    lister: channel-listing backend (see list_channel_videos).
     Returns the number of newly added videos.
     """
     added = 0
-    for candidate in scrapetube.get_channel(youtube_channel_id):
-        vid_id = candidate["videoId"]
+    for candidate in list_channel_videos(youtube_channel_id, lister):
+        vid_id = candidate["video_id"]
         if vid_id == skip_video_id:
             continue
         if vid_id in processed_videos or vid_id in blacklist:
             continue
 
-        title     = candidate["title"]["runs"][0]["text"]
-        thumbnail = candidate["thumbnail"]["thumbnails"][-1]["url"]
+        title     = candidate["title"]
+        thumbnail = candidate["thumbnail_url"]
 
         try:
             fetched, detected_lang, language_code, transcript_source = get_transcript(vid_id, language)
@@ -508,6 +608,7 @@ def _process_channel_request(  # noqa: PLR0913
     cursor, connection, youtube_channel_id: str, request_id: int,
     nlp_cache: dict, sentence_types: dict, db_words: set,
     processed_videos: set, blacklist: set,
+    lister: str = "auto",
 ) -> None:
     """Ensure the channel is in the DB, then scan and process any new videos."""
     cursor.execute(
@@ -544,6 +645,7 @@ def _process_channel_request(  # noqa: PLR0913
         cursor, connection,
         youtube_channel_id, internal_channel_id, language,
         nlp_cache, sentence_types, db_words, processed_videos, blacklist,
+        lister=lister,
     )
     logger.info("[request] done — %d new video(s) added", added)
     _mark_request(cursor, connection, request_id, "done")
@@ -629,6 +731,7 @@ def process_pending_requests(
     cursor, connection,
     nlp_cache: dict, sentence_types: dict, db_words: set,
     processed_videos: set, blacklist: set,
+    lister: str = "auto",
 ) -> None:
     cursor.execute(
         "SELECT request_id, request_type, content_id FROM content_request WHERE status = 'pending'"
@@ -644,6 +747,7 @@ def process_pending_requests(
                 _process_channel_request(
                     cursor, connection, content_id, request_id,
                     nlp_cache, sentence_types, db_words, processed_videos, blacklist,
+                    lister=lister,
                 )
             else:
                 _process_video_request(
@@ -655,16 +759,20 @@ def process_pending_requests(
             logger.exception("[request] error processing %s %s", request_type, content_id)
 
 
-def main(language: str | None = None):
+def main(language: str | None = None, lister: str = "auto"):
     """Run the channel-loop scraper. With `language`, restricts to that
     language only — both the initial load and the post-content-request
     reload below are filtered. Useful for language-scoped dogfood runs
-    without flipping channel.active flags."""
+    without flipping channel.active flags.
+
+    `lister` selects the channel-video listing backend (auto | scrapetube
+    | yt-dlp); see list_channel_videos."""
     connection = connect()
     cursor = connection.cursor()
 
     if language is not None:
         logger.info("Language filter active: only processing %r channels", language)
+    logger.info("Channel lister: %s", lister)
 
     channels = load_channels(cursor, language=language)
     logger.info("Loaded %d channels total", len(channels))
@@ -684,16 +792,17 @@ def main(language: str | None = None):
     nlp_cache = {}
 
     process_pending_requests(
-        cursor, connection, nlp_cache, sentence_types, db_words, processed_videos, blacklist
+        cursor, connection, nlp_cache, sentence_types, db_words, processed_videos, blacklist,
+        lister=lister,
     )
 
     # Reload channels in case a channel request just added new ones.
     # Apply the same language filter so the second pass stays scoped.
     channels = load_channels(cursor, language=language)
 
-    # Build one lazy iterator per channel
+    # Build one lazy candidate iterator per channel via the chosen lister.
     channel_iters = [
-        (ch, iter(scrapetube.get_channel(ch["id"])))
+        (ch, list_channel_videos(ch["id"], lister))
         for ch in channels
     ]
     logger.info("Active channels: %d", len(channel_iters))
@@ -715,7 +824,7 @@ def main(language: str | None = None):
                 except StopIteration:
                     logger.info("Channel exhausted this run: %s", channel_name)
                     break
-                vid_id = candidate["videoId"]
+                vid_id = candidate["video_id"]
                 if vid_id in blacklist or vid_id in processed_videos:
                     continue
                 video = candidate
@@ -724,7 +833,7 @@ def main(language: str | None = None):
             if video is None:
                 continue  # channel exhausted — not added to next_round
 
-            video_id = video["videoId"]
+            video_id = video["video_id"]
             try:
                 fetched, detected_lang, language_code, transcript_source = get_transcript(video_id, language)
             except Exception:
@@ -752,8 +861,8 @@ def main(language: str | None = None):
                     next_round.append((channel, vid_iter))
                     continue
 
-            title = video["title"]["runs"][0]["text"]
-            thumbnail = video["thumbnail"]["thumbnails"][-1]["url"]
+            title = video["title"]
+            thumbnail = video["thumbnail_url"]
 
             category = fetch_category(video_id)
 
@@ -784,8 +893,11 @@ def main(language: str | None = None):
     logger.info("Done.")
 
 
-def run_pending_requests_only() -> None:
-    """Process only pending content_request rows, then exit."""
+def run_pending_requests_only(lister: str = "auto") -> None:
+    """Process only pending content_request rows, then exit.
+
+    `lister` is forwarded to channel-request processing (video requests
+    don't list a channel, so it only matters for channel requests)."""
     connection = connect()
     cursor = connection.cursor()
 
@@ -803,7 +915,8 @@ def run_pending_requests_only() -> None:
 
     nlp_cache: dict = {}
     process_pending_requests(
-        cursor, connection, nlp_cache, sentence_types, db_words, processed_videos, blacklist
+        cursor, connection, nlp_cache, sentence_types, db_words, processed_videos, blacklist,
+        lister=lister,
     )
     connection.close()
     logger.info("Done.")
@@ -826,6 +939,15 @@ if __name__ == "__main__":
             "with --requests-only (content_request has no language field)."
         ),
     )
+    parser.add_argument(
+        "--lister", choices=VALID_LISTERS, default="auto",
+        help=(
+            "Channel-video listing backend. 'scrapetube' (web-scrape, lazy, "
+            "breaks when YouTube shifts markup), 'yt-dlp' (robust, heavier), "
+            "or 'auto' (default: scrapetube first, fall back to yt-dlp per "
+            "channel when scrapetube yields nothing)."
+        ),
+    )
     args = parser.parse_args()
 
     if args.requests_only:
@@ -834,6 +956,6 @@ if __name__ == "__main__":
                 "--language %r ignored: --requests-only processes content "
                 "requests, which have no language field.", args.language,
             )
-        run_pending_requests_only()
+        run_pending_requests_only(lister=args.lister)
     else:
-        main(language=args.language)
+        main(language=args.language, lister=args.lister)

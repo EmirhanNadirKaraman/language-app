@@ -101,6 +101,99 @@ def test_load_channels_with_language_filters_query(pipeline_module):
     assert cursor.last_params == ("es",)
 
 
+# ---------------------------------------------------------------------------
+# Channel-lister backend dispatch (scrapetube | yt-dlp | auto)
+# ---------------------------------------------------------------------------
+
+def test_lister_scrapetube_uses_only_scrapetube(pipeline_module, monkeypatch):
+    calls = {"st": 0, "yt": 0}
+    monkeypatch.setattr(pipeline_module, "_iter_scrapetube",
+                        lambda cid: (calls.__setitem__("st", calls["st"] + 1),
+                                     (yield {"video_id": "a", "title": "A", "thumbnail_url": ""}))[1])
+    monkeypatch.setattr(pipeline_module, "_iter_ytdlp",
+                        lambda cid: (calls.__setitem__("yt", calls["yt"] + 1), iter(()))[1])
+
+    out = list(pipeline_module.list_channel_videos("UCx", "scrapetube"))
+    assert [c["video_id"] for c in out] == ["a"]
+    assert calls == {"st": 1, "yt": 0}
+
+
+def test_lister_ytdlp_uses_only_ytdlp(pipeline_module, monkeypatch):
+    calls = {"st": 0, "yt": 0}
+    monkeypatch.setattr(pipeline_module, "_iter_scrapetube",
+                        lambda cid: (calls.__setitem__("st", calls["st"] + 1), iter(()))[1])
+    monkeypatch.setattr(pipeline_module, "_iter_ytdlp",
+                        lambda cid: (calls.__setitem__("yt", calls["yt"] + 1),
+                                     (yield {"video_id": "b", "title": "B", "thumbnail_url": ""}))[1])
+
+    out = list(pipeline_module.list_channel_videos("UCx", "yt-dlp"))
+    assert [c["video_id"] for c in out] == ["b"]
+    assert calls == {"st": 0, "yt": 1}
+
+
+def test_lister_auto_prefers_scrapetube_when_it_yields(pipeline_module, monkeypatch):
+    """auto: if scrapetube produces candidates, yt-dlp is never touched."""
+    yt_called = {"n": 0}
+
+    def st(cid):
+        yield {"video_id": "s1", "title": "S1", "thumbnail_url": ""}
+        yield {"video_id": "s2", "title": "S2", "thumbnail_url": ""}
+
+    def yt(cid):
+        yt_called["n"] += 1
+        yield {"video_id": "y1", "title": "Y1", "thumbnail_url": ""}
+
+    monkeypatch.setattr(pipeline_module, "_iter_scrapetube", st)
+    monkeypatch.setattr(pipeline_module, "_iter_ytdlp", yt)
+
+    out = list(pipeline_module.list_channel_videos("UCx", "auto"))
+    assert [c["video_id"] for c in out] == ["s1", "s2"]
+    assert yt_called["n"] == 0, "yt-dlp must not run when scrapetube produced videos"
+
+
+def test_lister_auto_falls_back_to_ytdlp_when_scrapetube_empty(pipeline_module, monkeypatch):
+    """auto: scrapetube yields nothing → yt-dlp is used. This is the exact
+    May-2026 breakage scenario (scrapetube returning 0 for every channel)."""
+    def st(cid):
+        return
+        yield  # unreachable — makes this an empty generator
+
+    def yt(cid):
+        yield {"video_id": "y1", "title": "Y1", "thumbnail_url": ""}
+        yield {"video_id": "y2", "title": "Y2", "thumbnail_url": ""}
+
+    monkeypatch.setattr(pipeline_module, "_iter_scrapetube", st)
+    monkeypatch.setattr(pipeline_module, "_iter_ytdlp", yt)
+
+    out = list(pipeline_module.list_channel_videos("UCx", "auto"))
+    assert [c["video_id"] for c in out] == ["y1", "y2"]
+
+
+def test_scrapetube_adapter_normalizes_shape(pipeline_module, monkeypatch):
+    """_iter_scrapetube maps scrapetube's nested dict → flat normalized shape,
+    and skips malformed entries instead of raising."""
+    raw = [
+        {  # well-formed
+            "videoId": "ok1",
+            "title": {"runs": [{"text": "Hola Mundo"}]},
+            "thumbnail": {"thumbnails": [{"url": "lo.jpg"}, {"url": "hi.jpg"}]},
+        },
+        {"videoId": "bad", "title": {}},          # malformed → skipped
+        {  # well-formed
+            "videoId": "ok2",
+            "title": {"runs": [{"text": "Segundo"}]},
+            "thumbnail": {"thumbnails": [{"url": "t2.jpg"}]},
+        },
+    ]
+    monkeypatch.setattr(pipeline_module.scrapetube, "get_channel", lambda cid: iter(raw))
+
+    out = list(pipeline_module._iter_scrapetube("UCx"))
+    assert out == [
+        {"video_id": "ok1", "title": "Hola Mundo", "thumbnail_url": "hi.jpg"},
+        {"video_id": "ok2", "title": "Segundo", "thumbnail_url": "t2.jpg"},
+    ]
+
+
 def test_no_scraper_code_reads_legacy_flat_files():
     """No Python file under subtitle-scraper/ should reference the deleted
     flat channel files. seed_data/channels.json is the only allowed seed."""
